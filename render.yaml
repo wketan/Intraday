@@ -1,0 +1,30 @@
+# render.yaml — Blueprint for one-click Render deploy
+services:
+  - type: web
+    name: intraday-signal-engine
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn server:app --bind 0.0.0.0:$PORT --workers 1 --threads 4 --timeout 120
+    envVars:
+      - key: ANGEL_API_KEY
+        sync: false
+      - key: ANGEL_CLIENT_ID
+        sync: false
+      - key: ANGEL_PASSWORD
+        sync: false
+      - key: ANGEL_TOTP_SECRET
+        sync: false
+      - key: TARGET_MIN
+        value: "10"
+      - key: TARGET_MAX
+        value: "15"
+      - key: SCAN_INTERVAL
+        value: "5"
+      - key: MIN_CONFIDENCE
+        value: "60"
+      - key: PYTHON_VERSION
+        value: "3.11.6"
+    disk:
+      name: signal-data
+      mountPath: /data
+      sizeGB: 1
