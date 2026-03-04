@@ -1,0 +1,24 @@
+services:
+  - type: web
+    name: intraday-signal-engine
+    runtime: python
+    repo: https://github.com/wketan/Intraday
+    branch: main
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn server:app --bind 0.0.0.0:$PORT --timeout 120 --workers 1 --threads 4
+    plan: free
+    envVars:
+      - key: ANGEL_API_KEY
+        sync: false
+      - key: ANGEL_CLIENT_ID
+        sync: false
+      - key: ANGEL_PASSWORD
+        sync: false
+      - key: ANGEL_TOTP_SECRET
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: SLACK_WEBHOOK
+        sync: false
+      - key: PYTHON_VERSION
+        value: 3.11.6
