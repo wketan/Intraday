@@ -14,13 +14,6 @@ import threading
 import logging
 from datetime import datetime, timedelta
 
-# Load .env file for local development
-try:
-    from dotenv import load_dotenv
-    load_dotenv()
-except ImportError:
-    pass
-
 import numpy as np
 import pandas as pd
 import requests
@@ -339,7 +332,7 @@ class AngelClient:
         """Fetch option chain: Instrument Master for tokens → 1 batch API call for all prices."""
         try:
             gap = info["strike_gap"]; atm = round(spot/gap)*gap
-            strikes = [atm+i*gap for i in range(-3,4)]
+            strikes = [atm+i*gap for i in range(-7,8)]  # ±7 strikes = 15 strikes × 2 = 30 options
             strikes_set = set(int(s) for s in strikes)
             prefix = info["expiry_prefix"]
             exchange = info["option_exchange"]
@@ -702,6 +695,50 @@ class SignalGen:
         
         conf=min(95,round(max(bs,be)));direction="LONG" if bs>be else "SHORT"
         av=atr.iloc[n]
+        
+        # ═══ CONFLICT DETECTION — reduce confidence when indicators disagree ═══
+        penalties = []
+        
+        # SuperTrend conflict: signal vs trend
+        if direction=="LONG" and st.iloc[n]==-1:
+            conf=max(10,conf-12); penalties.append("SuperTrend BEAR conflicts LONG")
+        elif direction=="SHORT" and st.iloc[n]==1:
+            conf=max(10,conf-12); penalties.append("SuperTrend BULL conflicts SHORT")
+        
+        # RSI overextended: buying overbought or selling oversold
+        if direction=="LONG" and rv>75:
+            conf=max(10,conf-15); penalties.append(f"RSI {rv:.0f} overbought — reversal risk")
+        elif direction=="SHORT" and rv<25:
+            conf=max(10,conf-15); penalties.append(f"RSI {rv:.0f} oversold — bounce risk")
+        
+        # VWAP conflict: LONG below VWAP or SHORT above VWAP
+        if direction=="LONG" and price<vwap.iloc[n]*0.998:
+            conf=max(10,conf-5); penalties.append("Below VWAP — weak for LONG")
+        elif direction=="SHORT" and price>vwap.iloc[n]*1.002:
+            conf=max(10,conf-5); penalties.append("Above VWAP — weak for SHORT")
+        
+        # Low ATR = no volatility, options won't move
+        avg_atr = atr.tail(20).mean()
+        if av < avg_atr * 0.6:
+            conf=max(10,conf-10); penalties.append(f"Low ATR ({av:.1f} vs avg {avg_atr:.1f}) — no momentum")
+        
+        # Late session penalty: theta decay accelerates after 2:30 PM
+        now_hr = datetime.now().hour
+        now_min = datetime.now().minute
+        if now_hr == 14 and now_min >= 30:
+            conf=max(10,conf-5); penalties.append("Late session — theta decay risk")
+        elif now_hr >= 15:
+            conf=max(10,conf-10); penalties.append("Market closing — avoid new entries")
+        
+        # Margin too thin: bull-bear spread too narrow = unclear direction
+        spread = abs(bs - be)
+        if spread < 8:
+            conf=max(10,conf-8); penalties.append(f"Bull/Bear split too close ({bs}B vs {be}S)")
+        
+        reasons = br if direction=="LONG" else ber
+        if penalties:
+            reasons = reasons + [f"⚠️ {p}" for p in penalties]
+        
         if direction=="LONG":
             entry=round(price+av*0.1,2);stop=round(price-av*1.2,2)
             t1,t2=round(entry+self.tmin,2),round(entry+self.tmax,2)
@@ -713,7 +750,7 @@ class SignalGen:
         return {"direction":direction,"confidence":conf,"price":round(price,2),
             "entry":entry,"sl":stop,"target1":t1,"target2":t2,
             "risk":risk,"reward":reward,"risk_reward":round(reward/risk,2) if risk>0 else 0,
-            "reasons":br if direction=="LONG" else ber,
+            "reasons":reasons,
             "indicators":{"rsi":round(rv,1),"macd":round(mh.iloc[n],3),"ema9":round(e9.iloc[n],2),
                 "ema21":round(e21.iloc[n],2),"ema50":round(e50.iloc[n],2),"vwap":round(vwap.iloc[n],2),
                 "atr":round(av,2),"bb_upper":round(bbu.iloc[n],2),"bb_lower":round(bbl.iloc[n],2),
@@ -743,25 +780,36 @@ Option: {option.get('symbol','')} | LTP: ₹{option.get('ltp',0)} | Delta: {opti
 Option SL: ₹{option.get('sl',0)} | T1: ₹{option.get('target1',0)} | T2: ₹{option.get('target2',0)}
 Capital: ₹{option.get('capital',0)} | Max Loss: ₹{option.get('max_loss',0)}"""
 
-            prompt = f"""You are an expert Indian intraday options trader. Analyze this signal and give a quick verdict.
+            prompt = f"""You are a ruthlessly disciplined Indian intraday options trader managing a ₹20,000 account. Your job is to protect capital first, profit second. Only recommend trades with clear edge.
 
 SIGNAL:
 Instrument: {instrument}
-Direction: {signal['direction']} | Confidence: {signal['confidence']}%
+Direction: {signal['direction']} | Engine Confidence: {signal['confidence']}%
 Entry: {signal['entry']} | SL: {signal['sl']} | T1: {signal['target1']} | T2: {signal['target2']}
 R:R: {signal.get('risk_reward',0)}
 {opt_info}
 
 INDICATORS:
-RSI: {ind.get('rsi',0)} | MACD: {ind.get('macd',0)} | SuperTrend: {ind.get('supertrend','')}
+RSI: {ind.get('rsi',0)} | MACD Hist: {ind.get('macd',0)} | SuperTrend: {ind.get('supertrend','')}
 EMA9: {ind.get('ema9',0)} | EMA21: {ind.get('ema21',0)} | VWAP: {ind.get('vwap',0)}
-ATR: {ind.get('atr',0)} | Stoch: {ind.get('stoch',0)} | ADX: {ind.get('adx',0)} | Vol: {ind.get('vol_ratio',0)}x
+ATR: {ind.get('atr',0)} | Stochastic: {ind.get('stoch',0)} | Vol Ratio: {ind.get('vol_ratio',0)}x
 
-REASONS: {', '.join(signal.get('reasons',[])[:5])}
-Current time: {datetime.now().strftime('%H:%M')} IST
+ACTIVE REASONS: {', '.join(signal.get('reasons',[])[:5])}
+Time: {datetime.now().strftime('%H:%M')} IST
 
-Respond in EXACTLY this JSON format (no markdown, no backticks):
-{{"verdict": "TAKE" or "SKIP" or "WAIT", "confidence_adj": number between -15 and +15, "reasoning": "1 line why", "risk_note": "1 line risk", "exit_tip": "when to exit if not hitting target"}}"""
+RULES YOU MUST APPLY:
+- SKIP if RSI>75 for LONG or RSI<25 for SHORT (overextended, reversal likely)
+- SKIP if price is far from VWAP with low volume (mean reversion trap)
+- SKIP if time > 14:30 and premium has heavy theta decay
+- SKIP if ATR is very low (no volatility = no movement)
+- SKIP if SuperTrend conflicts with signal direction
+- TAKE only if 3+ indicators align AND R:R >= 1.2
+- WAIT if setup is developing but not confirmed yet
+- Be extra cautious with BANKNIFTY (wild swings, gaps)
+- Consider: will the OPTION premium move enough to profit after brokerage?
+
+Respond in EXACTLY this JSON (no markdown):
+{{"verdict": "TAKE" or "SKIP" or "WAIT", "confidence_adj": number between -20 and +10, "reasoning": "1 line why", "risk_note": "1 specific risk", "exit_tip": "specific exit condition if target not hit"}}"""
 
             resp = requests.post(
                 AIAnalysis.API_URL,
@@ -841,8 +889,8 @@ def estimate_exit_time(signal):
 # OPTION PICKER
 # ═══════════════════════════════════════════════════════════════════
 class OptPicker:
-    """Pick the BEST option from real Angel One chain data.
-    Rules: ₹40-80 premium, 1 OTM preferred, max 50% capital per trade."""
+    """Pick the BEST option: maximize lots within ₹20K budget.
+    Priority: affordability > premium range > delta > R:R > OTM distance."""
     
     def pick(self, sig, info, chain, atm, budget=20000):
         if not sig: return None
@@ -855,75 +903,69 @@ class OptPicker:
         price = sig["price"]
         max_capital = budget * 0.5  # max 50% per trade
         
-        # Score each option
         scored = []
         for o in cands:
             ltp = o["ltp"]
             strike = o["strike"]
+            if ltp < 5: continue
             
-            if ltp < 5: continue  # too cheap = too far OTM
+            cost_1lot = ltp * lot
+            affordable = (cost_1lot <= max_capital)
+            can_buy_2 = (cost_1lot * 2 <= max_capital)
             
-            affordable = (ltp * lot <= max_capital)
-            
-            # Distance from ATM (in gaps)
             otm_gaps = abs(strike - atm) / gap
-            
-            # Moneyness for delta estimate
             moneyness = abs(strike - price) / price
-            
-            # Is it the right side? (CE: strike >= atm, PE: strike <= atm)
             right_side = (ot == "CE" and strike >= atm) or (ot == "PE" and strike <= atm)
             
-            # Delta estimate from moneyness
             if moneyness < 0.001: delta = 0.50
             elif moneyness < 0.002: delta = 0.45
             elif moneyness < 0.003: delta = 0.38
             elif moneyness < 0.005: delta = 0.30
             elif moneyness < 0.008: delta = 0.22
             else: delta = 0.12
-            
-            # For ITM options, delta is higher
             if not right_side: delta = min(0.70, delta + 0.20)
             
-            # Score: prefer ₹40-80 premium, 1 OTM, good R:R
+            # ═══ BUDGET-FIRST SCORING ═══
             score = 0
             
-            # Premium range scoring (₹40-80 is ideal)
-            if 40 <= ltp <= 80: score += 30
+            # 1. AFFORDABILITY (40 pts) — #1 priority
+            if can_buy_2: score += 40
+            elif affordable: score += 25
+            
+            # 2. PREMIUM SWEET SPOT (25 pts) — ₹30-100 ideal
+            if 40 <= ltp <= 80: score += 25
             elif 30 <= ltp <= 100: score += 20
-            elif 20 <= ltp <= 150: score += 10
+            elif 20 <= ltp <= 150: score += 12
+            elif 150 < ltp <= 250: score += 5
             
-            # OTM distance scoring (1 OTM = best, 0 = ATM ok, 2+ = too far)
-            if right_side and otm_gaps == 1: score += 25  # ideal 1 OTM
-            elif otm_gaps == 0: score += 20  # ATM is fine
-            elif right_side and otm_gaps == 2: score += 15
-            elif otm_gaps >= 3: score += 5
+            # 3. DELTA QUALITY (20 pts) — need movement sensitivity
+            if delta >= 0.35: score += 20
+            elif delta >= 0.25: score += 15
+            elif delta >= 0.18: score += 8
             
-            # Delta scoring (0.30-0.45 ideal for day trading)
-            if 0.30 <= delta <= 0.45: score += 15
-            elif 0.20 <= delta <= 0.50: score += 10
-            
-            # R:R scoring based on real LTP
+            # 4. R:R (10 pts)
             idx_move_to_t1 = abs(sig["target1"] - sig["entry"])
             opt_move_to_t1 = idx_move_to_t1 * delta
             idx_move_to_sl = abs(sig["sl"] - sig["entry"])
             opt_move_to_sl = idx_move_to_sl * delta
             rr = opt_move_to_t1 / max(opt_move_to_sl, 1)
-            if rr >= 1.5: score += 10
-            elif rr >= 1.0: score += 5
+            if rr >= 2.0: score += 10
+            elif rr >= 1.5: score += 7
+            elif rr >= 1.0: score += 3
             
-            # Budget bonus (prefer affordable, but NEVER exclude)
-            if affordable: score += 20
+            # 5. OTM PREFERENCE (5 pts)
+            if right_side and 0.5 <= otm_gaps <= 2.5: score += 5
+            elif otm_gaps < 0.5: score += 3
             
+            lots_possible = max(1, int(max_capital / cost_1lot)) if affordable else 0
             scored.append({**o, "delta": round(delta, 2), "score": score, 
-                          "otm_gaps": otm_gaps, "right_side": right_side, "rr": round(rr, 2),
-                          "affordable": affordable})
+                          "otm_gaps": round(otm_gaps,1), "right_side": right_side, "rr": round(rr, 2),
+                          "affordable": affordable, "lots_possible": lots_possible})
         
         if not scored: return None
         scored.sort(key=lambda x: -x["score"])
         b = scored[0]
         
-        # Calculate option targets/SL using delta
         e = b["ltp"]
         d = b["delta"]
         idx_to_sl = abs(sig["sl"] - sig["entry"])
@@ -934,10 +976,11 @@ class OptPicker:
         t1 = round(e + idx_to_t1 * d, 2)
         t2 = round(e + idx_to_t2 * d, 2)
         
-        if b.get("affordable", True):
-            lots = max(1, min(int(max_capital / (e * lot)), 2))
+        cost_1lot = e * lot
+        if cost_1lot <= max_capital:
+            lots = max(1, min(int(max_capital / cost_1lot), 3))
         else:
-            lots = 1  # Show 1 lot even if over budget
+            lots = 1
         qty = lots * lot
         capital = round(e * qty)
         
@@ -1086,7 +1129,7 @@ class Engine:
 # FLASK API
 # ═══════════════════════════════════════════════════════════════════
 app = Flask(__name__)
-CORS(app, origins=["*"], supports_credentials=False)
+CORS(app)
 engine = Engine()
 
 @app.route("/")
@@ -1270,36 +1313,57 @@ def option_ltp():
     for o in candidates:
         ltp = o["ltp"]
         strike = o["strike"]
-        affordable = (ltp * lot <= max_cap)
+        cost_1lot = ltp * lot
+        affordable = (cost_1lot <= max_cap)
+        can_buy_2 = (cost_1lot * 2 <= max_cap)
         
-        # Moneyness
+        # Moneyness & Delta
         otm_dist = (strike - atm) / gap if direction == "LONG" else (atm - strike) / gap
         moneyness = abs(strike - spot) / spot
-        delta = 0.50 if moneyness < 0.001 else (0.42 if moneyness < 0.002 else (0.35 if moneyness < 0.004 else 0.25))
+        if moneyness < 0.001: delta = 0.50
+        elif moneyness < 0.002: delta = 0.45
+        elif moneyness < 0.004: delta = 0.38
+        elif moneyness < 0.006: delta = 0.30
+        elif moneyness < 0.010: delta = 0.22
+        else: delta = 0.12
         
-        # Scoring
+        # ═══ SCORING: Budget-first approach ═══
+        # Goal: maximize lots × delta for best profit potential
         score = 0
-        # 1. Premium range (30 pts max)
-        if 40 <= ltp <= 80: score += 30
+        
+        # 1. AFFORDABILITY (40 pts) — THE #1 PRIORITY
+        #    Can buy 2 lots = maximum score, 1 lot = good, 0 lots = penalty
+        if can_buy_2: score += 40        # ₹40×65×2 = ₹5200 ✓ (2 lots NIFTY)
+        elif affordable: score += 25      # can buy 1 lot
+        else: score += 0                  # over budget
+
+        # 2. PREMIUM SWEET SPOT (25 pts) — ₹30-100 ideal for ₹20K budget
+        if 40 <= ltp <= 80: score += 25   # perfect range
         elif 30 <= ltp <= 100: score += 20
-        elif 20 <= ltp <= 150: score += 10
-        # 2. OTM distance (25 pts max)
-        if 0.5 <= otm_dist <= 1.5: score += 25
-        elif -0.5 <= otm_dist <= 0.5: score += 20
-        elif 1.5 < otm_dist <= 2.5: score += 15
-        else: score += 5
-        # 3. Delta (15 pts max)
-        if 0.30 <= delta <= 0.45: score += 15
-        elif 0.20 <= delta <= 0.50: score += 10
-        # 4. R:R
+        elif 20 <= ltp <= 150: score += 12
+        elif 150 < ltp <= 250: score += 5
+        # >250 = 0 pts (too expensive, eats all capital)
+        
+        # 3. DELTA QUALITY (20 pts) — need enough movement sensitivity
+        if delta >= 0.35: score += 20     # ATM/near OTM — good moves
+        elif delta >= 0.25: score += 15   # 1-2 OTM — decent
+        elif delta >= 0.18: score += 8    # 3-4 OTM — weak but cheap
+        # <0.18 = 0 pts (too far OTM, won't move enough)
+        
+        # 4. R:R RATIO (10 pts)
         sl_pts = ltp * 0.3
         t1_pts = abs(inst.get("target_min", gap * 0.5)) * delta
-        if sl_pts > 0 and t1_pts / sl_pts >= 1.5: score += 10
-        elif sl_pts > 0 and t1_pts / sl_pts >= 1.0: score += 5
-        # 5. Budget penalty (prefer affordable, but don't exclude)
-        if affordable: score += 20
+        if sl_pts > 0 and t1_pts / sl_pts >= 2.0: score += 10
+        elif sl_pts > 0 and t1_pts / sl_pts >= 1.5: score += 7
+        elif sl_pts > 0 and t1_pts / sl_pts >= 1.0: score += 3
         
-        scored.append({**o, "delta": delta, "otm_dist": otm_dist, "score": score, "affordable": affordable})
+        # 5. OTM PREFERENCE (5 pts) — mild preference for 1-2 OTM
+        if 0.5 <= otm_dist <= 2.5: score += 5
+        elif -0.5 <= otm_dist <= 0.5: score += 3  # ATM ok
+        
+        lots_possible = max(1, int(max_cap / cost_1lot)) if affordable else 0
+        scored.append({**o, "delta": round(delta,3), "otm_dist": round(otm_dist,1), 
+            "score": score, "affordable": affordable, "lots_possible": lots_possible})
     
     if not scored:
         return jsonify({"error": "No options scored", "chain_size": len(chain)}), 500
@@ -1309,16 +1373,19 @@ def option_ltp():
     best = scored[0]
     ltp = best["ltp"]
     
-    # If not affordable, still show it but with 1 lot and over-budget flag
-    if best["affordable"]:
-        lots = max(1, min(int(max_cap / (ltp * lot)), 2))
+    # Calculate lots — maximize within budget
+    cost_1lot = ltp * lot
+    if cost_1lot <= max_cap:
+        lots = max(1, min(int(max_cap / cost_1lot), 3))  # up to 3 lots
         over_budget = False
     else:
         lots = 1
         over_budget = True
-        log.info(f"  OptLTP: {name} cheapest option ₹{ltp} × {lot} = ₹{ltp*lot} exceeds ₹{max_cap} cap, showing anyway")
     
-    log.info(f"  OptLTP: Picked {best['symbol']} LTP=₹{ltp} score={best['score']} (of {len(scored)} candidates)")
+    # Log top 3 candidates for debugging
+    for i,s in enumerate(scored[:3]):
+        tag = "→ PICKED" if i==0 else ""
+        log.info(f"  OptLTP: #{i+1} {s['symbol']} ₹{s['ltp']} δ{s['delta']} OTM{s['otm_dist']} lots={s.get('lots_possible',0)} score={s['score']} {tag}")
     
     return jsonify({
         "symbol": best["symbol"],
@@ -1358,16 +1425,14 @@ def test_chain(n):
         "sample":chain[:4] if chain else [],
         "status":"OK" if chain else "FAILED - check server logs"})
 
-# Pre-load instrument master (works with both direct run and gunicorn)
-if not _master.loaded:
-    log.info("  Loading instrument master...")
-    _master.load()
-
 if __name__ == "__main__":
     log.info("="*60)
     log.info("  INTRADAY OPTIONS SIGNAL ENGINE v4.0")
     log.info(f"  Port: {PORT}")
     log.info(f"  Slack Alerts: {'ON' if CONFIG['slack_enabled'] and CONFIG['slack_webhook'] else 'OFF'}")
     log.info(f"  AI Analysis:  {'ON (Sonnet 4)' if CONFIG.get('anthropic_api_key') else 'OFF'}")
+    # Pre-load instrument master for instant option lookups
+    log.info("  Loading instrument master...")
+    _master.load()
     log.info("="*60)
     app.run(host="0.0.0.0", port=PORT, debug=False)
