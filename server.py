@@ -295,16 +295,16 @@ class AngelClient:
             secret = CONFIG["totp_secret"].upper().replace("0","O").replace("1","I").replace("8","B")
             totp = pyotp.TOTP(secret).now()
             import concurrent.futures as _cf
-        with _cf.ThreadPoolExecutor(max_workers=1) as _ex:
-            try:
-                data = _ex.submit(self.api.generateSession, clientCode=CONFIG["client_id"], password=CONFIG["password"], totp=totp).result(timeout=12)
-            except _cf.TimeoutError:
-                log.error("❌ Login timeout (12s) — API key invalid or Angel One unreachable")
-                self.connected = False; return False
-            if data and data.get("status"):
-                self.connected = True; self.last_login = datetime.now(IST)
-                log.info("✅ Angel One login successful"); return True
-            log.error(f"❌ Login failed: {data}"); return False
+            with _cf.ThreadPoolExecutor(max_workers=1) as _ex:
+                try:
+                    data = _ex.submit(self.api.generateSession, clientCode=CONFIG["client_id"], password=CONFIG["password"], totp=totp).result(timeout=12)
+                except _cf.TimeoutError:
+                    log.error("❌ Login timeout (12s) — API key invalid or Angel One unreachable")
+                    self.connected = False; return False
+                if data and data.get("status"):
+                    self.connected = True; self.last_login = datetime.now(IST)
+                    log.info("✅ Angel One login successful"); return True
+                log.error(f"❌ Login failed: {data}"); return False
         except Exception as e:
             log.error(f"❌ Login error: {e}"); return False
     
