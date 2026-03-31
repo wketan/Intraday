@@ -294,7 +294,13 @@ class AngelClient:
             self.api = SmartConnect(api_key=CONFIG["api_key"])
             secret = CONFIG["totp_secret"].upper().replace("0","O").replace("1","I").replace("8","B")
             totp = pyotp.TOTP(secret).now()
-            data = self.api.generateSession(clientCode=CONFIG["client_id"], password=CONFIG["password"], totp=totp)
+            import concurrent.futures as _cf
+        with _cf.ThreadPoolExecutor(max_workers=1) as _ex:
+            try:
+                data = _ex.submit(self.api.generateSession, clientCode=CONFIG["client_id"], password=CONFIG["password"], totp=totp).result(timeout=12)
+            except _cf.TimeoutError:
+                log.error("❌ Login timeout (12s) — API key invalid or Angel One unreachable")
+                self.connected = False; return False
             if data and data.get("status"):
                 self.connected = True; self.last_login = datetime.now(IST)
                 log.info("✅ Angel One login successful"); return True
@@ -310,11 +316,16 @@ class AngelClient:
     def candles(self, token, exchange, interval="FIVE_MINUTE", days=3):
         try:
             if not self.ensure(): return pd.DataFrame()
-            resp = self.api.getCandleData({
-                "exchange":exchange,"symboltoken":token,"interval":interval,
+            _params = {"exchange":exchange,"symboltoken":token,"interval":interval,
                 "fromdate":(datetime.now(IST)-timedelta(days=days)).strftime("%Y-%m-%d %H:%M"),
-                "todate":datetime.now(IST).strftime("%Y-%m-%d %H:%M"),
-            })
+                "todate":datetime.now(IST).strftime("%Y-%m-%d %H:%M")}
+            import concurrent.futures as _cf2
+            with _cf2.ThreadPoolExecutor(max_workers=1) as _ex2:
+                try:
+                    resp = _ex2.submit(self.api.getCandleData, _params).result(timeout=12)
+                except _cf2.TimeoutError:
+                    log.error("❌ getCandleData timeout (12s) — returning empty")
+                    return pd.DataFrame()
             if resp and resp.get("status") and resp.get("data"):
                 df = pd.DataFrame(resp["data"], columns=["timestamp","open","high","low","close","volume"])
                 df["timestamp"] = pd.to_datetime(df["timestamp"]); return df
