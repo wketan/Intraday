@@ -9,7 +9,7 @@
 <link rel="manifest" href="manifest.json">
 <title>Signal Engine</title>
 <style>
-  *{margin:0;padding:0;box-sizing:border-box;-webkit-font-smoothing:antialiased}
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-font-smoothing:antialiased;-webkit-tap-highlight-color:transparent}
   body{background:#09090b;color:#e4e4e7;font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text','Helvetica Neue',sans-serif;overflow-x:hidden}
   button{font-family:inherit;cursor:pointer;outline:none}
   input{font-family:inherit}
@@ -17,15 +17,16 @@
   @keyframes pulse{0%,100%{opacity:1}50%{opacity:0.4}}
   @keyframes spin{to{transform:rotate(360deg)}}
   @keyframes slideDown{from{transform:translateY(-100%);opacity:0}to{transform:translateY(0);opacity:1}}
+  @keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
   .mono{font-family:'SF Mono',SFMono-Regular,Menlo,'Courier New',monospace}
   .card{background:#18181b;border-radius:12px;border:1px solid rgba(255,255,255,0.06)}
   .lbl{font-size:9px;color:#71717a;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:3px}
-  @media(max-width:640px){
-    header{padding:8px 12px!important;gap:6px!important}
-    nav{padding:0 12px!important;overflow-x:auto}
-    nav button{padding:10px 14px!important;white-space:nowrap}
+  @media(max-width:768px){
+    html{font-size:14px}
+    ::-webkit-scrollbar{width:0}
+    button{-webkit-tap-highlight-color:transparent;touch-action:manipulation}
   }
-</style>
+</style></style>
 </head>
 <body>
 <div id="root"></div>
@@ -256,7 +257,7 @@ const G="#22c55e",R="#ef4444",Y="#eab308",B="#3b82f6",P="#a855f7",M="#71717a",D=
 function Chart({candles,sig}){
   if(!candles||candles.length<5)return null;
   const d=candles.slice(-60),c=d.map(x=>x.c);
-  const mn=Math.min(...c)*0.9998,mx=Math.max(...c)*1.0002,w=600,ht=150;
+  const mn=Math.min(...c)*0.9998,mx=Math.max(...c)*1.0002,w=window.innerWidth<=768?window.innerWidth-80:600,ht=150;
   const pts=c.map((v,i)=>(i/(c.length-1))*w+","+(ht-((v-mn)/(mx-mn))*ht)).join(" ");
   const clr=sig&&sig.direction==="LONG"?G:R;
   const lines=[];
@@ -307,14 +308,14 @@ function TradeCard({t}){
       h("div",{style:{paddingTop:16}},
         // Row 0: Timing
         h("div",{style:{fontSize:10,color:M,fontWeight:600,marginBottom:8,textTransform:"uppercase",letterSpacing:"0.06em"}},"Timing"),
-        h("div",{style:{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8,marginBottom:16}},
+        h("div",{style:{display:"grid",gridTemplateColumns:window.innerWidth<=768?"repeat(2,1fr)":"repeat(4,1fr)",gap:8,marginBottom:16}},
           [{l:"Entry Time",v:t.date+" "+t.time,c:T},{l:"Exit Time",v:t.exitDate&&t.exitTime?t.exitDate+" "+t.exitTime:isOpen?"Active":"—",c:t.exitTime?T:isOpen?B:M},
            {l:"Duration",v:t.durationStr||"—",c:B},{l:"Est. Exit Was",v:t.estExitBy?"~"+t.estExitBy:"—",c:D}].map(x=>
             h("div",{key:x.l,style:{background:"#111113",borderRadius:10,padding:"12px 14px"}},
               h("div",{className:"lbl"},x.l),h("div",{className:"mono",style:{fontSize:12,fontWeight:600,color:x.c}},x.v)))),
         // Row 1: Option trade levels
         h("div",{style:{fontSize:10,color:M,fontWeight:600,marginBottom:8,textTransform:"uppercase",letterSpacing:"0.06em"}},"Option Trade Levels"),
-        h("div",{style:{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8,marginBottom:16}},
+        h("div",{style:{display:"grid",gridTemplateColumns:window.innerWidth<=768?"repeat(2,1fr)":"repeat(4,1fr)",gap:8,marginBottom:16}},
           [{l:isLive?"Buy At (LIVE)":"Buy At (Est.)",v:pfx+t.optEntry,c:Y},
            {l:w?"Exit (Target)":isOpen?"SL Level":"Exit (SL)",v:pfx+(w?t.optT1:t.optSL),c:w?G:R},
            {l:"Stop Loss",v:pfx+t.optSL,c:R},{l:"Target",v:pfx+t.optT1,c:G}].map(x=>
@@ -322,19 +323,19 @@ function TradeCard({t}){
               h("div",{className:"lbl"},x.l),h("div",{className:"mono",style:{fontSize:13,fontWeight:600,color:x.c}},x.v)))),
         // Row 2: Option details
         h("div",{style:{fontSize:10,color:M,fontWeight:600,marginBottom:8,textTransform:"uppercase",letterSpacing:"0.06em"}},"Trade Details"),
-        h("div",{style:{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8,marginBottom:8}},
+        h("div",{style:{display:"grid",gridTemplateColumns:window.innerWidth<=768?"repeat(2,1fr)":"repeat(3,1fr)",gap:8,marginBottom:8}},
           [{l:"Symbol",v:fmtOpt(t.option),c:P},{l:isLive?"Premium (LIVE)":"Premium (Est.)",v:pfx+(t.premium||t.optEntry),c:Y},{l:"Capital Required",v:"₹"+(t.capital||0).toLocaleString(),c:T}].map(x=>
             h("div",{key:x.l,style:{background:"#111113",borderRadius:10,padding:"12px 14px"}},
               h("div",{className:"lbl"},x.l),h("div",{className:"mono",style:{fontSize:12,fontWeight:600,color:x.c}},x.v)))),
         t.optToken&&h("div",{style:{marginBottom:8}},h("a",{href:angelUrl(t.option,t.optToken),target:"_blank",rel:"noopener",style:{display:"inline-flex",alignItems:"center",gap:6,fontSize:11,padding:"6px 14px",borderRadius:8,background:B+"12",color:B,textDecoration:"none",fontWeight:600,border:"1px solid "+B+"25"}},"\ud83d\udcc8 Open in Angel One")),
-        h("div",{style:{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8,marginBottom:16}},
+        h("div",{style:{display:"grid",gridTemplateColumns:window.innerWidth<=768?"repeat(2,1fr)":"repeat(4,1fr)",gap:8,marginBottom:16}},
           [{l:"Lot Size",v:(t.lotSize||"—")+" shares",c:D},{l:"Lots",v:t.lots||1,c:D},
            {l:"R:R",v:(t.rrRatio||0)+"x",c:(t.rrRatio||0)>=1.5?G:Y},{l:"P&L",v:isOpen?"Active":(t.pnl>=0?"+":"")+"₹"+t.pnl.toLocaleString(),c:isOpen?B:clr}].map(x=>
             h("div",{key:x.l,style:{background:"#111113",borderRadius:10,padding:"12px 14px"}},
               h("div",{className:"lbl"},x.l),h("div",{className:"mono",style:{fontSize:12,fontWeight:600,color:x.c}},x.v)))),
         // Index reference levels
         h("div",{style:{fontSize:10,color:M,fontWeight:600,marginBottom:8,textTransform:"uppercase",letterSpacing:"0.06em"}},"Index Reference ("+t.inst+")"),
-        h("div",{style:{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8,marginBottom:16}},
+        h("div",{style:{display:"grid",gridTemplateColumns:window.innerWidth<=768?"repeat(2,1fr)":"repeat(3,1fr)",gap:8,marginBottom:16}},
           [{l:"Spot Entry",v:"₹"+(t.entryPrice||0),c:D},{l:"Spot SL",v:"₹"+(t.slPrice||0),c:D},{l:"Spot Target",v:"₹"+(t.targetPrice||0),c:D}].map(x=>
             h("div",{key:x.l,style:{background:"#111113",borderRadius:10,padding:"10px 14px"}},
               h("div",{className:"lbl"},x.l),h("div",{className:"mono",style:{fontSize:11,fontWeight:500,color:x.c}},x.v)))),
@@ -354,6 +355,8 @@ function TradeCard({t}){
 
 // ═══ App ═══
 function App(){
+  const [isMobile,setIsMobile]=React.useState(window.innerWidth<=768);
+  React.useEffect(()=>{const _h=()=>setIsMobile(window.innerWidth<=768);window.addEventListener('resize',_h);return()=>window.removeEventListener('resize',_h);},[]);
   const[mode,setMode]=useState("replay");const[sel,setSel]=useState(0);const[tab,setTab]=useState("signals");
   const[serverUrl,setServerUrl]=useState(getServer());
   const[showSettings,setShowSettings]=useState(!getServer());
@@ -679,7 +682,7 @@ function App(){
       h("span",null,"SIGNAL: "+toast.text),
       h("span",{style:{fontSize:11,opacity:0.8,marginLeft:8}},"(click to dismiss)")),
     // ── Header ──
-    h("header",{style:{background:BG,borderBottom:"1px solid "+BD,padding:"10px 24px",display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:8,position:"sticky",top:0,zIndex:100}},
+    h("header",{style:{background:BG,borderBottom:"1px solid "+BD,padding:isMobile?"10px 16px":"10px 24px",display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:isMobile?6:8,position:"sticky",top:0,zIndex:100}},
       h("div",{style:{display:"flex",alignItems:"center",gap:14}},
         h("div",{style:{width:8,height:8,borderRadius:"50%",background:on?G:M,boxShadow:on?"0 0 10px "+G+"60":"none",animation:on?"pulse 2s infinite":"none"}}),
         h("span",{style:{fontSize:15,fontWeight:600,letterSpacing:"-0.02em"}},"Signal Engine"),
@@ -727,7 +730,7 @@ function App(){
             "2. Deploy to Render (free) for 24/7 access — see README")))),
 
     // Tabs
-    h("nav",{style:{display:"flex",gap:0,padding:"0 24px",background:BG,borderBottom:"1px solid "+BD}},
+    h("nav",{style:{display:"flex",gap:0,padding:isMobile?"0 12px":"0 24px",background:BG,borderBottom:"1px solid "+BD,overflowX:"auto",WebkitOverflowScrolling:"touch",scrollbarWidth:"none"}},
       [{k:"signals",l:"Signals"},{k:"journal",l:"Journal ("+trades.length+")"},{k:"stats",l:"Stats"},{k:"calc",l:"Calculator"},{k:"log",l:"Log"}].map(t=>
         h("button",{key:t.k,onClick:()=>setTab(t.k),style:{background:"transparent",border:"none",
           borderBottom:tab===t.k?"2px solid "+B:"2px solid transparent",color:tab===t.k?T:M,
@@ -735,7 +738,7 @@ function App(){
 
     // ═══ SIGNALS ═══
     tab==="signals"&&h("div",null,
-      h("div",{style:{display:"flex",gap:4,padding:"12px 24px"}},
+      h("div",{style:{display:"flex",gap:4,padding:isMobile?"10px 12px":"12px 24px",overflowX:"auto",WebkitOverflowScrolling:"touch",scrollbarWidth:"none",msOverflowStyle:"none"}},
         INST.map((ins,i)=>{const s=signals[ins.name],cn=candles[ins.name]||[];
           const p=cn.length>0?cn[cn.length-1].c:(s?s.price:ins.base);
           return h("button",{key:i,onClick:()=>setSel(i),style:{background:sel===i?BG2:"transparent",border:"1px solid "+(sel===i?BD:"transparent"),
@@ -745,12 +748,12 @@ function App(){
             s&&s.confidence>=40&&s.activeCount>=2&&s.inWindow&&h("span",{style:{fontSize:9,padding:"2px 8px",borderRadius:4,
               background:s.direction==="LONG"?G+"15":R+"15",color:s.direction==="LONG"?G:R,fontWeight:600}},s.direction))})),
 
-      h("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr",minHeight:"calc(100vh - 170px)"}},
+      h("div",{style:{display:"grid",gridTemplateColumns:isMobile?"1fr":"1fr 1fr",minHeight:isMobile?"auto":"calc(100vh - 170px)"}},
         // LEFT
-        h("div",{style:{padding:"20px 24px",borderRight:"1px solid "+BD,overflowY:"auto",maxHeight:"calc(100vh - 170px)"}},
+        h("div",{style:{padding:isMobile?"16px":"20px 24px",borderRight:isMobile?"none":"1px solid "+BD,overflowY:isMobile?"visible":"auto",maxHeight:isMobile?"none":"calc(100vh - 170px)"}},
           h("div",{style:{marginBottom:20}},
             h("div",{style:{display:"flex",alignItems:"baseline",gap:12}},
-              h("span",{className:"mono",style:{fontSize:36,fontWeight:700,letterSpacing:"-0.04em",
+              h("span",{className:"mono",style:{fontSize:isMobile?26:36,fontWeight:700,letterSpacing:"-0.04em",
                 transition:"color 0.3s",color:mode==="live"&&ltpDir==="up"?G:mode==="live"&&ltpDir==="down"?R:T}},(typeof ltp==="number"?ltp.toFixed(2):ltp)),
               h("span",{className:"mono",style:{fontSize:14,fontWeight:600,color:chg>=0?G:R}},(chg>=0?"+":"")+chg.toFixed(2)+" ("+pct.toFixed(2)+"%)")),
             h("div",{style:{color:M,fontSize:11,marginTop:5}},
@@ -777,17 +780,17 @@ function App(){
                     strokeLinecap:"round",transform:"rotate(-90 30 30)",style:{transition:"all 0.8s"}}),
                   h("text",{x:30,y:33,textAnchor:"middle",fill:T,fontSize:13,fontWeight:700,fontFamily:"SF Mono,monospace"},sig.confidence)))),
             sig.confidence>=35&&h("div",null,
-              h("div",{style:{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8,marginBottom:10}},
+              h("div",{style:{display:"grid",gridTemplateColumns:isMobile?"repeat(2,1fr)":"repeat(4,1fr)",gap:8,marginBottom:10}},
                 [{l:sig.option.source==="LIVE"?"Buy (LIVE)":"Buy (Est.)",v:(sig.option.source==="LIVE"?"₹":"~₹")+sig.option.premium,c:Y},{l:"SL Premium",v:(sig.option.source==="LIVE"?"₹":"~₹")+sig.option.sl,c:R},{l:"T1 Premium",v:(sig.option.source==="LIVE"?"₹":"~₹")+sig.option.target1,c:G},{l:"T2 Premium",v:(sig.option.source==="LIVE"?"₹":"~₹")+sig.option.target2,c:G}].map(x=>
                   h("div",{key:x.l,style:{background:"#111113",borderRadius:10,padding:"10px 12px"}},
                     h("div",{className:"lbl"},x.l),h("div",{className:"mono",style:{fontSize:13,fontWeight:600,color:x.c}},x.v)))),
               // Timing estimate
-              sig.estExit&&h("div",{style:{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8,marginBottom:10}},
+              sig.estExit&&h("div",{style:{display:"grid",gridTemplateColumns:isMobile?"repeat(2,1fr)":"repeat(4,1fr)",gap:8,marginBottom:10}},
                 [{l:"Entry Time",v:sig.time,c:T},{l:"Target By",v:"~"+sig.estExit.targetBy,c:G},
                  {l:"SL By",v:"~"+sig.estExit.slBy,c:R},{l:"Est. Duration",v:sig.estExit.duration,c:B}].map(x=>
                   h("div",{key:x.l,style:{background:"#111113",borderRadius:10,padding:"8px 12px"}},
                     h("div",{className:"lbl"},x.l),h("div",{className:"mono",style:{fontSize:12,fontWeight:600,color:x.c}},x.v)))),
-              h("div",{style:{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8,marginBottom:14}},
+              h("div",{style:{display:"grid",gridTemplateColumns:isMobile?"repeat(2,1fr)":"repeat(4,1fr)",gap:8,marginBottom:14}},
                 [{l:"Index Entry",v:sig.entry,c:D},{l:"Index SL",v:sig.sl,c:D},{l:"Index T1",v:sig.target1,c:D},{l:"Index T2",v:sig.target2,c:D}].map(x=>
                   h("div",{key:x.l,style:{background:"#111113",borderRadius:10,padding:"8px 12px"}},
                     h("div",{className:"lbl"},x.l),h("div",{className:"mono",style:{fontSize:11,fontWeight:500,color:x.c}},x.v)))),
@@ -817,13 +820,13 @@ function App(){
               h("div",{style:{textAlign:"right"}},
                 h("div",{className:"lbl"},sig.option.source==="LIVE"?"BUY AT (LIVE)":"BUY AT (EST.)"),
                 h("div",{className:"mono",style:{fontSize:28,fontWeight:700}},(sig.option.source==="LIVE"?"₹":"~₹")+sig.option.premium))),
-            h("div",{style:{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8,marginBottom:10}},
+            h("div",{style:{display:"grid",gridTemplateColumns:isMobile?"repeat(2,1fr)":"repeat(3,1fr)",gap:8,marginBottom:10}},
               [{l:"Exit if SL",v:(sig.option.source==="LIVE"?"₹":"~₹")+sig.option.sl,c:R},
                {l:"Exit at T1",v:(sig.option.source==="LIVE"?"₹":"~₹")+sig.option.target1,c:G},
                {l:"Exit at T2",v:(sig.option.source==="LIVE"?"₹":"~₹")+sig.option.target2,c:G}].map(x=>
                 h("div",{key:x.l,style:{background:"#111113",borderRadius:10,padding:"10px 12px"}},
                   h("div",{className:"lbl"},x.l),h("div",{className:"mono",style:{fontSize:14,fontWeight:700,color:x.c}},x.v)))),
-            h("div",{style:{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8,marginBottom:10}},
+            h("div",{style:{display:"grid",gridTemplateColumns:isMobile?"repeat(2,1fr)":"repeat(4,1fr)",gap:8,marginBottom:10}},
               [{l:"Capital",v:"₹"+sig.option.capital.toLocaleString(),c:P},{l:"Max Loss",v:"-₹"+sig.option.maxLoss,c:R},
                {l:"T1 Profit",v:"+₹"+sig.option.profit1,c:G},{l:"T2 Profit",v:"+₹"+sig.option.profit2,c:G}].map(x=>
                 h("div",{key:x.l,style:{background:"#111113",borderRadius:10,padding:"10px 12px"}},
@@ -831,7 +834,7 @@ function App(){
             sig.option.source!=="LIVE"&&h("div",{style:{fontSize:9,color:M,padding:"6px 0",fontStyle:"italic"}},"* Backtest estimate — actual option prices vary with IV, time decay & demand"))
         ),
         // RIGHT
-        h("div",{style:{padding:"20px 24px",overflowY:"auto",maxHeight:"calc(100vh - 170px)"}},
+        h("div",{style:{padding:isMobile?"16px":"20px 24px",overflowY:isMobile?"visible":"auto",maxHeight:isMobile?"none":"calc(100vh - 170px)"}},
           sig&&h("div",null,
             h("div",{className:"lbl",style:{marginBottom:10}},"STRATEGIES · "+sig.activeCount+" ACTIVE"),
             ...(sig.strategies||[]).map((s,i)=>{const clr={LONG:G,SHORT:R,WAIT:M};
@@ -847,7 +850,7 @@ function App(){
                   h("div",{style:{fontSize:10,color:M,marginTop:1}},s.detail)))}),
             sig.indicators&&h("div",null,
               h("div",{className:"lbl",style:{marginTop:20,marginBottom:10}},"INDICATORS"),
-              h("div",{style:{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:4}},
+              h("div",{style:{display:"grid",gridTemplateColumns:isMobile?"repeat(2,1fr)":"repeat(3,1fr)",gap:4}},
                 [["RSI",sig.indicators.rsi,sig.indicators.rsi>30&&sig.indicators.rsi<70],["MACD",sig.indicators.macd,sig.direction==="LONG"?sig.indicators.macd>0:sig.indicators.macd<0],
                  ["Vol",sig.indicators.vol+"x",sig.indicators.vol>1],["ST",sig.indicators.supertrend,(sig.direction==="LONG"&&sig.indicators.supertrend==="BULL")||(sig.direction==="SHORT"&&sig.indicators.supertrend==="BEAR")],
                  ["Stoch",sig.indicators.stoch,sig.indicators.stoch>20&&sig.indicators.stoch<80],["ATR",sig.indicators.atr,true]].map(([l,v,g])=>
@@ -872,7 +875,7 @@ function App(){
                   a.option&&h("span",{style:{fontSize:8,padding:"2px 6px",borderRadius:3,background:isLive?G+"20":Y+"20",color:isLive?G:Y,fontWeight:600}},isLive?"LIVE":"EST")),
                 h("span",{style:{color:M,fontSize:10}},a.date+" "+a.time)),
               // Row 2: Option trade plan
-              a.option&&h("div",{style:{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:6,marginBottom:6}},
+              a.option&&h("div",{style:{display:"grid",gridTemplateColumns:isMobile?"repeat(2,1fr)":"repeat(4,1fr)",gap:6,marginBottom:6}},
                 [{l:"BUY",v:(isLive?"₹":"~₹")+a.option.premium,c:Y},
                  {l:"SL",v:(isLive?"₹":"~₹")+a.option.sl,c:R},
                  {l:"T1",v:(isLive?"₹":"~₹")+a.option.target1,c:G},
@@ -899,7 +902,7 @@ function App(){
     ), // signals tab
 
     // ═══ JOURNAL ═══
-    tab==="journal"&&h("div",{style:{padding:24,maxWidth:960,margin:"0 auto"}},
+    tab==="journal"&&h("div",{style:{padding:isMobile?16:24,maxWidth:960,margin:"0 auto"}},
       h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:24}},
         h("div",null,
           h("div",{style:{fontSize:20,fontWeight:600,marginBottom:4}},"Trade Journal"),
@@ -913,9 +916,9 @@ function App(){
       trades.map(t=>h(TradeCard,{key:t.id,t}))),
 
     // ═══ STATS ═══
-    tab==="stats"&&h("div",{style:{padding:28,maxWidth:640,margin:"0 auto"}},
+    tab==="stats"&&h("div",{style:{padding:isMobile?16:28,maxWidth:640,margin:"0 auto"}},
       h("div",{style:{fontSize:20,fontWeight:600,marginBottom:24}},"Performance"+(mode==="replay"?" (Backtest)":"")),
-      h("div",{style:{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10,marginBottom:24}},
+      h("div",{style:{display:"grid",gridTemplateColumns:isMobile?"repeat(2,1fr)":"repeat(4,1fr)",gap:10,marginBottom:24}},
         [{l:"Trades",v:perf.total,c:T},{l:"Wins",v:perf.wins,c:G},{l:"Losses",v:perf.losses,c:R},
          {l:"Win %",v:perf.total>0?Math.round(perf.wins/perf.total*100)+"%":"—",c:perf.total>0&&perf.wins/perf.total>=0.5?G:R}].map(x=>
           h("div",{key:x.l,className:"card",style:{padding:20,textAlign:"center"}},
@@ -940,7 +943,7 @@ function App(){
             h("span",{style:{fontSize:11,color:M}},l),h("span",{className:"mono",style:{fontSize:11,fontWeight:500}},v))))),
 
     // ═══ LOG ═══
-    tab==="log"&&h("div",{style:{padding:24,maxWidth:750,margin:"0 auto"}},
+    tab==="log"&&h("div",{style:{padding:isMobile?16:24,maxWidth:750,margin:"0 auto"}},
       h("div",{style:{fontSize:20,fontWeight:600,marginBottom:20}},"Engine Log"),
       h("div",{className:"mono",style:{fontSize:11,lineHeight:"2"}},
         log.map((l,i)=>h("div",{key:i,style:{color:l.m.includes("ERROR")||l.m.includes("FAILED")||l.m.includes("failed")?R:
@@ -948,7 +951,7 @@ function App(){
           h("span",{style:{color:M+"80",marginRight:12}},l.t),l.m)))),
 
     // ═══ CALCULATOR ═══
-    tab==="calc"&&h("div",{style:{padding:24,maxWidth:560,margin:"0 auto"}},
+    tab==="calc"&&h("div",{style:{padding:isMobile?16:24,maxWidth:560,margin:"0 auto"}},
       h("div",{style:{fontSize:20,fontWeight:600,marginBottom:6}},"Profit Calculator"),
       h("div",{style:{fontSize:11,color:M,marginBottom:24}},"Calculate P&L for any option trade"),
       (()=>{
@@ -1006,7 +1009,7 @@ function App(){
               inp("NUMBER OF LOTS",calcLots,setCalcLots,"e.g. 1")),
 
           // Lot info row
-          hasResult&&h("div",{style:{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8,marginBottom:12}},
+          hasResult&&h("div",{style:{display:"grid",gridTemplateColumns:isMobile?"repeat(2,1fr)":"repeat(4,1fr)",gap:8,marginBottom:12}},
             [{l:"Lot Size",v:lot},{l:"Lots",v:lots},{l:"Qty",v:qty},{l:"Invested",v:"₹"+(invested).toLocaleString("en-IN",{maximumFractionDigits:0})}].map(x=>
               h("div",{key:x.l,style:{background:"#111113",borderRadius:10,padding:"12px 14px"}},
                 h("div",{className:"lbl"},x.l),
@@ -1022,7 +1025,7 @@ function App(){
               (pnlPct>=0?"+":"")+pnlPct.toFixed(1)+"% return")),
 
           // Per-lot breakdown
-          hasResult&&h("div",{style:{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8}},
+          hasResult&&h("div",{style:{display:"grid",gridTemplateColumns:isMobile?"repeat(2,1fr)":"repeat(3,1fr)",gap:8}},
             [{l:"Per Lot P&L",v:(perLot>=0?"+":"")+"₹"+Math.abs(perLot).toLocaleString("en-IN",{maximumFractionDigits:0}),c:perLot>=0?G:R},
              {l:"Move (₹)",v:(exit-entry>=0?"+":"")+(exit-entry).toFixed(1),c:exit-entry>=0?G:R},
              {l:"Move (%)",v:(entry>0?((exit-entry)/entry*100).toFixed(1):"0")+"%",c:exit>=entry?G:R}].map(x=>
