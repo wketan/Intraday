@@ -1,7 +1,7 @@
 """
 ╔══════════════════════════════════════════════════════════════════╗
-║  INTRADAY OPTIONS SIGNAL ENGINE — Production Server             ║
-║  Features: Live Signals + Option Picks + P&L + WhatsApp Alerts  ║
+║  INTRADAY OPTIONS SIGNAL ENGINE — Production Server              ║
+║  Features: Live Signals + Option Picks + P&L + WhatsApp Alerts   ║
 ╚══════════════════════════════════════════════════════════════════╝
 """
 
