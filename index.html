@@ -419,18 +419,18 @@ function App(){
 
   const addLog=useCallback(msg=>setLog(l=>[{t:new Date().toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit",second:"2-digit"}),m:msg},...l].slice(0,150)),[]);
 
-  useEffect(()=>{const ck=async()=>{try{const r=await fetch(API("/api/status"));setServerOk(r.ok)}catch{setServerOk(false)}};ck();const iv=setInterval(ck,10000);return()=>clearInterval(iv)},[]);
+  useEffect(()=>{const ck=async()=>{try{const r=await fetch(API("/api/status"),{credentials:"include"});setServerOk(r.ok)}catch{setServerOk(false)}};ck();const iv=setInterval(ck,10000);return()=>clearInterval(iv)},[]);
 
   const loadReplay=useCallback(async()=>{
     setReplayLoading(true);setReplayData({});setReplayIdx({});setAlerts([]);setTrades([]);
     setPerf({total:0,wins:0,losses:0,pnl:0});setDayTrades({});prevRef.current={};
     addLog("Logging in...");
-    try{const lr=await fetch(API("/api/login"),{method:"POST"});const ld=await lr.json();
+    try{const lr=await fetch(API("/api/login"),{credentials:"include",method:"POST"});const ld=await lr.json();
       if(ld.status!=="ok"){addLog("LOGIN FAILED: "+(ld.error||"unknown"));setReplayLoading(false);return}addLog("Login OK")}
     catch(ex){addLog("ERROR: "+ex.message);setReplayLoading(false);return}
     const data={};let any=false;
     for(const inst of INST){try{addLog("Loading "+inst.key+"...");
-      const r=await fetch(API("/api/historical/"+inst.key+"?days="+replayDays));const d=await r.json();
+      const r=await fetch(API("/api/historical/"+inst.key+"?days="+replayDays),{credentials:"include"});const d=await r.json();
       if(r.ok&&d.candles&&d.candles.length>0){data[inst.name]=d.candles;any=true;addLog(inst.key+": "+d.candles.length+" candles")}
       else{data[inst.name]=[];addLog(inst.key+" error: "+(d.error||"no data"))}}catch(ex){data[inst.name]=[];addLog(inst.key+" failed")}}
     setReplayData(data);const idx={};INST.forEach(i=>idx[i.name]=26);setReplayIdx(idx);
@@ -504,10 +504,10 @@ function App(){
   // ── LIVE MODE: Fast tick (2s) — real-time LTP + engine alerts ──
   const liveFast=useCallback(async()=>{try{
     // Fetch real-time LTP for all instruments
-    const lr=await fetch(API("/api/ltp"));if(lr.ok){const ld=await lr.json();
+    const lr=await fetch(API("/api/ltp"),{credentials:"include"});if(lr.ok){const ld=await lr.json();
       if(ld.prices){setLiveLtp(ld.prices);setLiveTime(ld.time||"")}}
     // Fetch engine alerts
-    const r=await fetch(API("/api/status"));const data=await r.json();
+    const r=await fetch(API("/api/status"),{credentials:"include"});const data=await r.json();
     if(data.alerts&&data.alerts.length>0){
       setAlerts(prev=>{
         const existIds=new Set(prev.map(a=>a.id));
@@ -549,7 +549,7 @@ function App(){
   const liveSignalRef=useRef({});
   const liveSlow=useCallback(async()=>{try{
     for(const ci of INST){try{
-      const cr=await fetch(API("/api/historical/"+ci.key+"?days=2&interval=FIVE_MINUTE"));
+      const cr=await fetch(API("/api/historical/"+ci.key+"?days=2&interval=FIVE_MINUTE"),{credentials:"include"});
       if(cr.ok){const cd=await cr.json();
         if(cd.candles&&cd.candles.length>0){
           const all=cd.candles;
@@ -565,7 +565,7 @@ function App(){
               // LIVE: Always fetch REAL option LTP from Angel One
               if(localSig.direction&&localSig.direction!=="NEUTRAL"){
                 try{
-                  const oResp=await fetch(API("/api/option-ltp"),{method:"POST",headers:{"Content-Type":"application/json"},
+                  const oResp=await fetch(API("/api/option-ltp"),{credentials:"include",method:"POST",headers:{"Content-Type":"application/json"},
                     body:JSON.stringify({instrument:ci.key,spot:localSig.price,direction:localSig.direction})});
                   if(oResp.ok){const oData=await oResp.json();
                     if(oData.ltp>0){
@@ -645,20 +645,27 @@ function App(){
   const doStart=async()=>{
     requestNotify(); // Ask for browser notification permission
     if(mode==="replay"&&!Object.keys(replayData).length){await loadReplay();setOn(true);addLog("Started");return}
-    if(mode==="live"){
+    if(mode==="live"){addLog("Waking server...");
+      try{await fetch(API("/api/ping"),{credentials:"include"})}catch(e){}
+      
       setLiveLoading(true);addLog("Logging in...");
       try{
-        const lr=await fetch(API("/api/login"),{method:"POST"});const ld=await lr.json();
+        const lr=await (async()=>{
+        const ctrl=new AbortController();
+        const tid=setTimeout(()=>ctrl.abort(),75000);
+        try{ return await fetch(API("/api/login"),{credentials:"include",method:"POST",signal:ctrl.signal}); }
+        finally{ clearTimeout(tid); }
+      })();const ld=await lr.json();
         if(ld.status!=="ok"){addLog("LOGIN FAILED: "+(ld.error||"Unknown"));setLiveLoading(false);return}
         addLog("Login OK");
         addLog("Starting engine...");
-        await fetch(API("/api/start"),{method:"POST"});
+        await fetch(API("/api/start"),{credentials:"include",method:"POST"});
         addLog("Engine started — fetching live data...");
       }catch(ex){addLog("ERROR: "+ex.message);setLiveLoading(false);return}
       setLiveLoading(false);
     }
     setOn(true)};
-  const doStop=()=>{if(mode==="live")fetch(API("/api/stop"),{method:"POST"}).catch(()=>{});setOn(false);clearInterval(slowRef.current);addLog("Stopped")};
+  const doStop=()=>{if(mode==="live")fetch(API("/api/stop"),{credentials:"include",method:"POST"}).catch(()=>{});setOn(false);clearInterval(slowRef.current);addLog("Stopped")};
   const doReset=()=>{setOn(false);clearInterval(slowRef.current);setReplayData({});setReplayIdx({});setReplayPct(0);setAlerts([]);setTrades([]);setPerf({total:0,wins:0,losses:0,pnl:0});setDayTrades({});setSignals({});setLiveLtp({});setLiveTime("");prevRef.current={};addLog("Reset")};
 
   const inst=INST[sel],cd=candles[inst.name]||[],sig=signals[inst.name];
@@ -1050,7 +1057,16 @@ function App(){
       "40% min · 2+ strategies · Trade windows only · Max 3/day · Live option chain")
   );
 }
-ReactDOM.render(h(App),document.getElementById("root"));
+
+class ErrorBoundary extends React.Component{
+  constructor(p){super(p);this.state={err:null}}
+  static getDerivedStateFromError(e){return{err:e.message||String(e)}}
+  render(){
+    if(this.state.err)return h("div",{style:{padding:40,color:"#e2e8f0",fontFamily:"monospace",background:"#1a202c",minHeight:"100vh"}},
+      h("div",{style:{color:"#f87171",fontSize:24,marginBottom:16}},"Dashboard Error"),
+      h("pre",{style:{whiteSpace:"pre-wrap",color:"#fbd38d"}},this.state.err));
+    return this.props.children}}
+ReactDOM.render(h(ErrorBoundary,null,h(App)),document.getElementById("root"));
 </script>
 </body>
 </html>
