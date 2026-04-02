@@ -292,7 +292,7 @@ class AngelClient:
         try:
             log.info(f"🔐 Attempting login... client_id={CONFIG['client_id']}")
             self.api = SmartConnect(api_key=CONFIG["api_key"])
-            secret = CONFIG["totp_secret"].upper().replace("0","O").replace("1","I").replace("8","B")
+            secret = CONFIG["totp_secret"].upper().replace("0","O").replace("1","I")
             totp = pyotp.TOTP(secret).now()
             import concurrent.futures as _cf
             with _cf.ThreadPoolExecutor(max_workers=1) as _ex:
@@ -1142,6 +1142,27 @@ class Engine:
 # ═══════════════════════════════════════════════════════════════════
 app = Flask(__name__)
 CORS(app)
+
+@app.after_request
+def add_cors_headers(response):
+    origin = flask_request.headers.get("Origin", "*")
+    response.headers["Access-Control-Allow-Origin"] = origin
+    response.headers["Access-Control-Allow-Credentials"] = "true"
+    response.headers["Access-Control-Allow-Headers"] = "Content-Type, X-Auth-Token"
+    response.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
+    return response
+
+@app.before_request
+def handle_options():
+    if flask_request.method == "OPTIONS":
+        from flask import Response
+        r = Response()
+        r.headers["Access-Control-Allow-Origin"] = flask_request.headers.get("Origin", "*")
+        r.headers["Access-Control-Allow-Credentials"] = "true"
+        r.headers["Access-Control-Allow-Headers"] = "Content-Type, X-Auth-Token"
+        r.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
+        return r, 204
+
 engine = Engine()
 
 @app.route("/")
@@ -1204,7 +1225,7 @@ def historical(instrument):
     
     df = engine.client.candles(inst["token"], inst["exchange"], interval, days)
     if df.empty:
-        return jsonify({"error": "No data returned. Check Angel One connection."}), 500
+        return jsonify({"candles": [], "count": 0, "warning": "No data from Angel One. Market may be closed."}), 200
     
     candles = []
     IST = timedelta(hours=5, minutes=30)
@@ -1446,6 +1467,17 @@ def my_ip():
         ip = str(e)
     return jsonify({'ip': ip})
 
+
+def _startup():
+    """Auto-login on server start — works with both Gunicorn (Railway) and direct run."""
+    import time as _t; _t.sleep(5)
+    log.info("▶ Auto-startup: loading instrument master...")
+    _master.load()
+    log.info("▶ Auto-startup: logging into Angel One...")
+    ok = engine.client.login()
+    log.info("▶ Auto-startup: login " + ("✅ OK" if ok else "❌ FAILED — click Start in dashboard to retry"))
+
+threading.Thread(target=_startup, daemon=True, name="Startup").start()
 
 if __name__ == "__main__":
     log.info("="*60)
