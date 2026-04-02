@@ -1147,7 +1147,7 @@ class Engine:
 # FLASK API
 # ═══════════════════════════════════════════════════════════════════
 app = Flask(__name__)
-CORS(app)
+# CORS via @app.after_request (credentials-safe)
 
 @app.after_request
 def add_cors_headers(response):
@@ -1257,6 +1257,10 @@ def historical(instrument):
         "count": len(candles),
         "candles": candles,
     })
+
+@app.route("/api/ping")
+def ping():
+    return jsonify({"ok": True, "time": datetime.now(IST).strftime("%H:%M:%S")})
 
 @app.route("/api/status")
 def status():
