@@ -828,7 +828,7 @@ Respond in EXACTLY this JSON (no markdown):
                 headers={"Content-Type": "application/json",
                          "x-api-key": api_key,
                          "anthropic-version": "2023-06-01"},
-                json={"model": "claude-sonnet-4-20250514", "max_tokens": 200,
+                json={"model": "claude-sonnet-4-6", "max_tokens": 200,
                       "messages": [{"role": "user", "content": prompt}]},
                 timeout=15
             )
@@ -1110,8 +1110,14 @@ class Engine:
                         not prev or prev.get("direction")!=sig["direction"]
                         or abs(prev.get("confidence",0)-sig["confidence"])>10):
                         
-                        # Run AI analysis (async-safe, has timeout)
+                        # Run AI analysis — blocks SKIP signals
                         ai_result = AIAnalysis.analyze(name, sig, opt)
+                        
+                        # If AI says SKIP, suppress this signal entirely
+                        if ai_result and ai_result.get("verdict") == "SKIP":
+                            log.info(f"🤖 AI BLOCKED {name} {sig['direction']} — {ai_result.get('reasoning','')[:80]}")
+                            self._prev[name] = result
+                            continue
                         
                         self.alerts.insert(0,{"id":int(time.time()*1000),"time":datetime.now(IST).strftime("%H:%M:%S"),
                             "instrument":name,"signal":sig,"option":opt,"timing":timing,"ai":ai_result})
