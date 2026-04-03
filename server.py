@@ -1,8 +1,8 @@
 """
-╔══════════════════════════════════════════════════════════════════╗
-║  INTRADAY OPTIONS SIGNAL ENGINE — Production Server             ║
-║  Features: Live Signals + Option Picks + P&L + WhatsApp Alerts  ║
-╚══════════════════════════════════════════════════════════════════╝
+ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+â  INTRADAY OPTIONS SIGNAL ENGINE â Production Server             â
+â  Features: Live Signals + Option Picks + P&L + WhatsApp Alerts  â
+ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 """
 
 import os
@@ -24,9 +24,9 @@ from flask_cors import CORS
 from SmartApi import SmartConnect
 import pyotp
 
-# ═══════════════════════════════════════════════════════════════════
+# âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 # CONFIG
-# ═══════════════════════════════════════════════════════════════════
+# âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 CONFIG = {
     "api_key":      os.environ.get("ANGEL_API_KEY", ""),
     "client_id":    os.environ.get("ANGEL_CLIENT_ID", ""),
@@ -38,23 +38,23 @@ CONFIG = {
     "lookback_days":     3,
     "target_points_min": int(os.environ.get("TARGET_MIN", "10")),
     "target_points_max": int(os.environ.get("TARGET_MAX", "15")),
-    "min_confidence":    int(os.environ.get("MIN_CONFIDENCE", "40")),
+    "min_confidence":    int(os.environ.get("MIN_CONFIDENCE", "60")),
     "budget":            int(os.environ.get("BUDGET", "20000")),
 
-    # ── Slack Alert Config ──
-    # Create webhook: Slack → Apps → Incoming Webhooks → Add to Slack → Select your DM
+    # ââ Slack Alert Config ââ
+    # Create webhook: Slack â Apps â Incoming Webhooks â Add to Slack â Select your DM
     "slack_webhook":    os.environ.get("SLACK_WEBHOOK", ""),
     "slack_enabled":    os.environ.get("SLACK_ENABLED", "true").lower() == "true",
     
-    # ── AI Analysis (Claude Sonnet 4) ──
+    # ââ AI Analysis (Claude Sonnet 4) ââ
     "anthropic_api_key": os.environ.get("ANTHROPIC_API_KEY", ""),
 }
 
 PORT = int(os.environ.get("PORT", "5050"))
 
-# ═══════════════════════════════════════════════════════════════════
+# âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 # INSTRUMENTS
-# ═══════════════════════════════════════════════════════════════════
+# âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 INSTRUMENTS = {
     "NIFTY": {
         "symbol": "NIFTY", "token": "99926000", "exchange": "NSE",
@@ -73,9 +73,9 @@ INSTRUMENTS = {
     },
 }
 
-# ═══════════════════════════════════════════════════════════════════
+# âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 # LOGGING
-# ═══════════════════════════════════════════════════════════════════
+# âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(message)s",
@@ -86,19 +86,19 @@ logging.basicConfig(
 )
 log = logging.getLogger("SignalEngine")
 
-# ═══════════════════════════════════════════════════════════════════
-# SLACK DM ALERTS (FREE — uses Incoming Webhook)
-# ═══════════════════════════════════════════════════════════════════
+# âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+# SLACK DM ALERTS (FREE â uses Incoming Webhook)
+# âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 class SlackAlert:
     """
     Slack DM alerts using Incoming Webhook.
     
     SETUP:
-    1. Go to https://api.slack.com/apps → Create New App → From scratch
+    1. Go to https://api.slack.com/apps â Create New App â From scratch
     2. Name: "Trading Alerts", Workspace: your workspace
-    3. Left sidebar → Incoming Webhooks → Activate (toggle ON)
-    4. Click "Add New Webhook to Workspace" → Select your DM channel
-    5. Copy the Webhook URL → paste in CONFIG below
+    3. Left sidebar â Incoming Webhooks â Activate (toggle ON)
+    4. Click "Add New Webhook to Workspace" â Select your DM channel
+    5. Copy the Webhook URL â paste in CONFIG below
     """
     
     @staticmethod
@@ -111,7 +111,7 @@ class SlackAlert:
                 payload["blocks"] = blocks
             resp = requests.post(CONFIG["slack_webhook"], json=payload, timeout=10)
             if resp.status_code == 200:
-                log.info("📱 Slack alert sent")
+                log.info("ð± Slack alert sent")
                 return True
             log.warning(f"Slack alert failed: {resp.status_code} {resp.text}")
             return False
@@ -121,88 +121,88 @@ class SlackAlert:
     
     @staticmethod
     def format_signal(instrument, signal, option, timing=None, ai=None):
-        arrow = "🟢" if signal["direction"] == "LONG" else "🔴"
+        arrow = "ð¢" if signal["direction"] == "LONG" else "ð´"
         entry_time = signal.get("timestamp", datetime.now(IST).strftime("%H:%M"))
         
         msg = f"""{arrow} *SIGNAL: {instrument} {signal["direction"]}*
-━━━━━━━━━━━━━━━━━━━━━"""
+âââââââââââââââââââââ"""
 
         if option:
             msg += f"""
-📋 *{option["action"]}: {option["symbol"]}*
+ð *{option["action"]}: {option["symbol"]}*
 
 *TRADE PLAN:*
-▶ Buy at: `₹{option["entry"]}` (Live LTP)
-🛑 Exit SL: `₹{option["sl"]}`
-✅ Exit T1: `₹{option["target1"]}` → Profit: *+₹{option["t1_profit"]}*
-✅ Exit T2: `₹{option["target2"]}` → Profit: *+₹{option["t2_profit"]}*
-💼 Capital: `₹{option["capital"]}` | Max Loss: `₹{option["max_loss"]}`
-📐 Delta: `{option.get("delta",0.4)}` | R:R: `{signal["risk_reward"]}`
+â¶ Buy at: `â¹{option["entry"]}` (Live LTP)
+ð Exit SL: `â¹{option["sl"]}`
+â Exit T1: `â¹{option["target1"]}` â Profit: *+â¹{option["t1_profit"]}*
+â Exit T2: `â¹{option["target2"]}` â Profit: *+â¹{option["t2_profit"]}*
+ð¼ Capital: `â¹{option["capital"]}` | Max Loss: `â¹{option["max_loss"]}`
+ð Delta: `{option.get("delta",0.4)}` | R:R: `{signal["risk_reward"]}`
 
 *TIMING:*
-⏰ Entry: `{entry_time}` IST"""
+â° Entry: `{entry_time}` IST"""
             if timing:
                 msg += f"""
-🎯 Target by: `~{timing["target_by"]}` IST (~{timing["est_duration"]})
-🛑 SL by: `~{timing["sl_by"]}` IST"""
+ð¯ Target by: `~{timing["target_by"]}` IST (~{timing["est_duration"]})
+ð SL by: `~{timing["sl_by"]}` IST"""
         else:
             msg += f"""
 *INDEX LEVELS:*
-▶ Entry: `{signal["entry"]}` | 🛑 SL: `{signal["sl"]}`
-✅ T1: `{signal["target1"]}` | T2: `{signal["target2"]}`
-⏰ Entry: `{entry_time}` IST"""
+â¶ Entry: `{signal["entry"]}` | ð SL: `{signal["sl"]}`
+â T1: `{signal["target1"]}` | T2: `{signal["target2"]}`
+â° Entry: `{entry_time}` IST"""
 
         if ai and ai.get("verdict"):
             v = ai["verdict"]
-            emoji = "✅" if v == "TAKE" else ("⏸" if v == "WAIT" else "⛔")
+            emoji = "â" if v == "TAKE" else ("â¸" if v == "WAIT" else "â")
             adj = ai.get("confidence_adj", 0)
             adj_str = f"+{adj}" if adj > 0 else str(adj)
             msg += f"""
 
-*🤖 AI ANALYSIS:*
+*ð¤ AI ANALYSIS:*
 {emoji} Verdict: *{v}* (Conf {adj_str}%)
-💡 {ai.get("reasoning", "")}
-⚠️ {ai.get("risk_note", "")}"""
+ð¡ {ai.get("reasoning", "")}
+â ï¸ {ai.get("risk_note", "")}"""
         
         msg += f"""
 
-🎯 Confidence: *{signal["confidence"]}%* | Strategies: {len(signal.get("reasons",[]))}
-*Why:* {' · '.join(signal.get("reasons",[])[:4])}
-━━━━━━━━━━━━━━━━━━━━━
-⚠️ _Verify option LTP before trading. Not financial advice._"""
+ð¯ Confidence: *{signal["confidence"]}%* | Strategies: {len(signal.get("reasons",[]))}
+*Why:* {' Â· '.join(signal.get("reasons",[])[:4])}
+âââââââââââââââââââââ
+â ï¸ _Verify option LTP before trading. Not financial advice._"""
         return msg
     
     @staticmethod
     def format_close(instrument, direction, result, pnl, option=None, entry_time=None):
-        emoji = "✅" if result == "WIN" else "❌"
+        emoji = "â" if result == "WIN" else "â"
         exit_time = datetime.now(IST).strftime("%H:%M")
         msg = f"""{emoji} *TRADE CLOSED: {instrument}*
-━━━━━━━━━━━━━━━━━━━━━
-📊 {direction} → *{result}*"""
+âââââââââââââââââââââ
+ð {direction} â *{result}*"""
         if option:
-            msg += f"\n📋 {option.get('symbol','')}"
+            msg += f"\nð {option.get('symbol','')}"
         if entry_time:
-            msg += f"\n⏰ {entry_time} → {exit_time} IST"
+            msg += f"\nâ° {entry_time} â {exit_time} IST"
         msg += f"""
-💰 P&L: *{"+" if pnl>=0 else ""}₹{pnl}*
-━━━━━━━━━━━━━━━━━━━━━"""
+ð° P&L: *{"+" if pnl>=0 else ""}â¹{pnl}*
+âââââââââââââââââââââ"""
         return msg
 
     @staticmethod
     def format_daily_summary(perf):
-        return f"""📊 *DAILY SUMMARY*
-━━━━━━━━━━━━━━━━━
+        return f"""ð *DAILY SUMMARY*
+âââââââââââââââââ
 Total Signals: {perf["total"]}
-✅ Wins: {perf["wins"]}  |  ❌ Losses: {perf["losses"]}
-📈 Win Rate: *{perf["win_rate"]}%*
-💰 Total P&L: *₹{perf["total_pnl"]}*
-🏆 Best: ₹{perf["best_trade"]}  |  📉 Worst: ₹{perf["worst_trade"]}
-━━━━━━━━━━━━━━━━━"""
+â Wins: {perf["wins"]}  |  â Losses: {perf["losses"]}
+ð Win Rate: *{perf["win_rate"]}%*
+ð° Total P&L: *â¹{perf["total_pnl"]}*
+ð Best: â¹{perf["best_trade"]}  |  ð Worst: â¹{perf["worst_trade"]}
+âââââââââââââââââ"""
 
 
-# ═══════════════════════════════════════════════════════════════════
+# âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 # DATABASE
-# ═══════════════════════════════════════════════════════════════════
+# âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 DB_PATH = os.environ.get("DB_PATH", "signals.db")
 
 def init_db():
@@ -224,7 +224,7 @@ def init_db():
         )
     """)
     conn.commit(); conn.close()
-    log.info("📊 Database ready")
+    log.info("ð Database ready")
 
 init_db()
 
@@ -281,16 +281,16 @@ def get_perf():
         "worst_trade":round(min(pnls),0) if pnls else 0,
     }
 
-# ═══════════════════════════════════════════════════════════════════
+# âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 # ANGEL ONE CLIENT
-# ═══════════════════════════════════════════════════════════════════
+# âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 class AngelClient:
     def __init__(self):
         self.api = None; self.connected = False; self.last_login = None
     
     def login(self):
         try:
-            log.info(f"🔐 Attempting login... client_id={CONFIG['client_id']}")
+            log.info(f"ð Attempting login... client_id={CONFIG['client_id']}")
             self.api = SmartConnect(api_key=CONFIG["api_key"])
             secret = CONFIG["totp_secret"].upper().replace("0","O").replace("1","I")
             totp = pyotp.TOTP(secret).now()
@@ -299,14 +299,14 @@ class AngelClient:
                 try:
                     data = _ex.submit(self.api.generateSession, clientCode=CONFIG["client_id"], password=CONFIG["password"], totp=totp).result(timeout=12)
                 except _cf.TimeoutError:
-                    log.error("❌ Login timeout (12s) — API key invalid or Angel One unreachable")
+                    log.error("â Login timeout (12s) â API key invalid or Angel One unreachable")
                     self.connected = False; return False
                 if data and data.get("status"):
                     self.connected = True; self.last_login = datetime.now(IST)
-                    log.info("✅ Angel One login successful"); return True
-                log.error(f"❌ Login failed: {data}"); return False
+                    log.info("â Angel One login successful"); return True
+                log.error(f"â Login failed: {data}"); return False
         except Exception as e:
-            log.error(f"❌ Login error: {e}"); return False
+            log.error(f"â Login error: {e}"); return False
     
     def ensure(self):
         if not self.connected: return self.login()
@@ -324,7 +324,7 @@ class AngelClient:
                 try:
                     resp = _ex2.submit(self.api.getCandleData, _params).result(timeout=12)
                 except _cf2.TimeoutError:
-                    log.error("❌ getCandleData timeout (12s) — returning empty")
+                    log.error("â getCandleData timeout (12s) â returning empty")
                     return pd.DataFrame()
             if resp and resp.get("status") and resp.get("data"):
                 df = pd.DataFrame(resp["data"], columns=["timestamp","open","high","low","close","volume"])
@@ -341,10 +341,10 @@ class AngelClient:
         except: return None
     
     def option_chain(self, info, spot):
-        """Fetch option chain: Instrument Master for tokens → 1 batch API call for all prices."""
+        """Fetch option chain: Instrument Master for tokens â 1 batch API call for all prices."""
         try:
             gap = info["strike_gap"]; atm = round(spot/gap)*gap
-            strikes = [atm+i*gap for i in range(-7,8)]  # ±7 strikes = 15 strikes × 2 = 30 options
+            strikes = [atm+i*gap for i in range(-7,8)]  # Â±7 strikes = 15 strikes Ã 2 = 30 options
             strikes_set = set(int(s) for s in strikes)
             prefix = info["expiry_prefix"]
             exchange = info["option_exchange"]
@@ -356,7 +356,7 @@ class AngelClient:
                 tokens = self._scrip_lookup(prefix, strikes_set, exchange)
             
             if not tokens:
-                log.error(f"  No tokens for {prefix} — both methods failed")
+                log.error(f"  No tokens for {prefix} â both methods failed")
                 return [], 0
             
             log.info(f"  Got {len(tokens)} tokens for {prefix}")
@@ -456,9 +456,9 @@ class AngelClient:
             log.error(f"  searchScrip fallback error: {e}")
             return []
 
-# ═══════════════════════════════════════════════════════════════════
-# INSTRUMENT MASTER — Download once, lookup any option instantly
-# ═══════════════════════════════════════════════════════════════════
+# âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+# INSTRUMENT MASTER â Download once, lookup any option instantly
+# âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 class InstrumentMaster:
     """Downloads Angel One's instrument master JSON and provides fast option lookups."""
     MASTER_URLS = [
@@ -567,7 +567,7 @@ class InstrumentMaster:
             return []
         
         # Sort expiries and pick nearest future one
-        # Expiry format: "02MAR2026" → parse to date
+        # Expiry format: "02MAR2026" â parse to date
         today = datetime.now(IST).date()
         dated_expiries = []
         for exp in expiries:
@@ -599,12 +599,12 @@ class InstrumentMaster:
         log.info(f"  Found {len(results)} option tokens for {name_prefix} (wanted {len(strikes)*2})")
         return results
 
-# Global instance — loaded once
+# Global instance â loaded once
 _master = InstrumentMaster()
 
-# ═══════════════════════════════════════════════════════════════════
+# âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 # TECHNICAL ANALYSIS
-# ═══════════════════════════════════════════════════════════════════
+# âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 class TA:
     @staticmethod
     def ema(s,p): return s.ewm(span=p,adjust=False).mean()
@@ -648,9 +648,9 @@ class TA:
         atr=TA.atr(df,p);pdi=100*pm.ewm(span=p,adjust=False).mean()/atr;mdi=100*mm.ewm(span=p,adjust=False).mean()/atr
         return(100*((pdi-mdi).abs()/(pdi+mdi))).ewm(span=p,adjust=False).mean(),pdi,mdi
 
-# ═══════════════════════════════════════════════════════════════════
+# âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 # SIGNAL GENERATOR
-# ═══════════════════════════════════════════════════════════════════
+# âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 class SignalGen:
     def __init__(self):
         self.tmin=CONFIG["target_points_min"];self.tmax=CONFIG["target_points_max"]
@@ -665,8 +665,8 @@ class SignalGen:
         vra=df["volume"].tail(20).mean();vr=df["volume"].iloc[n]/vra if vra>0 else 1
         
         bs,be=0,0;br,ber=[],[]
-        if e9.iloc[n]>e21.iloc[n] and e9.iloc[n-1]<=e21.iloc[n-1]:bs+=15;br.append("🔥 EMA 9/21 Bullish Crossover")
-        elif e9.iloc[n]<e21.iloc[n] and e9.iloc[n-1]>=e21.iloc[n-1]:be+=15;ber.append("🔥 EMA 9/21 Bearish Crossover")
+        if e9.iloc[n]>e21.iloc[n] and e9.iloc[n-1]<=e21.iloc[n-1]:bs+=15;br.append("ð¥ EMA 9/21 Bullish Crossover")
+        elif e9.iloc[n]<e21.iloc[n] and e9.iloc[n-1]>=e21.iloc[n-1]:be+=15;ber.append("ð¥ EMA 9/21 Bearish Crossover")
         elif e9.iloc[n]>e21.iloc[n]:bs+=8;br.append("EMA 9>21 bullish")
         else:be+=8;ber.append("EMA 9<21 bearish")
         if price>e50.iloc[n]:bs+=5;br.append("Above EMA 50")
@@ -676,18 +676,18 @@ class SignalGen:
         elif rv>70:be+=12;ber.append(f"RSI Overbought ({rv:.1f})")
         elif 50<rv<65:bs+=6;br.append(f"RSI Bullish ({rv:.1f})")
         elif 35<rv<50:be+=6;ber.append(f"RSI Bearish ({rv:.1f})")
-        if mh.iloc[n]>0 and mh.iloc[n-1]<=0:bs+=15;br.append("🔥 MACD Bull Cross")
-        elif mh.iloc[n]<0 and mh.iloc[n-1]>=0:be+=15;ber.append("🔥 MACD Bear Cross")
+        if mh.iloc[n]>0 and mh.iloc[n-1]<=0:bs+=15;br.append("ð¥ MACD Bull Cross")
+        elif mh.iloc[n]<0 and mh.iloc[n-1]>=0:be+=15;ber.append("ð¥ MACD Bear Cross")
         elif mh.iloc[n]>mh.iloc[n-1] and mh.iloc[n]>0:bs+=8;br.append("MACD rising")
         elif mh.iloc[n]<mh.iloc[n-1] and mh.iloc[n]<0:be+=8;ber.append("MACD falling")
         if price<=bbl.iloc[n]*1.002:bs+=10;br.append("At Lower BB")
         elif price>=bbu.iloc[n]*0.998:be+=10;ber.append("At Upper BB")
-        if price>vwap.iloc[n] and c.iloc[n-1]<=vwap.iloc[n-1]:bs+=10;br.append("🔥 Crossed above VWAP")
-        elif price<vwap.iloc[n] and c.iloc[n-1]>=vwap.iloc[n-1]:be+=10;ber.append("🔥 Crossed below VWAP")
+        if price>vwap.iloc[n] and c.iloc[n-1]<=vwap.iloc[n-1]:bs+=10;br.append("ð¥ Crossed above VWAP")
+        elif price<vwap.iloc[n] and c.iloc[n-1]>=vwap.iloc[n-1]:be+=10;ber.append("ð¥ Crossed below VWAP")
         elif price>vwap.iloc[n]:bs+=5;br.append("Above VWAP")
         else:be+=5;ber.append("Below VWAP")
-        if st.iloc[n]==1 and st.iloc[n-1]==-1:bs+=13;br.append("🔥 Supertrend BULL")
-        elif st.iloc[n]==-1 and st.iloc[n-1]==1:be+=13;ber.append("🔥 Supertrend BEAR")
+        if st.iloc[n]==1 and st.iloc[n-1]==-1:bs+=13;br.append("ð¥ Supertrend BULL")
+        elif st.iloc[n]==-1 and st.iloc[n-1]==1:be+=13;ber.append("ð¥ Supertrend BEAR")
         elif st.iloc[n]==1:bs+=7;br.append("Supertrend Bull")
         else:be+=7;ber.append("Supertrend Bear")
         if vr>1.5:
@@ -708,7 +708,7 @@ class SignalGen:
         conf=min(95,round(max(bs,be)));direction="LONG" if bs>be else "SHORT"
         av=atr.iloc[n]
         
-        # ═══ CONFLICT DETECTION — reduce confidence when indicators disagree ═══
+        # âââ CONFLICT DETECTION â reduce confidence when indicators disagree âââ
         penalties = []
         
         # SuperTrend conflict: signal vs trend
@@ -719,28 +719,28 @@ class SignalGen:
         
         # RSI overextended: buying overbought or selling oversold
         if direction=="LONG" and rv>75:
-            conf=max(10,conf-15); penalties.append(f"RSI {rv:.0f} overbought — reversal risk")
+            conf=max(10,conf-15); penalties.append(f"RSI {rv:.0f} overbought â reversal risk")
         elif direction=="SHORT" and rv<25:
-            conf=max(10,conf-15); penalties.append(f"RSI {rv:.0f} oversold — bounce risk")
+            conf=max(10,conf-15); penalties.append(f"RSI {rv:.0f} oversold â bounce risk")
         
         # VWAP conflict: LONG below VWAP or SHORT above VWAP
         if direction=="LONG" and price<vwap.iloc[n]*0.998:
-            conf=max(10,conf-5); penalties.append("Below VWAP — weak for LONG")
+            conf=max(10,conf-5); penalties.append("Below VWAP â weak for LONG")
         elif direction=="SHORT" and price>vwap.iloc[n]*1.002:
-            conf=max(10,conf-5); penalties.append("Above VWAP — weak for SHORT")
+            conf=max(10,conf-5); penalties.append("Above VWAP â weak for SHORT")
         
         # Low ATR = no volatility, options won't move
         avg_atr = atr.tail(20).mean()
         if av < avg_atr * 0.6:
-            conf=max(10,conf-10); penalties.append(f"Low ATR ({av:.1f} vs avg {avg_atr:.1f}) — no momentum")
+            conf=max(10,conf-10); penalties.append(f"Low ATR ({av:.1f} vs avg {avg_atr:.1f}) â no momentum")
         
         # Late session penalty: theta decay accelerates after 2:30 PM
         now_hr = datetime.now(IST).hour
         now_min = datetime.now(IST).minute
         if now_hr == 14 and now_min >= 30:
-            conf=max(10,conf-5); penalties.append("Late session — theta decay risk")
+            conf=max(10,conf-5); penalties.append("Late session â theta decay risk")
         elif now_hr >= 15:
-            conf=max(10,conf-10); penalties.append("Market closing — avoid new entries")
+            conf=max(10,conf-10); penalties.append("Market closing â avoid new entries")
         
         # Margin too thin: bull-bear spread too narrow = unclear direction
         spread = abs(bs - be)
@@ -749,14 +749,16 @@ class SignalGen:
         
         reasons = br if direction=="LONG" else ber
         if penalties:
-            reasons = reasons + [f"⚠️ {p}" for p in penalties]
+            reasons = reasons + [f"â ï¸ {p}" for p in penalties]
         
         if direction=="LONG":
             entry=round(price+av*0.1,2);stop=round(price-av*1.2,2)
-            t1,t2=round(entry+self.tmin,2),round(entry+self.tmax,2)
+            risk_dist=round(abs(entry-stop),2)
+            t1,t2=round(entry+risk_dist*1.5,2),round(entry+risk_dist*2.5,2)
         else:
             entry=round(price-av*0.1,2);stop=round(price+av*1.2,2)
-            t1,t2=round(entry-self.tmin,2),round(entry-self.tmax,2)
+            risk_dist=round(abs(entry-stop),2)
+            t1,t2=round(entry-risk_dist*1.5,2),round(entry-risk_dist*2.5,2)
         risk=round(abs(entry-stop),2);reward=round(abs(t1-entry),2)
         
         return {"direction":direction,"confidence":conf,"price":round(price,2),
@@ -770,9 +772,9 @@ class SignalGen:
                 "stoch":round(skv,0),"adx":round(adxv,0)},
             "timestamp":datetime.now(IST).strftime("%H:%M:%S")}
 
-# ═══════════════════════════════════════════════════════════════════
+# âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 # AI SIGNAL ANALYSIS (Claude API)
-# ═══════════════════════════════════════════════════════════════════
+# âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 class AIAnalysis:
     API_URL = "https://api.anthropic.com/v1/messages"
     
@@ -788,11 +790,11 @@ class AIAnalysis:
             opt_info = ""
             if option:
                 opt_info = f"""
-Option: {option.get('symbol','')} | LTP: ₹{option.get('ltp',0)} | Delta: {option.get('delta',0)}
-Option SL: ₹{option.get('sl',0)} | T1: ₹{option.get('target1',0)} | T2: ₹{option.get('target2',0)}
-Capital: ₹{option.get('capital',0)} | Max Loss: ₹{option.get('max_loss',0)}"""
+Option: {option.get('symbol','')} | LTP: â¹{option.get('ltp',0)} | Delta: {option.get('delta',0)}
+Option SL: â¹{option.get('sl',0)} | T1: â¹{option.get('target1',0)} | T2: â¹{option.get('target2',0)}
+Capital: â¹{option.get('capital',0)} | Max Loss: â¹{option.get('max_loss',0)}"""
 
-            prompt = f"""You are a ruthlessly disciplined Indian intraday options trader managing a ₹20,000 account. Your job is to protect capital first, profit second. Only recommend trades with clear edge.
+            prompt = f"""You are a ruthlessly disciplined Indian intraday options trader managing a â¹20,000 account. Your job is to protect capital first, profit second. Only recommend trades with clear edge.
 
 SIGNAL:
 Instrument: {instrument}
@@ -840,7 +842,7 @@ Respond in EXACTLY this JSON (no markdown):
                 import re
                 text = re.sub(r'```json\s*|```\s*', '', text).strip()
                 result = json.loads(text)
-                log.info(f"🤖 AI: {instrument} → {result.get('verdict','?')} ({result.get('reasoning','')[:60]})")
+                log.info(f"ð¤ AI: {instrument} â {result.get('verdict','?')} ({result.get('reasoning','')[:60]})")
                 return result
             else:
                 log.warning(f"AI API error: {resp.status_code}")
@@ -850,9 +852,9 @@ Respond in EXACTLY this JSON (no markdown):
             return None
 
 
-# ═══════════════════════════════════════════════════════════════════
+# âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 # EXIT TIME ESTIMATOR
-# ═══════════════════════════════════════════════════════════════════
+# âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 def estimate_exit_time(signal):
     """Estimate probable exit time based on ATR and distance to target"""
     atr = signal.get("indicators", {}).get("atr", 0)
@@ -897,11 +899,11 @@ def estimate_exit_time(signal):
     }, candles_to_t1
 
 
-# ═══════════════════════════════════════════════════════════════════
+# âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 # OPTION PICKER
-# ═══════════════════════════════════════════════════════════════════
+# âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 class OptPicker:
-    """Pick the BEST option: maximize lots within ₹20K budget.
+    """Pick the BEST option: maximize lots within â¹20K budget.
     Priority: affordability > premium range > delta > R:R > OTM distance."""
     
     def pick(self, sig, info, chain, atm, budget=20000):
@@ -937,20 +939,20 @@ class OptPicker:
             else: delta = 0.12
             if not right_side: delta = min(0.70, delta + 0.20)
             
-            # ═══ BUDGET-FIRST SCORING ═══
+            # âââ BUDGET-FIRST SCORING âââ
             score = 0
             
-            # 1. AFFORDABILITY (40 pts) — #1 priority
+            # 1. AFFORDABILITY (40 pts) â #1 priority
             if can_buy_2: score += 40
             elif affordable: score += 25
             
-            # 2. PREMIUM SWEET SPOT (25 pts) — ₹30-100 ideal
+            # 2. PREMIUM SWEET SPOT (25 pts) â â¹30-100 ideal
             if 40 <= ltp <= 80: score += 25
             elif 30 <= ltp <= 100: score += 20
             elif 20 <= ltp <= 150: score += 12
             elif 150 < ltp <= 250: score += 5
             
-            # 3. DELTA QUALITY (20 pts) — need movement sensitivity
+            # 3. DELTA QUALITY (20 pts) â need movement sensitivity
             if delta >= 0.35: score += 20
             elif delta >= 0.25: score += 15
             elif delta >= 0.18: score += 8
@@ -1008,9 +1010,9 @@ class OptPicker:
             "source": "LIVE"
         }
 
-# ═══════════════════════════════════════════════════════════════════
+# âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 # P&L TRACKER
-# ═══════════════════════════════════════════════════════════════════
+# âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 class PLTracker:
     def __init__(self, client): self.client = client
     
@@ -1036,8 +1038,8 @@ class PLTracker:
                 pnl_pts=(cp-entry) if d=="LONG" else (entry-cp)
                 lot=inst.get("lot_size",25);pnl_rs=round(pnl_pts*lot,0)
                 update_result(s["id"],cp,result,round(pnl_pts,2),pnl_rs)
-                emoji="✅" if result=="WIN" else "❌"
-                log.info(f"{emoji} {s['instrument']} {d} → {result} | ₹{pnl_rs}")
+                emoji="â" if result=="WIN" else "â"
+                log.info(f"{emoji} {s['instrument']} {d} â {result} | â¹{pnl_rs}")
                 # WhatsApp close alert
                 SlackAlert.send(SlackAlert.format_close(s["instrument"],d,result,pnl_rs))
     
@@ -1051,9 +1053,9 @@ class PLTracker:
         if perf["total"] > 0:
             SlackAlert.send(SlackAlert.format_daily_summary(perf))
 
-# ═══════════════════════════════════════════════════════════════════
+# âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 # MAIN ENGINE
-# ═══════════════════════════════════════════════════════════════════
+# âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 class Engine:
     def __init__(self):
         self.client=AngelClient();self.sgen=SignalGen();self.opick=OptPicker()
@@ -1064,12 +1066,12 @@ class Engine:
         if not self.client.login(): return{"status":"error","message":"Login failed"}
         self.running=True
         threading.Thread(target=self._loop,daemon=True).start()
-        SlackAlert.send("🚀 *Signal Engine Started*\nScanning NIFTY, BANKNIFTY, FINNIFTY\nAlerts will arrive here when confidence ≥ 60%")
+        SlackAlert.send("ð *Signal Engine Started*\nScanning NIFTY, BANKNIFTY, FINNIFTY\nAlerts will arrive here when confidence â¥ 60%")
         return{"status":"ok","message":"Engine started"}
     
     def stop(self):
         self.running=False;self.tracker.close_all()
-        SlackAlert.send("🔴 *Signal Engine Stopped*")
+        SlackAlert.send("ð´ *Signal Engine Stopped*")
         return{"status":"ok"}
     
     def _loop(self):
@@ -1080,7 +1082,7 @@ class Engine:
                     time.sleep(30);continue
                 if now.hour==15 and now.minute>=25:
                     self.tracker.close_all();self.running=False
-                    log.info("🔔 Market close");break
+                    log.info("ð Market close");break
                 
                 self.tracker.check()
                 
@@ -1106,16 +1108,22 @@ class Engine:
                             "timing":timing,"updated_at":datetime.now(IST).strftime("%H:%M:%S")}
                     
                     prev=self._prev.get(name,{}).get("signal",{})
+                    # Hard R:R gate — never trade signals with R:R < 1.5 (risk of ruin)
+                    if sig.get("risk_reward", 0) < 1.5:
+                        log.info(f"⛔ R:R gate blocked {name} {sig['direction']} RR={sig.get('risk_reward',0)} (need ≥1.5)")
+                        self._prev[name] = result
+                        continue
+                    
                     if sig["confidence"]>=CONFIG["min_confidence"] and(
                         not prev or prev.get("direction")!=sig["direction"]
                         or abs(prev.get("confidence",0)-sig["confidence"])>10):
                         
-                        # Run AI analysis — blocks SKIP signals
+                        # Run AI analysis â blocks SKIP signals
                         ai_result = AIAnalysis.analyze(name, sig, opt)
                         
                         # If AI says SKIP, suppress this signal entirely
                         if ai_result and ai_result.get("verdict") == "SKIP":
-                            log.info(f"🤖 AI BLOCKED {name} {sig['direction']} — {ai_result.get('reasoning','')[:80]}")
+                            log.info(f"ð¤ AI BLOCKED {name} {sig['direction']} â {ai_result.get('reasoning','')[:80]}")
                             self._prev[name] = result
                             continue
                         
@@ -1123,9 +1131,9 @@ class Engine:
                             "instrument":name,"signal":sig,"option":opt,"timing":timing,"ai":ai_result})
                         self.alerts=self.alerts[:100]
                         save_signal(name,sig,opt)
-                        log.info(f"🚨 {name} {sig['direction']} Conf:{sig['confidence']}%")
+                        log.info(f"ð¨ {name} {sig['direction']} Conf:{sig['confidence']}%")
                         
-                        # 📱 SLACK ALERT
+                        # ð± SLACK ALERT
                         SlackAlert.send(SlackAlert.format_signal(name, sig, opt, timing, ai_result))
                     
                     self._prev[name]=result;self.latest[name]=result
@@ -1143,9 +1151,9 @@ class Engine:
             "market_open":9<=datetime.now(IST).hour<16,
             "slack_enabled":CONFIG["slack_enabled"] and bool(CONFIG["slack_webhook"])}
 
-# ═══════════════════════════════════════════════════════════════════
+# âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 # FLASK API
-# ═══════════════════════════════════════════════════════════════════
+# âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 app = Flask(__name__)
 # CORS via @app.after_request (credentials-safe)
 
@@ -1199,7 +1207,7 @@ def api_login():
 
 @app.route("/api/ltp")
 def api_ltp():
-    """Fast LTP endpoint — returns current prices for all instruments."""
+    """Fast LTP endpoint â returns current prices for all instruments."""
     if not engine.client.ensure():
         return jsonify({"error": "Not logged in"}), 401
     
@@ -1239,7 +1247,7 @@ def historical(instrument):
         ts = row["timestamp"]
         # Ensure IST: if timezone-aware (UTC from pd.to_datetime), convert
         if hasattr(ts, 'tzinfo') and ts.tzinfo is not None:
-            ts = ts + IST  # UTC → IST
+            ts = ts + IST  # UTC â IST
         candles.append({
             "t": ts.strftime("%Y-%m-%d %H:%M:%S"),
             "o": float(row["open"]),
@@ -1249,7 +1257,7 @@ def historical(instrument):
             "v": int(row["volume"]),
         })
     
-    log.info(f"📊 Returning {len(candles)} historical candles for {instrument} ({days}d)")
+    log.info(f"ð Returning {len(candles)} historical candles for {instrument} ({days}d)")
     return jsonify({
         "instrument": instrument.upper(),
         "interval": interval,
@@ -1370,27 +1378,27 @@ def option_ltp():
         elif moneyness < 0.010: delta = 0.22
         else: delta = 0.12
         
-        # ═══ SCORING: Budget-first approach ═══
-        # Goal: maximize lots × delta for best profit potential
+        # âââ SCORING: Budget-first approach âââ
+        # Goal: maximize lots Ã delta for best profit potential
         score = 0
         
-        # 1. AFFORDABILITY (40 pts) — THE #1 PRIORITY
+        # 1. AFFORDABILITY (40 pts) â THE #1 PRIORITY
         #    Can buy 2 lots = maximum score, 1 lot = good, 0 lots = penalty
-        if can_buy_2: score += 40        # ₹40×65×2 = ₹5200 ✓ (2 lots NIFTY)
+        if can_buy_2: score += 40        # â¹40Ã65Ã2 = â¹5200 â (2 lots NIFTY)
         elif affordable: score += 25      # can buy 1 lot
         else: score += 0                  # over budget
 
-        # 2. PREMIUM SWEET SPOT (25 pts) — ₹30-100 ideal for ₹20K budget
+        # 2. PREMIUM SWEET SPOT (25 pts) â â¹30-100 ideal for â¹20K budget
         if 40 <= ltp <= 80: score += 25   # perfect range
         elif 30 <= ltp <= 100: score += 20
         elif 20 <= ltp <= 150: score += 12
         elif 150 < ltp <= 250: score += 5
         # >250 = 0 pts (too expensive, eats all capital)
         
-        # 3. DELTA QUALITY (20 pts) — need enough movement sensitivity
-        if delta >= 0.35: score += 20     # ATM/near OTM — good moves
-        elif delta >= 0.25: score += 15   # 1-2 OTM — decent
-        elif delta >= 0.18: score += 8    # 3-4 OTM — weak but cheap
+        # 3. DELTA QUALITY (20 pts) â need enough movement sensitivity
+        if delta >= 0.35: score += 20     # ATM/near OTM â good moves
+        elif delta >= 0.25: score += 15   # 1-2 OTM â decent
+        elif delta >= 0.18: score += 8    # 3-4 OTM â weak but cheap
         # <0.18 = 0 pts (too far OTM, won't move enough)
         
         # 4. R:R RATIO (10 pts)
@@ -1400,7 +1408,7 @@ def option_ltp():
         elif sl_pts > 0 and t1_pts / sl_pts >= 1.5: score += 7
         elif sl_pts > 0 and t1_pts / sl_pts >= 1.0: score += 3
         
-        # 5. OTM PREFERENCE (5 pts) — mild preference for 1-2 OTM
+        # 5. OTM PREFERENCE (5 pts) â mild preference for 1-2 OTM
         if 0.5 <= otm_dist <= 2.5: score += 5
         elif -0.5 <= otm_dist <= 0.5: score += 3  # ATM ok
         
@@ -1416,7 +1424,7 @@ def option_ltp():
     best = scored[0]
     ltp = best["ltp"]
     
-    # Calculate lots — maximize within budget
+    # Calculate lots â maximize within budget
     cost_1lot = ltp * lot
     if cost_1lot <= max_cap:
         lots = max(1, min(int(max_cap / cost_1lot), 3))  # up to 3 lots
@@ -1427,8 +1435,8 @@ def option_ltp():
     
     # Log top 3 candidates for debugging
     for i,s in enumerate(scored[:3]):
-        tag = "→ PICKED" if i==0 else ""
-        log.info(f"  OptLTP: #{i+1} {s['symbol']} ₹{s['ltp']} δ{s['delta']} OTM{s['otm_dist']} lots={s.get('lots_possible',0)} score={s['score']} {tag}")
+        tag = "â PICKED" if i==0 else ""
+        log.info(f"  OptLTP: #{i+1} {s['symbol']} â¹{s['ltp']} Î´{s['delta']} OTM{s['otm_dist']} lots={s.get('lots_possible',0)} score={s['score']} {tag}")
     
     return jsonify({
         "symbol": best["symbol"],
@@ -1450,12 +1458,12 @@ def option_ltp():
 
 @app.route("/api/test-slack", methods=["POST"])
 def test_slack():
-    ok = SlackAlert.send("✅ *Test Alert*\nSlack notifications are working!\nYou'll receive trading signals here during market hours.")
+    ok = SlackAlert.send("â *Test Alert*\nSlack notifications are working!\nYou'll receive trading signals here during market hours.")
     return jsonify({"status":"ok" if ok else "failed"})
 
 @app.route("/api/test-chain/<name>")
 def test_chain(n):
-    """Quick test: /api/test-chain/NIFTY → shows if option chain fetches work"""
+    """Quick test: /api/test-chain/NIFTY â shows if option chain fetches work"""
     inst = INSTRUMENTS.get(n.upper())
     if not inst: return jsonify({"error":"Unknown"}),400
     if not engine.client.ensure(): return jsonify({"error":"Not logged in"}),401
@@ -1479,13 +1487,13 @@ def my_ip():
 
 
 def _startup():
-    """Auto-login on server start — works with both Gunicorn (Railway) and direct run."""
+    """Auto-login on server start â works with both Gunicorn (Railway) and direct run."""
     import time as _t; _t.sleep(5)
-    log.info("▶ Auto-startup: loading instrument master...")
+    log.info("â¶ Auto-startup: loading instrument master...")
     _master.load()
-    log.info("▶ Auto-startup: logging into Angel One...")
+    log.info("â¶ Auto-startup: logging into Angel One...")
     ok = engine.client.login()
-    log.info("▶ Auto-startup: login " + ("✅ OK" if ok else "❌ FAILED — click Start in dashboard to retry"))
+    log.info("â¶ Auto-startup: login " + ("â OK" if ok else "â FAILED â click Start in dashboard to retry"))
 
 threading.Thread(target=_startup, daemon=True, name="Startup").start()
 
