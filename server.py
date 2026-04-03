@@ -1245,9 +1245,11 @@ def historical(instrument):
     IST = timedelta(hours=5, minutes=30)
     for _, row in df.iterrows():
         ts = row["timestamp"]
-        # Ensure IST: if timezone-aware (UTC from pd.to_datetime), convert
+        # Ensure IST: if timezone-aware, properly convert to IST naive
+        # Angel One returns IST-aware (+05:30) timestamps — must NOT just add 5:30 again
         if hasattr(ts, 'tzinfo') and ts.tzinfo is not None:
-            ts = ts + IST  # UTC → IST
+            utc_offset = ts.utcoffset() or timedelta(0)
+            ts = ts.replace(tzinfo=None) - utc_offset + IST  # → UTC → IST naive
         candles.append({
             "t": ts.strftime("%Y-%m-%d %H:%M:%S"),
             "o": float(row["open"]),
