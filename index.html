@@ -203,8 +203,9 @@ function analyze(candles,inst,budget){
   // Index levels
   const entry=dir==="LONG"?+(price+av*0.15).toFixed(2):+(price-av*0.15).toFixed(2);
   const sl=dir==="LONG"?+(price-av*1.2).toFixed(2):+(price+av*1.2).toFixed(2);
-  const t1=dir==="LONG"?+(price+av*1.8).toFixed(2):+(price-av*1.8).toFixed(2);
-  const t2=dir==="LONG"?+(price+av*2.5).toFixed(2):+(price-av*2.5).toFixed(2);
+  const riskDist=+Math.abs(entry-sl).toFixed(2);
+  const t1=dir==="LONG"?+(entry+riskDist*1.5).toFixed(2):+(entry-riskDist*1.5).toFixed(2);
+  const t2=dir==="LONG"?+(entry+riskDist*2.5).toFixed(2):+(entry-riskDist*2.5).toFixed(2);
   const risk=Math.abs(entry-sl),reward=Math.abs(t1-entry);
 
   // Convert index moves to option premium moves via delta
@@ -447,7 +448,7 @@ function App(){
       const window=all.slice(Math.max(0,idx-65),idx+1);ni[inst.name]=idx+1;
       setCandles(prev=>({...prev,[inst.name]:window}));
       const sig=analyze(window,inst,budget);ns[inst.name]=sig;if(!sig)return;
-      const isStrong=sig.confidence>=40&&sig.activeCount>=2&&sig.inWindow;
+      const isStrong=sig.confidence>=55&&sig.activeCount>=2&&sig.inWindow;
       const prev2=prevRef.current[inst.name];
       const isNew=!prev2||prev2.direction!==sig.direction||Math.abs(prev2.confidence-sig.confidence)>15;
       const dayKey=sig.date+"-"+inst.name;const dayCount=dayTrades[dayKey]||0;
