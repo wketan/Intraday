@@ -37,11 +37,23 @@ const isMobile = window.innerWidth <= 768;
 
 const h=React.createElement,{useState,useEffect,useCallback,useRef}=React;
 
-// ═══ Server URL Config (stored in localStorage for GitHub Pages) ═══
+// ═══ Server URL + Auth Token Config (stored in localStorage for GitHub Pages) ═══
 const DEFAULT_SERVER="";
 function getServer(){return localStorage.getItem("signal_server_url")||DEFAULT_SERVER}
 function setServer(url){localStorage.setItem("signal_server_url",url.replace(/\/$/,""))}
 function API(path){const s=getServer();return s?s+path:path}
+function getAuthToken(){return localStorage.getItem("signal_auth_token")||""}
+function setAuthToken(t){if(t){localStorage.setItem("signal_auth_token",t.trim())}else{localStorage.removeItem("signal_auth_token")}}
+// apiFetch wraps fetch() and injects the shared-secret header on every call.
+// Server's @require_auth rejects writes without X-Auth-Token; we send it on
+// reads too (harmless) so the same helper covers every endpoint.
+function apiFetch(path,opts){
+  opts=opts||{};
+  const headers=Object.assign({},opts.headers||{});
+  const tok=getAuthToken();
+  if(tok)headers["X-Auth-Token"]=tok;
+  return fetch(API(path),Object.assign({credentials:"include"},opts,{headers}));
+}
 // CORS: server must allow this origin
 
 // ═══ TA Engine ═══
@@ -363,6 +375,7 @@ function App(){
   React.useEffect(()=>{const _h=()=>setIsMobile(window.innerWidth<=768);window.addEventListener('resize',_h);return()=>window.removeEventListener('resize',_h);},[]);
   const[mode,setMode]=useState("replay");const[sel,setSel]=useState(0);const[tab,setTab]=useState("signals");
   const[serverUrl,setServerUrl]=useState(getServer());
+  const[authToken,setAuthTokenState]=useState(getAuthToken());
   const[showSettings,setShowSettings]=useState(!getServer());
   const[candles,setCandles]=useState({});const[signals,setSignals]=useState({});const[alerts,setAlerts]=useState([]);
   const[liveLtp,setLiveLtp]=useState({});const[liveTime,setLiveTime]=useState("");
@@ -423,18 +436,18 @@ function App(){
 
   const addLog=useCallback(msg=>setLog(l=>[{t:new Date().toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit",second:"2-digit"}),m:msg},...l].slice(0,150)),[]);
 
-  useEffect(()=>{const ck=async()=>{try{const r=await fetch(API("/api/status"),{credentials:"include"});setServerOk(r.ok);if(r.ok)serverFailRef.current=0}catch{serverFailRef.current=(serverFailRef.current||0)+1;if(serverFailRef.current>=3)setServerOk(false)}};ck();const iv=setInterval(ck,10000);return()=>clearInterval(iv)},[]);
+  useEffect(()=>{const ck=async()=>{try{const r=await apiFetch("/api/status");setServerOk(r.ok);if(r.ok)serverFailRef.current=0}catch{serverFailRef.current=(serverFailRef.current||0)+1;if(serverFailRef.current>=3)setServerOk(false)}};ck();const iv=setInterval(ck,10000);return()=>clearInterval(iv)},[]);
 
   const loadReplay=useCallback(async()=>{
     setReplayLoading(true);setReplayData({});setReplayIdx({});setAlerts([]);setTrades([]);
     setPerf({total:0,wins:0,losses:0,pnl:0});setDayTrades({});prevRef.current={};
     addLog("Logging in...");
-    try{const lr=await fetch(API("/api/login"),{credentials:"include",method:"POST"});const ld=await lr.json();
+    try{const lr=await apiFetch("/api/login",{method:"POST"});const ld=await lr.json();
       if(ld.status!=="ok"){addLog("LOGIN FAILED: "+(ld.error||"unknown"));setReplayLoading(false);return}addLog("Login OK")}
     catch(ex){addLog("ERROR: "+ex.message);setReplayLoading(false);return}
     const data={};let any=false;
     for(const inst of INST){try{addLog("Loading "+inst.key+"...");
-      const r=await fetch(API("/api/historical/"+inst.key+"?days="+replayDays),{credentials:"include"});const d=await r.json();
+      const r=await apiFetch("/api/historical/"+inst.key+"?days="+replayDays);const d=await r.json();
       if(r.ok&&d.candles&&d.candles.length>0){data[inst.name]=d.candles;any=true;addLog(inst.key+": "+d.candles.length+" candles")}
       else{data[inst.name]=[];addLog(inst.key+" error: "+(d.error||"no data"))}}catch(ex){data[inst.name]=[];addLog(inst.key+" failed")}}
     setReplayData(data);const idx={};INST.forEach(i=>idx[i.name]=26);setReplayIdx(idx);
@@ -508,10 +521,10 @@ function App(){
   // ── LIVE MODE: Fast tick (2s) — real-time LTP + engine alerts ──
   const liveFast=useCallback(async()=>{try{
     // Fetch real-time LTP for all instruments
-    const lr=await fetch(API("/api/ltp"),{credentials:"include"});if(lr.ok){const ld=await lr.json();
+    const lr=await apiFetch("/api/ltp");if(lr.ok){const ld=await lr.json();
       if(ld.prices){setLiveLtp(ld.prices);setLiveTime(ld.time||"")}}
     // Fetch engine alerts
-    const r=await fetch(API("/api/status"),{credentials:"include"});const data=await r.json();
+    const r=await apiFetch("/api/status");const data=await r.json();
     if(data.alerts&&data.alerts.length>0){
       setAlerts(prev=>{
         const existIds=new Set(prev.map(a=>a.id));
@@ -553,7 +566,7 @@ function App(){
   const liveSignalRef=useRef({});
   const liveSlow=useCallback(async()=>{try{
     for(const ci of INST){try{
-      const cr=await fetch(API("/api/historical/"+ci.key+"?days=2&interval=FIVE_MINUTE"),{credentials:"include"});
+      const cr=await apiFetch("/api/historical/"+ci.key+"?days=2&interval=FIVE_MINUTE");
       if(cr.ok){const cd=await cr.json();
         if(cd.candles&&cd.candles.length>0){
           const all=cd.candles;
@@ -569,7 +582,7 @@ function App(){
               // LIVE: Always fetch REAL option LTP from Angel One
               if(localSig.direction&&localSig.direction!=="NEUTRAL"){
                 try{
-                  const oResp=await fetch(API("/api/option-ltp"),{credentials:"include",method:"POST",headers:{"Content-Type":"application/json"},
+                  const oResp=await apiFetch("/api/option-ltp",{method:"POST",headers:{"Content-Type":"application/json"},
                     body:JSON.stringify({instrument:ci.key,spot:localSig.price,direction:localSig.direction})});
                   if(oResp.ok){const oData=await oResp.json();
                     if(oData.ltp>0){
@@ -650,26 +663,26 @@ function App(){
     requestNotify(); // Ask for browser notification permission
     if(mode==="replay"&&!Object.keys(replayData).length){await loadReplay();setOn(true);addLog("Started");return}
     if(mode==="live"){addLog("Waking server...");
-      try{await fetch(API("/api/ping"),{credentials:"include"})}catch(e){}
+      try{await apiFetch("/api/ping")}catch(e){}
       
       setLiveLoading(true);addLog("Logging in...");
       try{
         const lr=await (async()=>{
         const ctrl=new AbortController();
         const tid=setTimeout(()=>ctrl.abort(),75000);
-        try{ return await fetch(API("/api/login"),{credentials:"include",method:"POST",signal:ctrl.signal}); }
+        try{ return await apiFetch("/api/login",{method:"POST",signal:ctrl.signal}); }
         finally{ clearTimeout(tid); }
       })();const ld=await lr.json();
         if(ld.status!=="ok"){addLog("LOGIN FAILED: "+(ld.error||"Unknown"));setLiveLoading(false);return}
         addLog("Login OK");
         addLog("Starting engine...");
-        await fetch(API("/api/start"),{credentials:"include",method:"POST"});
+        await apiFetch("/api/start",{method:"POST"});
         addLog("Engine started — fetching live data...");
       }catch(ex){addLog("ERROR: "+ex.message);setLiveLoading(false);return}
       setLiveLoading(false);
     }
     setOn(true)};
-  const doStop=()=>{if(mode==="live")fetch(API("/api/stop"),{credentials:"include",method:"POST"}).catch(()=>{});setOn(false);clearInterval(slowRef.current);addLog("Stopped")};
+  const doStop=()=>{if(mode==="live")apiFetch("/api/stop",{method:"POST"}).catch(()=>{});setOn(false);clearInterval(slowRef.current);addLog("Stopped")};
   const doReset=()=>{setOn(false);clearInterval(slowRef.current);setReplayData({});setReplayIdx({});setReplayPct(0);setAlerts([]);setTrades([]);setPerf({total:0,wins:0,losses:0,pnl:0});setDayTrades({});setSignals({});setLiveLtp({});setLiveTime("");prevRef.current={};addLog("Reset")};
 
   const inst=INST[sel],cd=candles[inst.name]||[],sig=signals[inst.name];
@@ -726,8 +739,16 @@ function App(){
           h("input",{value:serverUrl,onChange:e=>setServerUrl(e.target.value),
             placeholder:"https://your-server.onrender.com",
             style:{flex:1,padding:"10px 14px",borderRadius:8,border:"1px solid "+BD,
+              background:BG,color:T,fontSize:13,fontFamily:"SF Mono,monospace",outline:"none"}})),
+        h("div",{style:{fontSize:13,fontWeight:600,marginTop:16,marginBottom:10}},"Auth Token"),
+        h("div",{style:{fontSize:11,color:M,marginBottom:12}},
+          "Required to control the engine. Must match AUTH_TOKEN env var on the server."),
+        h("div",{style:{display:"flex",gap:8}},
+          h("input",{value:authToken,onChange:e=>setAuthTokenState(e.target.value),type:"password",
+            placeholder:"paste AUTH_TOKEN here",
+            style:{flex:1,padding:"10px 14px",borderRadius:8,border:"1px solid "+BD,
               background:BG,color:T,fontSize:13,fontFamily:"SF Mono,monospace",outline:"none"}}),
-          h("button",{onClick:()=>{setServer(serverUrl);setShowSettings(false);window.location.reload()},
+          h("button",{onClick:()=>{setServer(serverUrl);setAuthToken(authToken);setShowSettings(false);window.location.reload()},
             style:{padding:"10px 20px",borderRadius:8,background:B+"15",border:"1px solid "+B+"30",
               color:B,fontSize:12,fontWeight:600,whiteSpace:"nowrap"}},"Save & Reload")),
         serverUrl&&h("div",{style:{marginTop:10,display:"flex",alignItems:"center",gap:8}},
