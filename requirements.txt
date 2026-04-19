@@ -1,5 +1,6 @@
 flask>=3.0.0
 smartapi-python==1.4.0
+logzero>=1.7.0
 pyotp>=2.9.0
 numpy>=1.24.0
 pandas>=2.0.0
