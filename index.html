@@ -197,8 +197,9 @@ function analyze(candles,inst,budget){
   const estPrem=Math.max(5,Math.round(atmPrem*otmMult));
 
   // ── Delta-based option levels ──
-  // Delta also adjusts with DTE: near expiry, OTM delta drops faster
-  const delta=adjOtmPct<0.001?0.50:adjOtmPct<0.002?0.42:adjOtmPct<0.004?0.32:adjOtmPct<0.008?0.22:0.12;
+  // Ladder must match server/fallback_delta() in server.py so replay strike choice
+  // is consistent with what the LIVE engine would actually pick.
+  const delta=adjOtmPct<0.001?0.50:adjOtmPct<0.002?0.45:adjOtmPct<0.003?0.38:adjOtmPct<0.005?0.30:adjOtmPct<0.008?0.22:0.12;
 
   // Index levels
   const entry=dir==="LONG"?+(price+av*0.15).toFixed(2):+(price-av*0.15).toFixed(2);
