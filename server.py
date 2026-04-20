@@ -1959,7 +1959,6 @@ class Engine:
         # Same geometry as SignalGen: entry = fresh price, SL = 1× ATR away, T1/T2 stretch same multiplier
         idx_sl_pts = max(atr, 1e-6)
         # Preserve R:R ratio from the original signal
-SL (stop-loss): {sig.get("sl", sig.get("stop", "n/a"))}  |  Gap vs prev close: {round((sig.get("price",0) - sig.get("prev_close", sig.get("price",0))) / max(sig.get("prev_close", sig.get("price",1)),1)*100, 2)}%
         orig_entry = sig.get("entry") or fresh_price
         orig_sl_pts = abs((sig.get("sl") or orig_entry) - orig_entry) or idx_sl_pts
         orig_t1_pts = abs((sig.get("target1") or orig_entry) - orig_entry) or idx_sl_pts * 1.5
