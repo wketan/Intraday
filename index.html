@@ -545,7 +545,21 @@
     }
     async function apiJSON(path, opts = {}) {
       const r = await apiFetch(path, opts);
-      if (!r.ok) throw new Error('API ' + r.status);
+      if (!r.ok) {
+        let body = '';
+        try { body = await r.text(); } catch(e) {}
+        let detail = '';
+        if (body) {
+          try {
+            const j = JSON.parse(body);
+            detail = j.message || j.error || j.detail || j.msg || body.slice(0, 200);
+          } catch(e) { detail = body.slice(0, 200); }
+        }
+        const err = new Error(`API ${r.status}${detail ? ' · ' + detail : ''}`);
+        err.status = r.status;
+        err.body = body;
+        throw err;
+      }
       return r.json();
     }
 
@@ -1220,9 +1234,14 @@
       const [filter, setFilter] = useState('ALL');
       const listRef = useRef(null);
       useEffect(() => {
-        if (listRef.current) listRef.current.scrollTop = listRef.current.scrollHeight;
+        // newest is at top now — keep view pinned to top on new entries
+        if (listRef.current) listRef.current.scrollTop = 0;
       }, [logLines]);
-      const filtered = (logLines || []).filter(l => filter === 'ALL' ? true : l.level === filter);
+      // descending order: newest first
+      const filtered = (logLines || [])
+        .filter(l => filter === 'ALL' ? true : l.level === filter)
+        .slice()
+        .reverse();
       return (
         <div style={{padding:'16px var(--pad-x)'}}>
           <div className="panel">
@@ -1475,6 +1494,7 @@
       const preopenScan = async () => {
         addLog('INFO', `Pre-open scan · fetching ${replayDays || 5}d historical for all instruments`);
         const results = [];
+        let firstAuthFail = true;
         for (const i of INST) {
           try {
             addLog('TICK', `Loading ${i.name} historical · ${replayDays || 5}d …`);
@@ -1503,7 +1523,15 @@
               addLog('INFO', `${i.name} · analyze error · ${aE.message || aE}`);
             }
           } catch (e) {
-            addLog('INFO', `${i.name} · fetch failed · ${e.message || e}`);
+            // surface the server's actual reason if we have one
+            const status = e.status || '';
+            const reason = e.message || String(e);
+            addLog('INFO', `${i.name} · fetch failed · ${reason}`);
+            if (status === 401 && firstAuthFail) {
+              firstAuthFail = false;
+              showToast('Historical 401 — broker session likely expired on server');
+              addLog('INFO', '↳ 401 on historical usually means the server-side Angel One session expired. Re-run broker login or check the backend logs.');
+            }
           }
         }
         if (results.length) setSignals(prev => [...results, ...prev]);
@@ -1538,8 +1566,23 @@
             try {
               const lr = await apiFetch('/api/login', { method:'POST' });
               if (lr.status === 401) { addLog('INFO', '✗ Auth token rejected (HTTP 401) · check ⚙ Tweaks'); showToast('Auth 401 — check token in Tweaks'); setOn(false); return; }
-              if (lr.ok) addLog('INFO', 'Broker login OK');
-              else addLog('INFO', 'Broker login skipped · HTTP ' + lr.status);
+              if (lr.ok) {
+                addLog('INFO', 'Broker login OK');
+                // Some backends mint a per-session JWT after broker login. If one is returned, persist it.
+                try {
+                  const body = await lr.clone().json();
+                  const sess = body && (body.token || body.jwt || body.access_token || body.session_token || (body.data && (body.data.jwtToken || body.data.token)));
+                  if (sess && typeof sess === 'string' && sess !== getAuthToken()) {
+                    setAuthToken(sess);
+                    addLog('INFO', '↳ session token refreshed from broker login response');
+                  }
+                  if (body && body.message) addLog('INFO', `↳ ${body.message}`);
+                } catch(_) { /* login response may be empty/non-JSON — that's fine */ }
+              } else {
+                let bodyTxt = '';
+                try { bodyTxt = await lr.text(); } catch(_) {}
+                addLog('INFO', `Broker login skipped · HTTP ${lr.status}${bodyTxt ? ' · ' + bodyTxt.slice(0,200) : ''}`);
+              }
             } catch(e) { addLog('INFO', 'Broker login warning · ' + (e.message || e)); }
 
             if (phase === 'open') {
