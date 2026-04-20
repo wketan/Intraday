@@ -527,9 +527,8 @@
     function MarketClock() {
       const [now, setNow] = useState(new Date());
       useEffect(() => { const id = setInterval(() => setNow(new Date()), 1000); return () => clearInterval(id); }, []);
-      // Convert to IST regardless of host tz
-      const istMs = now.getTime() + (now.getTimezoneOffset() * 60000) + (5.5 * 3600 * 1000);
-      const ist = new Date(istMs);
+      // getTime() is always UTC-based; just shift to IST (UTC+5:30)
+      const ist = new Date(now.getTime() + 5.5 * 3600 * 1000);
       const hh = String(ist.getUTCHours()).padStart(2,'0');
       const mm = String(ist.getUTCMinutes()).padStart(2,'0');
       const ss = String(ist.getUTCSeconds()).padStart(2,'0');
@@ -917,9 +916,7 @@
       const lastSigId = useRef(null);
 
       const addLog = (level, msg) => {
-        const now = new Date();
-        const istMs = now.getTime() + (now.getTimezoneOffset()*60000) + (5.5*3600*1000);
-        const ist = new Date(istMs);
+        const ist = new Date(Date.now() + 5.5*3600*1000);
         const t = String(ist.getUTCHours()).padStart(2,'0')+':'+String(ist.getUTCMinutes()).padStart(2,'0')+':'+String(ist.getUTCSeconds()).padStart(2,'0');
         setLogLines(prev => [...prev.slice(-199), { t, level, msg }]);
       };
