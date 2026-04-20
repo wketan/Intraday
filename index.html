@@ -350,9 +350,10 @@
     // ===========================================
 
     const INST = [
-      { name: 'NIFTY', key: 'NIFTY', base: 'NIFTY 50', lot: 50, gap: 50, pfx: 'I' },
-      { name: 'BANKNIFTY', key: 'BANKNIFTY', base: 'BANK NIFTY', lot: 15, gap: 100, pfx: 'B' },
-      { name: 'FINNIFTY', key: 'FINNIFTY', base: 'FIN NIFTY', lot: 40, gap: 50, pfx: 'F' }
+      // Lot sizes per NSE F&O (latest reviewed: NIFTY 75, BANKNIFTY 30, FINNIFTY 65)
+      { name: 'NIFTY',     key: 'NIFTY',     base: 'NIFTY 50',   lot: 75, gap: 50,  pfx: 'I' },
+      { name: 'BANKNIFTY', key: 'BANKNIFTY', base: 'BANK NIFTY', lot: 30, gap: 100, pfx: 'B' },
+      { name: 'FINNIFTY',  key: 'FINNIFTY',  base: 'FIN NIFTY',  lot: 65, gap: 50,  pfx: 'F' }
     ];
 
     // ===========================================
@@ -739,19 +740,41 @@
       );
     }
 
-    function LogTab() {
-      const logs = [
-        { time: '14:30:22', msg: 'ORB breakout detected on NIFTY', level: 'sig' },
-        { time: '14:30:45', msg: 'Signal fired: LONG @ 20150.50, SL 20130.00, T1 20165.00', level: 'sig' },
-        { time: '14:31:12', msg: 'Tick: 20152.30', level: 'tick' },
-        { time: '14:32:08', msg: 'Exit: TP1 reached @ 20165.00, P&L +₹750', level: 'exit' }
-      ];
+    function LogTab({ logLines, onClear }) {
+      const [filter, setFilter] = useState('ALL');
+      const listRef = useRef(null);
+      useEffect(() => {
+        if (listRef.current) listRef.current.scrollTop = listRef.current.scrollHeight;
+      }, [logLines]);
+      const filtered = (logLines || []).filter(l => filter === 'ALL' ? true : l.level === filter);
       return (
-        <div style={{padding:'var(--pad-x)'}}>
-          <div className="log">
-            {logs.map((l, i) => (
-              <div key={i} className={`log-line ${l.level}`}>[{l.time}] {l.msg}</div>
-            ))}
+        <div style={{padding:'16px var(--pad-x)'}}>
+          <div className="panel">
+            <div className="panel-head">
+              <h3>Engine Log</h3>
+              <span style={{flex:1}}/>
+              <div className="seg">
+                {['ALL','SIG','EXIT','TICK','INFO'].map(x => (
+                  <button type="button" key={x} className={filter===x?'on':''} onClick={()=>setFilter(x)}>{x}</button>
+                ))}
+              </div>
+              <button type="button" className="btn ghost" onClick={onClear}>Clear</button>
+              <span className="muted mono" style={{fontSize:11}}>{filtered.length} lines</span>
+            </div>
+            <div ref={listRef} className="log" style={{maxHeight:'60vh', overflowY:'auto'}}>
+              {filtered.length === 0 && (
+                <div style={{padding:'20px 0', textAlign:'center', color:'var(--ink-3)', fontFamily:'JetBrains Mono, monospace', fontSize:12}}>
+                  — no activity yet · press <span style={{color:'var(--accent)'}}>▶ Start</span> to begin scanning —
+                </div>
+              )}
+              {filtered.map((l, i) => (
+                <div key={i} className="log-row">
+                  <span className="dim">{l.t}</span>
+                  <span className={`lvl ${l.level}`}>{l.level}</span>
+                  <span style={{color: l.level==='SIG' ? 'var(--ink-0)' : l.level==='EXIT' ? 'var(--ink-0)' : 'var(--ink-1)'}}>{l.msg}</span>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       );
@@ -947,17 +970,98 @@
 
       const requestNotify = () => { try { if ('Notification' in window && Notification.permission === 'default') Notification.requestPermission(); } catch(e){} };
 
+      // Determine current NSE phase from IST clock
+      const nsePhase = () => {
+        const ist = new Date(Date.now() + 5.5*3600*1000);
+        const mins = ist.getUTCHours()*60 + ist.getUTCMinutes();
+        const dow  = ist.getUTCDay();
+        const wkdy = dow >= 1 && dow <= 5;
+        if (!wkdy) return 'closed';
+        if (mins < 9*60) return 'pre-market';          // before 09:00
+        if (mins < 9*60+15) return 'pre-open';          // 09:00–09:15
+        if (mins < 15*60+30) return 'open';             // 09:15–15:30
+        return 'closed';
+      };
+
+      // Fetch historical candles for all instruments and run analyze() on each
+      const preopenScan = async () => {
+        addLog('INFO', `Pre-open scan · fetching ${replayDays || 5}d historical for all instruments`);
+        const results = [];
+        for (const i of INST) {
+          try {
+            addLog('TICK', `Loading ${i.name} historical · ${replayDays || 5}d …`);
+            const r = await apiJSON(`/api/historical/${i.key}?days=${replayDays || 5}`);
+            const arr = r.candles || r.data || r;
+            if (!Array.isArray(arr) || arr.length < 20) {
+              addLog('INFO', `${i.name} · insufficient data (${arr && arr.length || 0} candles)`);
+              continue;
+            }
+            setCandles(prev => ({ ...prev, [i.name]: arr }));
+            addLog('TICK', `${i.name} · ${arr.length} candles loaded · last close ${arr[arr.length-1].close || arr[arr.length-1][4] || '?'}`);
+            // analyze
+            try {
+              const sig = analyze(arr, i, 100000);
+              if (sig && sig.direction && sig.direction !== 'NONE') {
+                const entry = { id: `PRE-${i.name}-${Date.now()}`, inst: i.name, t: new Date(Date.now()+5.5*3600*1000).toISOString().slice(11,16),
+                  dir: sig.direction, type: sig.option?.type || (sig.direction==='LONG'?'CE':'PE'),
+                  strike: sig.option?.strike, premium: sig.option?.ltp, confidence: sig.confidence,
+                  strategies: sig.strategies, reasons: sig.reasons, status: 'PRE-OPEN' };
+                results.push(entry);
+                addLog('SIG', `${i.name} · ${sig.direction} ${sig.confidence}% · ${sig.strategies.length} strategies · ${sig.reasons[0] || ''}`);
+              } else {
+                addLog('INFO', `${i.name} · no signal · conditions not met`);
+              }
+            } catch (aE) {
+              addLog('INFO', `${i.name} · analyze error · ${aE.message || aE}`);
+            }
+          } catch (e) {
+            addLog('INFO', `${i.name} · fetch failed · ${e.message || e}`);
+          }
+        }
+        if (results.length) setSignals(prev => [...results, ...prev]);
+        addLog('INFO', `Pre-open scan complete · ${results.length} signal${results.length===1?'':'s'} staged`);
+        return results;
+      };
+
       const doStart = async () => {
         requestNotify();
+        const phase = nsePhase();
+        addLog('INFO', `Start pressed · mode=${mode} · phase=${phase}`);
         try {
           if (mode === 'live') {
-            await apiFetch('/api/ping');
-            try { await apiFetch('/api/login', { method:'POST' }); } catch(e){}
-            const r = await apiFetch('/api/start', { method:'POST', body: JSON.stringify({ mode:'live' }) });
-            if (!r.ok) throw new Error('start ' + r.status);
-            setOn(true); addLog('INFO', 'Engine started · LIVE'); showToast('Engine started · LIVE');
+            // Check server reachable
+            addLog('TICK', 'Pinging server …');
+            const ping = await apiFetch('/api/ping');
+            if (!ping.ok) throw new Error('server ping failed · HTTP ' + ping.status);
+            addLog('INFO', 'Server reachable');
+
+            // Authenticate with broker
+            addLog('TICK', 'Authenticating with broker …');
+            try {
+              const lr = await apiFetch('/api/login', { method:'POST' });
+              if (lr.ok) addLog('INFO', 'Broker login OK');
+              else addLog('INFO', 'Broker login skipped · HTTP ' + lr.status);
+            } catch(e) { addLog('INFO', 'Broker login warning · ' + (e.message || e)); }
+
+            if (phase === 'open') {
+              addLog('TICK', 'Starting live engine …');
+              const r = await apiFetch('/api/start', { method:'POST', body: JSON.stringify({ mode:'live' }) });
+              if (!r.ok) throw new Error('start HTTP ' + r.status);
+              setOn(true);
+              addLog('SIG', 'Engine started · LIVE · scanning ticks every 2s');
+              showToast('● Engine LIVE');
+            } else {
+              // pre-open / pre-market / closed — run a one-shot scan using historical data
+              addLog('INFO', `Market ${phase} · running pre-open analysis instead of live tick loop`);
+              await preopenScan();
+              showToast(phase === 'pre-open' ? 'Pre-open scan complete' : `${phase} · historical scan complete`);
+            }
           } else {
-            setOn(true); addLog('INFO', `Replay started · ${replayDays}d · ${speed}x`); showToast('Replay running');
+            addLog('TICK', `Replay · loading ${replayDays}d @ ${speed}x`);
+            await preopenScan();
+            setOn(true);
+            addLog('SIG', `Replay running · ${replayDays}d · ${speed}x`);
+            showToast('Replay running');
           }
         } catch (e) {
           addLog('INFO', 'Start failed · ' + (e.message || e));
@@ -1143,7 +1247,7 @@
             {tab === 'journal' && <JournalTab/>}
             {tab === 'stats' && <StatsTab/>}
             {tab === 'calc' && <CalcTab/>}
-            {tab === 'log' && <LogTab/>}
+            {tab === 'log' && <LogTab logLines={logLines} onClear={()=>setLogLines([])}/>}
           </div>
 
           {showPosMonitor && <PositionMonitor onClose={()=>setShowPosMonitor(false)}/>}
