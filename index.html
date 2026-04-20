@@ -1591,6 +1591,24 @@
               if (!r.ok) throw new Error('start HTTP ' + r.status);
               addLog('SIG', 'Engine started · LIVE · scanning ticks every 2s');
               showToast('● Engine LIVE · scanning ticks');
+              // Warm candles immediately instead of waiting 30s for the slow poller
+              addLog('TICK', 'Warming candles · fetching today\'s history for all instruments');
+              (async () => {
+                for (const i of INST) {
+                  try {
+                    const hr = await apiJSON(`/api/historical/${i.key || i.name}?days=1`);
+                    const arr = hr.candles || hr.data || hr.bars || (Array.isArray(hr) ? hr : null);
+                    if (Array.isArray(arr) && arr.length) {
+                      setCandles(prev => ({ ...prev, [i.name]: arr }));
+                      addLog('TICK', `${i.name} · ${arr.length} candles loaded`);
+                    } else {
+                      addLog('INFO', `${i.name} · historical empty or unknown shape`);
+                    }
+                  } catch (e) {
+                    addLog('INFO', `${i.name} · warm-up fetch failed · ${e.message || e}`);
+                  }
+                }
+              })();
             } else {
               addLog('INFO', `Market ${phase} · running pre-open analysis instead of live tick loop`);
               await preopenScan();
@@ -1655,10 +1673,13 @@
       useEffect(() => {
         if (!on || mode !== 'live') return;
         let alive = true;
+        let lastStatusErr = '';
+        const histErr = {}; // { [instName]: lastErrMessage }
         const fast = async () => {
           try {
             const s = await apiJSON('/api/status');
             if (!alive) return;
+            lastStatusErr = ''; // success — reset throttle
             if (Array.isArray(s.signals)) setSignals(s.signals);
             if (Array.isArray(s.trades))  setTrades(s.trades);
             if (s.live && typeof s.live === 'object' && !Array.isArray(s.live)) setLive(s.live);
@@ -1668,15 +1689,40 @@
               lastSigId.current = latest.id;
               notifySignal(latest);
             }
-          } catch(e){}
+          } catch(e) {
+            const msg = e.message || String(e);
+            if (msg !== lastStatusErr) {
+              lastStatusErr = msg;
+              addLog('INFO', `status poll failed · ${msg}`);
+            }
+          }
         };
         fast();
         const fastId = setInterval(fast, 2000);
-        const slowId = setInterval(async () => {
+        const pullHistory = async () => {
           for (const i of INST) {
-            try { const r = await apiJSON(`/api/historical/${i.key || i.name}?days=1`); if (alive && r.candles) setCandles(prev => ({...prev, [i.name]: r.candles})); } catch(e){}
+            try {
+              const r = await apiJSON(`/api/historical/${i.key || i.name}?days=1`);
+              const arr = r.candles || r.data || r.bars || (Array.isArray(r) ? r : null);
+              if (alive && Array.isArray(arr) && arr.length) {
+                setCandles(prev => ({ ...prev, [i.name]: arr }));
+                if (histErr[i.name]) { addLog('TICK', `${i.name} · historical recovered · ${arr.length} candles`); histErr[i.name] = ''; }
+              } else if (alive && histErr[i.name] !== 'empty') {
+                histErr[i.name] = 'empty';
+                addLog('INFO', `${i.name} · historical empty or unknown response shape`);
+              }
+            } catch(e) {
+              const msg = e.message || String(e);
+              if (alive && histErr[i.name] !== msg) {
+                histErr[i.name] = msg;
+                addLog('INFO', `${i.name} · historical poll failed · ${msg}`);
+              }
+            }
           }
-        }, 30000);
+        };
+        // kick off history immediately, then refresh every 30s
+        pullHistory();
+        const slowId = setInterval(pullHistory, 30000);
         return () => { alive = false; clearInterval(fastId); clearInterval(slowId); };
       }, [on, mode]);
 
