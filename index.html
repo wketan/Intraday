@@ -914,9 +914,13 @@
     // ===========================================
 
     function SignalsTab({ sel, setSel, signals = [], candles = {}, live = {}, on }) {
+      const sigArr = Array.isArray(signals) ? signals : [];
+      const candObj = (candles && typeof candles === 'object' && !Array.isArray(candles)) ? candles : {};
+      const liveObj = (live && typeof live === 'object' && !Array.isArray(live)) ? live : {};
       const inst = INST[sel];
-      const instCandles = candles[inst.name] || [];
-      const instSignals = signals.filter(s => s.inst === inst.name);
+      const rawCandles = candObj[inst.name];
+      const instCandles = Array.isArray(rawCandles) ? rawCandles : [];
+      const instSignals = sigArr.filter(s => s && s.inst === inst.name);
       const activeSignal = instSignals[0]; // most recent
       const liveData = live[inst.name];
       // Build sparkline from real candles if available
@@ -928,8 +932,9 @@
           {/* instrument selector with real data */}
           <div className="inst-row">
             {INST.map((i, idx) => {
-              const l = live[i.name];
-              const cnds = candles[i.name] || [];
+              const l = liveObj[i.name];
+              const rawC = candObj[i.name];
+              const cnds = Array.isArray(rawC) ? rawC : [];
               return (
                 <div key={i.name} className={`inst-card ${idx===sel?'on':''}`} onClick={()=>setSel(idx)}>
                   <div style={{display:'flex', alignItems:'center', justifyContent:'space-between'}}>
@@ -1048,7 +1053,8 @@
     }
 
     function JournalTab({ trades = [] }) {
-      const closed = trades.filter(t => t.status && t.status !== 'OPEN');
+      const tArr = Array.isArray(trades) ? trades : [];
+      const closed = tArr.filter(t => t && t.status && t.status !== 'OPEN');
       const wins = closed.filter(t => t.status === 'WIN').length;
       const pnl = closed.reduce((a,b) => a + (Number(b.pnl) || 0), 0);
       const winRate = closed.length ? Math.round((wins/closed.length)*100) : 0;
@@ -1118,7 +1124,9 @@
     }
 
     function StatsTab({ trades = [], signals = [] }) {
-      const closed = trades.filter(t => t.status && t.status !== 'OPEN');
+      const tArr = Array.isArray(trades) ? trades : [];
+      const sArr = Array.isArray(signals) ? signals : [];
+      const closed = tArr.filter(t => t && t.status && t.status !== 'OPEN');
       const wins = closed.filter(t => t.status === 'WIN').length;
       const pnl = closed.reduce((a,b) => a + (Number(b.pnl)||0), 0);
       const winRate = closed.length ? Math.round((wins/closed.length)*100) : 0;
@@ -1139,8 +1147,8 @@
             </div>
             <div className="metric">
               <div className="label">Signals Fired</div>
-              <div className="val">{signals.length}</div>
-              <div className="delta dim">{signals.filter(s=>s.status==='OPEN').length} open</div>
+              <div className="val">{sArr.length}</div>
+              <div className="delta dim">{sArr.filter(s => s && s.status === 'OPEN').length} open</div>
             </div>
             <div className="metric">
               <div className="label">Avg R:R</div>
@@ -1510,6 +1518,15 @@
         setOn(true);
         addLog('INFO', `▶ Start pressed · mode=${mode} · phase=${phase}`);
         showToast(`● Engine ${mode === 'live' ? 'LIVE' : 'REPLAY'} · ${phase}`);
+
+        // Pre-flight: warn if no auth token configured (server will 401 historical otherwise)
+        if (!getAuthToken()) {
+          addLog('INFO', '⚠ No auth token configured · open ⚙ Tweaks and paste your token');
+          showToast('Set auth token in ⚙ Tweaks first');
+          setOn(false);
+          return;
+        }
+
         try {
           if (mode === 'live') {
             addLog('TICK', 'Pinging server …');
@@ -1520,6 +1537,7 @@
             addLog('TICK', 'Authenticating with broker …');
             try {
               const lr = await apiFetch('/api/login', { method:'POST' });
+              if (lr.status === 401) { addLog('INFO', '✗ Auth token rejected (HTTP 401) · check ⚙ Tweaks'); showToast('Auth 401 — check token in Tweaks'); setOn(false); return; }
               if (lr.ok) addLog('INFO', 'Broker login OK');
               else addLog('INFO', 'Broker login skipped · HTTP ' + lr.status);
             } catch(e) { addLog('INFO', 'Broker login warning · ' + (e.message || e)); }
@@ -1566,7 +1584,8 @@
 
       // Auto-reveal floating position monitor when an OPEN trade exists
       useEffect(() => {
-        const hasOpen = trades.some(t => t.status === 'OPEN');
+        const tArr = Array.isArray(trades) ? trades : [];
+        const hasOpen = tArr.some(t => t && t.status === 'OPEN');
         if (hasOpen && !showPosMonitor) setShowPosMonitor(true);
         if (!hasOpen && showPosMonitor) setShowPosMonitor(false);
       }, [trades]);
@@ -1597,11 +1616,11 @@
           try {
             const s = await apiJSON('/api/status');
             if (!alive) return;
-            if (s.signals) setSignals(s.signals);
-            if (s.trades) setTrades(s.trades);
-            if (s.live) setLive(s.live);
-            if (s.log && Array.isArray(s.log)) setLogLines(s.log.slice(-200));
-            const latest = s.signals && s.signals[0];
+            if (Array.isArray(s.signals)) setSignals(s.signals);
+            if (Array.isArray(s.trades))  setTrades(s.trades);
+            if (s.live && typeof s.live === 'object' && !Array.isArray(s.live)) setLive(s.live);
+            if (Array.isArray(s.log))     setLogLines(s.log.slice(-200));
+            const latest = Array.isArray(s.signals) ? s.signals[0] : null;
             if (latest && latest.id && latest.id !== lastSigId.current) {
               lastSigId.current = latest.id;
               notifySignal(latest);
@@ -1646,6 +1665,13 @@
         { id:'calc', label:'Calculator', icon:'🧮' },
         { id:'log', label:'Engine Log', icon:'⚙' },
       ];
+
+      // ── defensive coercions (never trust the server shape) ──
+      const safeSignals = Array.isArray(signals) ? signals : [];
+      const safeTrades  = Array.isArray(trades)  ? trades  : [];
+      const safeLog     = Array.isArray(logLines) ? logLines : [];
+      const safeCandles = (candles && typeof candles === 'object' && !Array.isArray(candles)) ? candles : {};
+      const safeLive    = (live && typeof live === 'object' && !Array.isArray(live)) ? live : {};
 
       return (
         <div key={theme+accent} style={{width:'100%', height:'100%', display:'flex', flexDirection:'column'}}>
@@ -1711,7 +1737,7 @@
               </span>
               <span style={{flex:1}}/>
               <span className="muted mono" style={{fontSize:11}}>
-                {Object.keys(candles).length}/{INST.length} inst loaded · {signals.length} signal{signals.length===1?'':'s'} staged · {logLines.length} log lines
+                {Object.keys(safeCandles).length}/{INST.length} inst loaded · {safeSignals.length} signal{safeSignals.length===1?'':'s'} staged · {safeLog.length} log lines
               </span>
             </div>
           )}
@@ -1723,13 +1749,13 @@
             </div>
             <div className="rightcol">
               {(() => {
-                const closed = trades.filter(t => t.status && t.status !== 'OPEN');
+                const closed = safeTrades.filter(t => t && t.status && t.status !== 'OPEN');
                 const pnl = closed.reduce((a, b) => a + (Number(b.pnl) || 0), 0);
                 const wins = closed.filter(t => t.status === 'WIN').length;
                 const winRate = closed.length ? Math.round((wins / closed.length) * 100) : 0;
-                const totalCandles = Object.values(candles).reduce((a,c)=>a+(c && c.length || 0), 0);
-                const fired = signals.length;
-                const open = signals.filter(s => s.status === 'OPEN').length;
+                const totalCandles = Object.values(safeCandles).reduce((a,c)=> a + (Array.isArray(c) ? c.length : 0), 0);
+                const fired = safeSignals.length;
+                const open = safeSignals.filter(s => s && s.status === 'OPEN').length;
                 const pnlCls = pnl >= 0 ? 'pos' : 'neg';
                 return <>
                   <div className="metric" style={{minWidth:140, padding:'10px 14px'}}>
@@ -1761,14 +1787,14 @@
           </div>
 
           <div key={tab} className="reveal-enter" style={{flex:1, overflowY:'auto'}}>
-            {tab === 'signals' && <SignalsTab sel={inst} setSel={setInst} signals={signals} candles={candles} live={live} on={on}/>}
-            {tab === 'journal' && <JournalTab trades={trades}/>}
-            {tab === 'stats' && <StatsTab trades={trades} signals={signals}/>}
+            {tab === 'signals' && <SignalsTab sel={inst} setSel={setInst} signals={safeSignals} candles={safeCandles} live={safeLive} on={on}/>}
+            {tab === 'journal' && <JournalTab trades={safeTrades}/>}
+            {tab === 'stats' && <StatsTab trades={safeTrades} signals={safeSignals}/>}
             {tab === 'calc' && <CalcTab/>}
-            {tab === 'log' && <LogTab logLines={logLines} onClear={()=>setLogLines([])}/>}
+            {tab === 'log' && <LogTab logLines={safeLog} onClear={()=>setLogLines([])}/>}
           </div>
 
-          {showPosMonitor && <PositionMonitor open={trades.find(t => t.status === 'OPEN')} live={live} onClose={()=>setShowPosMonitor(false)}/>}
+          {showPosMonitor && <PositionMonitor open={safeTrades.find(t => t && t.status === 'OPEN')} live={safeLive} onClose={()=>setShowPosMonitor(false)}/>}
           {tweakOpen && <Tweaks theme={theme} setTheme={setTheme} accent={accent} setAccent={setAccent} density={density} setDensity={setDensity} serverOk={serverOk} onClose={()=>setTweakOpen(false)}/>}
 
           {toast && (
@@ -1789,10 +1815,41 @@
     }
 
     // ===========================================
+    // ERROR BOUNDARY
+    // A single bad shape from the server should never blank the page.
+    // ===========================================
+
+    class ErrorBoundary extends React.Component {
+      constructor(props) { super(props); this.state = { error: null }; }
+      static getDerivedStateFromError(error) { return { error }; }
+      componentDidCatch(error, info) { try { console.error('[Signal Engine] render error:', error, info); } catch(e){} }
+      reset = () => { try { location.reload(); } catch(e) { this.setState({ error: null }); } };
+      render() {
+        if (!this.state.error) return this.props.children;
+        return (
+          <div style={{padding:'60px 24px', maxWidth:560, margin:'0 auto', fontFamily:'Inter, sans-serif', color:'var(--ink-0)'}}>
+            <div style={{fontFamily:'Instrument Serif, serif', fontSize:34, lineHeight:1, color:'var(--ink-0)', marginBottom:10}}>
+              Something <em style={{color:'var(--accent)'}}>went sideways</em>.
+            </div>
+            <div style={{fontSize:13, color:'var(--ink-2)', marginBottom:18, lineHeight:1.6}}>
+              The dashboard hit a render error. Your data is safe — this is usually a bad response shape from the server. The details are in the browser console.
+            </div>
+            <pre style={{background:'var(--bg-2)', border:'1px solid var(--line-1)', borderRadius:8, padding:12, fontFamily:'JetBrains Mono, monospace', fontSize:11.5, color:'var(--short)', overflowX:'auto', marginBottom:16, whiteSpace:'pre-wrap'}}>
+              {String(this.state.error && this.state.error.message || this.state.error)}
+            </pre>
+            <button type="button" className="btn primary" onClick={this.reset}>⟲ Reload dashboard</button>
+          </div>
+        );
+      }
+    }
+
+    // ===========================================
     // RENDER
     // ===========================================
 
-    ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+    ReactDOM.createRoot(document.getElementById('root')).render(
+      <ErrorBoundary><App/></ErrorBoundary>
+    );
   </script>
 </body>
 </html>
