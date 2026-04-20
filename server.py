@@ -1120,7 +1120,7 @@ class SignalGen:
 _ANTHROPIC_URL = "https://api.anthropic.com/v1/messages"
 
 
-def _anthropic_call(prompt, model=None, max_tokens=400, timeout=20):
+def _anthropic_call(prompt, model=None, max_tokens=800, temperature=0.2, timeout=20):
     """Low-level wrapper around Anthropic messages API. Returns parsed JSON dict
     (from Claude's response content) or None if anything failed. Callers decide
     how to handle None — the safe default for validation is SKIP."""
@@ -1135,6 +1135,7 @@ def _anthropic_call(prompt, model=None, max_tokens=400, timeout=20):
                      "anthropic-version": "2023-06-01"},
             json={"model": model or CONFIG.get("anthropic_model", "claude-sonnet-4-5"),
                   "max_tokens": max_tokens,
+                  "temperature": temperature,
                   "messages": [{"role": "user", "content": prompt}]},
             timeout=timeout,
         )
@@ -1896,7 +1897,7 @@ class Engine:
     def __init__(self):
         self.client=AngelClient();self.sgen=SignalGen();self.opick=OptPicker()
         self.tracker=PLTracker(self.client);self.latest={};self.alerts=[]
-        self.running=False;self._prev={}
+        self.running=False;self._prev={};self._last_signal={}
         self._regime=None
         self._last_regime_run=None
         self._last_eod_run=None
@@ -1958,6 +1959,7 @@ class Engine:
         # Same geometry as SignalGen: entry = fresh price, SL = 1× ATR away, T1/T2 stretch same multiplier
         idx_sl_pts = max(atr, 1e-6)
         # Preserve R:R ratio from the original signal
+SL (stop-loss): {sig.get("sl", sig.get("stop", "n/a"))}  |  Gap vs prev close: {round((sig.get("price",0) - sig.get("prev_close", sig.get("price",0))) / max(sig.get("prev_close", sig.get("price",1)),1)*100, 2)}%
         orig_entry = sig.get("entry") or fresh_price
         orig_sl_pts = abs((sig.get("sl") or orig_entry) - orig_entry) or idx_sl_pts
         orig_t1_pts = abs((sig.get("target1") or orig_entry) - orig_entry) or idx_sl_pts * 1.5
@@ -1986,7 +1988,7 @@ class Engine:
                 # Pre-market: run regime brief early so overrides are ready at 09:15
                 self._maybe_regime(now)
 
-                if now.hour<9 or(now.hour==9 and now.minute<15)or now.hour>=16:
+                if now.hour<9 or(now.hour==9 and now.minute<20)or now.hour>=15:
                     time.sleep(30);continue
                 if now.hour==15 and now.minute>=25:
                     self.tracker.close_all();self.running=False
@@ -2021,6 +2023,9 @@ class Engine:
                     if df.empty or len(df)<30: continue
                     sig=self.sgen.analyze(df)
                     if not sig: continue
+                    # 15-min cooldown: skip re-signal same instrument
+                    _last_t=self._last_signal.get(name)
+                    if _last_t and (datetime.now(IST)-_last_t).total_seconds()<900: continue
 
                     # Fetch real option chain at 40%+ for dashboard display
                     opt=None
@@ -2117,7 +2122,7 @@ class Engine:
                         # 📱 SLACK ALERT
                         SlackAlert.send(SlackAlert.format_signal(name, sig, opt, timing, ai_result))
 
-                    self._prev[name]=result;self.latest[name]=result
+                    self._prev[name]=result;self.latest[name]=result;self._last_signal[name]=datetime.now(IST)
 
                 time.sleep(CONFIG["scan_interval_sec"])
             except Exception as e:
