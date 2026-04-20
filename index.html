@@ -232,22 +232,28 @@
 
     const DEFAULT_SERVER = "";
 
-    const getServer = () => localStorage.getItem('se_server') || DEFAULT_SERVER;
-    const setServer = (url) => localStorage.setItem('se_server', url);
-    const API = (path) => `${getServer()}/api${path}`;
-    const getAuthToken = () => localStorage.getItem('se_token') || '';
-    const setAuthToken = (token) => localStorage.setItem('se_token', token);
-
-    const apiFetch = async (path, method = 'GET', body = null) => {
-      const opts = {
-        method,
-        headers: { 'X-Auth-Token': getAuthToken(), 'Content-Type': 'application/json' }
-      };
-      if (body) opts.body = JSON.stringify(body);
-      const res = await fetch(API(path), opts);
-      if (!res.ok) throw new Error(`API ${res.status}`);
-      return res.json();
+    const getServer = () => localStorage.getItem('signal_server_url') || DEFAULT_SERVER;
+    const setServer = (url) => localStorage.setItem('signal_server_url', (url||'').replace(/\/$/,''));
+    const API = (path) => { const s = getServer(); return s ? s + path : path; };
+    const getAuthToken = () => localStorage.getItem('signal_auth_token') || '';
+    const setAuthToken = (token) => {
+      if (token) localStorage.setItem('signal_auth_token', token.trim());
+      else localStorage.removeItem('signal_auth_token');
     };
+
+    async function apiFetch(path, opts = {}) {
+      const headers = Object.assign({}, opts.headers || {});
+      const tok = getAuthToken();
+      if (tok) headers['X-Auth-Token'] = tok;
+      if (opts.body && !headers['Content-Type']) headers['Content-Type'] = 'application/json';
+      const res = await fetch(API(path), Object.assign({ credentials: 'include' }, opts, { headers }));
+      return res;
+    }
+    async function apiJSON(path, opts = {}) {
+      const r = await apiFetch(path, opts);
+      if (!r.ok) throw new Error('API ' + r.status);
+      return r.json();
+    }
 
     // ===========================================
     // TECHNICAL ANALYSIS LIBRARY
@@ -521,15 +527,38 @@
     function MarketClock() {
       const [now, setNow] = useState(new Date());
       useEffect(() => { const id = setInterval(() => setNow(new Date()), 1000); return () => clearInterval(id); }, []);
-      const t = '14:32:' + String(now.getSeconds()).padStart(2, '0');
+      // Convert to IST regardless of host tz
+      const istMs = now.getTime() + (now.getTimezoneOffset() * 60000) + (5.5 * 3600 * 1000);
+      const ist = new Date(istMs);
+      const hh = String(ist.getUTCHours()).padStart(2,'0');
+      const mm = String(ist.getUTCMinutes()).padStart(2,'0');
+      const ss = String(ist.getUTCSeconds()).padStart(2,'0');
+      const minsOfDay = ist.getUTCHours() * 60 + ist.getUTCMinutes();
+      const dow = ist.getUTCDay(); // 0=Sun 6=Sat
+      const OPEN = 9*60 + 15, CLOSE = 15*60 + 30;
+      const isWeekday = dow >= 1 && dow <= 5;
+      const open = isWeekday && minsOfDay >= OPEN && minsOfDay < CLOSE;
+      const preOpen = isWeekday && minsOfDay < OPEN;
+      let statusTxt, statusColor, tail;
+      if (open) {
+        const mins = CLOSE - minsOfDay;
+        statusTxt = 'NSE OPEN'; statusColor = 'var(--long)';
+        tail = mins < 60 ? `${mins}m to close` : `${Math.floor(mins/60)}h ${mins%60}m to close`;
+      } else if (preOpen) {
+        const mins = OPEN - minsOfDay;
+        statusTxt = 'PRE-OPEN'; statusColor = 'var(--warn)';
+        tail = mins < 60 ? `opens in ${mins}m` : `opens in ${Math.floor(mins/60)}h ${mins%60}m`;
+      } else {
+        statusTxt = 'NSE CLOSED'; statusColor = 'var(--ink-3)';
+        tail = isWeekday ? (minsOfDay >= CLOSE ? 'closed · opens 09:15' : '') : 'weekend · opens Mon 09:15';
+      }
       return (
         <div className="market-status">
-          <span className="pulse" />
-          <span style={{color:'var(--long)', fontWeight:600}}>NSE OPEN</span>
+          <span className="pulse" style={{background: statusColor}} />
+          <span style={{color: statusColor, fontWeight:600}}>{statusTxt}</span>
           <span className="dim">·</span>
-          <span>{t} IST</span>
-          <span className="dim">·</span>
-          <span>58m to close</span>
+          <span>{hh}:{mm}:{ss} IST</span>
+          {tail && <><span className="dim">·</span><span>{tail}</span></>}
         </div>
       );
     }
@@ -805,15 +834,38 @@
       r.style.setProperty('--accent-faint',  `oklch(${a.a} / 0.08)`);
     }
 
-    function Tweaks({ theme, setTheme, accent, setAccent, density, setDensity, onClose }) {
+    function Tweaks({ theme, setTheme, accent, setAccent, density, setDensity, serverOk, onClose }) {
+      const [serverInp, setServerInp] = useState(getServer());
+      const [tokInp, setTokInp] = useState(getAuthToken());
+      const inputStyle = { width:'100%', background:'var(--bg-2)', border:'1px solid var(--line-1)', color:'var(--ink-0)',
+        padding:'8px 10px', borderRadius:'var(--r-sm)', fontFamily:'JetBrains Mono, monospace', fontSize:11.5, outline:'none', marginBottom:6 };
+      const dotColor = serverOk === true ? 'var(--long)' : serverOk === false ? 'var(--short)' : 'var(--ink-3)';
+      const dotText  = serverOk === true ? 'connected' : serverOk === false ? 'offline' : 'checking…';
       return (
         <div className="tweaks">
-          <h4>Tweaks <button onClick={onClose} className="btn ghost" style={{height:22, padding:'0 8px', fontSize:10}}>close</button></h4>
+          <h4>Settings <button type="button" onClick={onClose} className="btn ghost" style={{height:22, padding:'0 8px', fontSize:10}}>close</button></h4>
+
+          <div className="tweak-row">
+            <div className="lbl">
+              <span>Connection</span>
+              <span className="v" style={{display:'inline-flex', alignItems:'center', gap:5}}>
+                <span style={{width:7, height:7, borderRadius:99, background: dotColor, boxShadow: serverOk===true?'0 0 6px var(--long)':'none'}}/>
+                {dotText}
+              </span>
+            </div>
+            <input type="text" placeholder="Server URL (e.g. https://intraday.up.railway.app)" value={serverInp}
+              onChange={e=>setServerInp(e.target.value)}
+              onBlur={e=>setServer(e.target.value)} style={inputStyle}/>
+            <input type="password" placeholder="Auth token" value={tokInp}
+              onChange={e=>setTokInp(e.target.value)}
+              onBlur={e=>setAuthToken(e.target.value)} style={inputStyle}/>
+          </div>
+
           <div className="tweak-row">
             <div className="lbl">Theme <span className="v">{theme}</span></div>
             <div className="theme-toggle" style={{width:'100%'}}>
-              <button className={theme==='dark'?'on':''} onClick={()=>setTheme('dark')} style={{flex:1, borderRadius:99}}>◗ Dark</button>
-              <button className={theme==='light'?'on':''} onClick={()=>setTheme('light')} style={{flex:1, borderRadius:99}}>◐ Light</button>
+              <button type="button" className={theme==='dark'?'on':''} onClick={()=>setTheme('dark')} style={{flex:1, borderRadius:99}}>◗ Dark</button>
+              <button type="button" className={theme==='light'?'on':''} onClick={()=>setTheme('light')} style={{flex:1, borderRadius:99}}>◐ Light</button>
             </div>
           </div>
           <div className="tweak-row">
@@ -828,14 +880,9 @@
           <div className="tweak-row">
             <div className="lbl">Density <span className="v">{density}</span></div>
             <div className="seg" style={{width:'100%'}}>
-              <button className={density==='comfortable'?'on':''} style={{flex:1}} onClick={()=>setDensity('comfortable')}>Comfort</button>
-              <button className={density==='compact'?'on':''} style={{flex:1}} onClick={()=>setDensity('compact')}>Compact</button>
+              <button type="button" className={density==='comfortable'?'on':''} style={{flex:1}} onClick={()=>setDensity('comfortable')}>Comfort</button>
+              <button type="button" className={density==='compact'?'on':''} style={{flex:1}} onClick={()=>setDensity('compact')}>Compact</button>
             </div>
-          </div>
-          <div className="tweak-row">
-            <div className="lbl">Server <span className="v">API</span></div>
-            <input type="text" placeholder="http://localhost:8080" defaultValue={getServer()} onChange={(e)=>setServer(e.target.value)} style={{width:'100%', marginBottom:8}}/>
-            <input type="password" placeholder="Auth Token" defaultValue={getAuthToken()} onChange={(e)=>setAuthToken(e.target.value)} style={{width:'100%'}}/>
           </div>
         </div>
       );
@@ -848,19 +895,153 @@
     function App() {
       const [tab, setTab] = useState(() => localStorage.getItem('se_tab') || 'signals');
       const [inst, setInst] = useState(0);
-      const [theme, setThemeState] = useState('dark');
-      const [accent, setAccentState] = useState('amber');
-      const [density, setDensityState] = useState('comfortable');
+      const [theme, setThemeState] = useState(() => localStorage.getItem('se_theme') || 'dark');
+      const [accent, setAccentState] = useState(() => localStorage.getItem('se_accent') || 'amber');
+      const [density, setDensityState] = useState(() => localStorage.getItem('se_density') || 'comfortable');
       const [tweakOpen, setTweakOpen] = useState(false);
-      const [showPosMonitor, setShowPosMonitor] = useState(true);
+      const [showPosMonitor, setShowPosMonitor] = useState(false);
+
+      // ── engine state ─────────────────────────────────
+      const [mode, setMode] = useState(() => localStorage.getItem('se_mode') || 'live'); // 'live' | 'replay'
+      const [speed, setSpeed] = useState(2); // 1x/2x/4x
+      const [replayDays, setReplayDays] = useState(5);
+      const [on, setOn] = useState(false);
+      const [serverOk, setServerOk] = useState(null);
+      const [signals, setSignals] = useState([]);
+      const [trades, setTrades] = useState([]);
+      const [logLines, setLogLines] = useState([]);
+      const [candles, setCandles] = useState({});    // { NIFTY:[...], BANKNIFTY:[...], ... }
+      const [live, setLive] = useState({});          // { NIFTY:{ltp, chg, pct}, ... }
+      const [replay, setReplay] = useState(null);    // { data, idx, total }
+      const [toast, setToast] = useState(null);
+      const lastSigId = useRef(null);
+
+      const addLog = (level, msg) => {
+        const now = new Date();
+        const istMs = now.getTime() + (now.getTimezoneOffset()*60000) + (5.5*3600*1000);
+        const ist = new Date(istMs);
+        const t = String(ist.getUTCHours()).padStart(2,'0')+':'+String(ist.getUTCMinutes()).padStart(2,'0')+':'+String(ist.getUTCSeconds()).padStart(2,'0');
+        setLogLines(prev => [...prev.slice(-199), { t, level, msg }]);
+      };
+
+      const showToast = (text, ms=3000) => { setToast(text); setTimeout(()=>setToast(null), ms); };
+
+      const beep = (freq=880) => {
+        try {
+          const ctx = new (window.AudioContext || window.webkitAudioContext)();
+          const o = ctx.createOscillator(), g = ctx.createGain();
+          o.frequency.value = freq; o.connect(g); g.connect(ctx.destination);
+          g.gain.setValueAtTime(0.0001, ctx.currentTime);
+          g.gain.exponentialRampToValueAtTime(0.12, ctx.currentTime+0.01);
+          g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime+0.18);
+          o.start(); o.stop(ctx.currentTime+0.2);
+        } catch(e){}
+      };
+
+      const notifySignal = (sig) => {
+        beep(880); setTimeout(()=>beep(1100), 180);
+        showToast(`● ${sig.inst || ''} ${sig.direction || sig.dir || ''} ${sig.option?.strike || sig.strike || ''}`);
+        try {
+          if ('Notification' in window && Notification.permission === 'granted') {
+            new Notification('Signal Engine', { body: `${sig.inst} ${sig.direction || sig.dir} @ ${sig.option?.strike || sig.strike}`, silent: false });
+          }
+        } catch(e){}
+      };
+
+      const requestNotify = () => { try { if ('Notification' in window && Notification.permission === 'default') Notification.requestPermission(); } catch(e){} };
+
+      const doStart = async () => {
+        requestNotify();
+        try {
+          if (mode === 'live') {
+            await apiFetch('/api/ping');
+            try { await apiFetch('/api/login', { method:'POST' }); } catch(e){}
+            const r = await apiFetch('/api/start', { method:'POST', body: JSON.stringify({ mode:'live' }) });
+            if (!r.ok) throw new Error('start ' + r.status);
+            setOn(true); addLog('INFO', 'Engine started · LIVE'); showToast('Engine started · LIVE');
+          } else {
+            setOn(true); addLog('INFO', `Replay started · ${replayDays}d · ${speed}x`); showToast('Replay running');
+          }
+        } catch (e) {
+          addLog('INFO', 'Start failed · ' + (e.message || e));
+          showToast('Start failed — check server + auth token');
+        }
+      };
+
+      const doStop = async () => {
+        if (mode === 'live') {
+          try { await apiFetch('/api/stop', { method:'POST' }); } catch(e){}
+        }
+        setOn(false); addLog('INFO', 'Engine stopped'); showToast('Engine stopped');
+      };
+
+      const doReset = () => {
+        setSignals([]); setTrades([]); setLogLines([]); setReplay(null); lastSigId.current = null;
+        addLog('INFO', 'State reset');
+      };
 
       useEffect(() => { localStorage.setItem('se_tab', tab); }, [tab]);
+      useEffect(() => { localStorage.setItem('se_mode', mode); }, [mode]);
 
       useEffect(() => {
         document.documentElement.setAttribute('data-theme', theme);
         document.documentElement.setAttribute('data-density', density);
         applyAccent(theme, accent);
       }, [theme, accent, density]);
+
+      // server health ping
+      useEffect(() => {
+        let alive = true;
+        const check = async () => {
+          try { const r = await apiFetch('/api/ping'); if (alive) setServerOk(r.ok); }
+          catch { if (alive) setServerOk(false); }
+        };
+        check();
+        const id = setInterval(check, 10000);
+        return () => { alive = false; clearInterval(id); };
+      }, []);
+
+      // live pollers
+      useEffect(() => {
+        if (!on || mode !== 'live') return;
+        let alive = true;
+        const fast = async () => {
+          try {
+            const s = await apiJSON('/api/status');
+            if (!alive) return;
+            if (s.signals) setSignals(s.signals);
+            if (s.trades) setTrades(s.trades);
+            if (s.live) setLive(s.live);
+            if (s.log && Array.isArray(s.log)) setLogLines(s.log.slice(-200));
+            const latest = s.signals && s.signals[0];
+            if (latest && latest.id && latest.id !== lastSigId.current) {
+              lastSigId.current = latest.id;
+              notifySignal(latest);
+            }
+          } catch(e){}
+        };
+        fast();
+        const fastId = setInterval(fast, 2000);
+        const slowId = setInterval(async () => {
+          for (const i of INST) {
+            try { const r = await apiJSON(`/api/historical/${i.key || i.name}?days=1`); if (alive && r.candles) setCandles(prev => ({...prev, [i.name]: r.candles})); } catch(e){}
+          }
+        }, 30000);
+        return () => { alive = false; clearInterval(fastId); clearInterval(slowId); };
+      }, [on, mode]);
+
+      // replay tick
+      useEffect(() => {
+        if (!on || mode !== 'replay' || !replay) return;
+        const id = setInterval(() => {
+          setReplay(r => {
+            if (!r) return r;
+            if (r.idx >= r.total - 1) { clearInterval(id); setOn(false); addLog('INFO','Replay complete'); return r; }
+            return { ...r, idx: r.idx + 1 };
+          });
+        }, Math.max(60, 180 / Math.max(1, speed)));
+        return () => clearInterval(id);
+      }, [on, mode, replay, speed]);
 
       const persist = (edits) => {
         Object.entries(edits).forEach(([k, v]) => localStorage.setItem(`se_${k}`, v));
@@ -900,16 +1081,34 @@
 
             <span style={{flex:1}}/>
 
-            <div className="seg">
-              <button className="on">LIVE</button>
-              <button>PAPER</button>
+            <div className="seg" title="engine mode">
+              <button type="button" className={mode==='live'?'on':''} onClick={()=>!on && setMode('live')} disabled={on}>LIVE</button>
+              <button type="button" className={mode==='replay'?'on':''} onClick={()=>!on && setMode('replay')} disabled={on}>REPLAY</button>
             </div>
 
-            <button className="btn ghost" onClick={() => setTheme(theme==='dark'?'light':'dark')} title="toggle theme">
+            {mode === 'replay' && (
+              <>
+                <div className="seg" title="replay speed">
+                  {[1,2,4].map(x => (
+                    <button type="button" key={x} className={speed===x?'on':''} onClick={()=>setSpeed(x)}>{x}x</button>
+                  ))}
+                </div>
+                <div style={{display:'flex', alignItems:'center', gap:6, fontSize:11.5, color:'var(--ink-2)'}}>
+                  <span>Days</span>
+                  <input type="number" min="1" max="30" value={replayDays} onChange={e=>setReplayDays(parseInt(e.target.value)||5)}
+                    style={{width:46, background:'var(--bg-2)', border:'1px solid var(--line-1)', color:'var(--ink-0)', borderRadius:4, padding:'4px 6px', fontFamily:'JetBrains Mono, monospace', fontSize:11.5}}/>
+                </div>
+              </>
+            )}
+
+            <button type="button" className="btn ghost" onClick={() => setTheme(theme==='dark'?'light':'dark')} title="toggle theme">
               {theme==='dark' ? '◐' : '◗'}
             </button>
-            <button className="btn" onClick={() => setTweakOpen(o=>!o)}>⚙ Tweaks</button>
-            <button className="btn primary">⚡ Place Order</button>
+            <button type="button" className="btn" onClick={() => setTweakOpen(o=>!o)} title="settings">⚙ Tweaks</button>
+            {on
+              ? <button type="button" className="btn danger" onClick={doStop} title="stop engine">■ Stop</button>
+              : <button type="button" className="btn primary" onClick={doStart} title="start engine">▶ Start</button>}
+            <button type="button" className="btn ghost" onClick={doReset} title="reset state">⟲</button>
           </div>
 
           <TickerTape/>
@@ -951,7 +1150,17 @@
           </div>
 
           {showPosMonitor && <PositionMonitor onClose={()=>setShowPosMonitor(false)}/>}
-          {tweakOpen && <Tweaks theme={theme} setTheme={setTheme} accent={accent} setAccent={setAccent} density={density} setDensity={setDensity} onClose={()=>setTweakOpen(false)}/>}
+          {tweakOpen && <Tweaks theme={theme} setTheme={setTheme} accent={accent} setAccent={setAccent} density={density} setDensity={setDensity} serverOk={serverOk} onClose={()=>setTweakOpen(false)}/>}
+
+          {toast && (
+            <div style={{position:'fixed', bottom:28, left:'50%', transform:'translateX(-50%)', zIndex:200,
+              background:'var(--bg-elev)', backdropFilter:'blur(18px) saturate(140%)',
+              border:'1px solid var(--accent)', borderRadius:'var(--r-md)', padding:'10px 18px',
+              fontSize:12.5, color:'var(--ink-0)', boxShadow:'var(--shadow-lg), 0 0 32px var(--accent-faint)',
+              animation:'fade-up 320ms cubic-bezier(.2,.7,.2,1)'}}>
+              {toast}
+            </div>
+          )}
 
           <footer style={{padding:'24px var(--pad-x) 100px', textAlign:'center', color:'var(--ink-3)', fontSize:11, fontFamily:'JetBrains Mono, monospace', letterSpacing:'0.08em', flexShrink:0}}>
             SIGNAL ENGINE v2.4 · PAPER-TRADING DEMO · NOT INVESTMENT ADVICE
