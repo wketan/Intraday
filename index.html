@@ -1780,16 +1780,30 @@ function App() {
         return () => { alive = false; clearInterval(fastId); clearInterval(slowId); };
       }, [on, mode]);
 
-      // Poll /api/ltp every 3 s while engine is on — keeps live cards populated
+      // Poll /api/ltp every 3 s while engine is on — keeps live cards populated.
+      // Backend sends { ltp, change }; frontend reads { ltp, chg, pct } — normalise here.
       useEffect(() => {
         if (!on || mode !== 'live') return;
         let cancelled = false;
         const tick = async () => {
           try {
             const r = await apiJSON('/api/ltp');
-            const prices = r && r.prices;
-            if (!cancelled && prices && typeof prices === 'object') {
-              setLive(prev => ({ ...prev, ...prices }));
+            const raw = r && r.prices;
+            if (!cancelled && raw && typeof raw === 'object') {
+              const normalised = {};
+              for (const [sym, v] of Object.entries(raw)) {
+                if (v && typeof v === 'object') {
+                  const ltp = Number(v.ltp  ?? v.last_price ?? 0);
+                  const chg = Number(v.chg  ?? v.change     ?? v.net_change ?? 0);
+                  const pct = Number(v.pct  ?? v.percent_change ??
+                    (ltp && chg ? (chg / Math.abs(ltp - chg || 1)) * 100 : 0));
+                  normalised[sym] = { ...v, ltp, chg, pct };
+                } else {
+                  // plain number — keep it, chg/pct will be NaN (unchanged from before)
+                  normalised[sym] = v;
+                }
+              }
+              setLive(prev => ({ ...prev, ...normalised }));
             }
           } catch (e) { /* silent */ }
         };
