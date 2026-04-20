@@ -1426,7 +1426,28 @@
     // MAIN APP
     // ===========================================
 
-    function App() {
+          // Normalize candle shape: backend emits {t,o,h,l,c,v}; analyze/chart expect long names.
+      function normCandles(arr) {
+        if (!Array.isArray(arr)) return [];
+        return arr.map(c => {
+          if (c && typeof c === 'object' && !Array.isArray(c)) {
+            return {
+              time:   c.time   ?? c.t   ?? c.timestamp ?? c[0],
+              open:   Number(c.open  ?? c.o ?? c[1]),
+              high:   Number(c.high  ?? c.h ?? c[2]),
+              low:    Number(c.low   ?? c.l ?? c[3]),
+              close:  Number(c.close ?? c.c ?? c[4]),
+              volume: Number(c.volume ?? c.v ?? c[5] ?? 0),
+            };
+          }
+          if (Array.isArray(c)) {
+            return { time:c[0], open:+c[1], high:+c[2], low:+c[3], close:+c[4], volume:+(c[5]||0) };
+          }
+          return null;
+        }).filter(Boolean);
+      }
+
+function App() {
       const [tab, setTab] = useState(() => localStorage.getItem('se_tab') || 'signals');
       const [inst, setInst] = useState(0);
       const [theme, setThemeState] = useState(() => localStorage.getItem('se_theme') || 'dark');
@@ -1507,28 +1528,6 @@
             const arr = r.candles || r.data || r;
             if (!Array.isArray(arr) || arr.length < 20) {
               addLog('INFO', `${i.name} · insufficient data (${arr && arr.length || 0} candles)`);
-
-      // Normalize candle shape: backend emits {t,o,h,l,c,v}; analyze/chart expect long names.
-      function normCandles(arr) {
-        if (!Array.isArray(arr)) return [];
-        return arr.map(c => {
-          if (c && typeof c === 'object' && !Array.isArray(c)) {
-            return {
-              time:   c.time   ?? c.t   ?? c.timestamp ?? c[0],
-              open:   Number(c.open  ?? c.o ?? c[1]),
-              high:   Number(c.high  ?? c.h ?? c[2]),
-              low:    Number(c.low   ?? c.l ?? c[3]),
-              close:  Number(c.close ?? c.c ?? c[4]),
-              volume: Number(c.volume ?? c.v ?? c[5] ?? 0),
-            };
-          }
-          if (Array.isArray(c)) {
-            return { time:c[0], open:+c[1], high:+c[2], low:+c[3], close:+c[4], volume:+(c[5]||0) };
-          }
-          return null;
-        }).filter(Boolean);
-      }
-
               continue;
             }
             setCandles(prev => ({ ...prev, [i.name]: normCandles(arr) }));
@@ -1781,7 +1780,7 @@
         return () => { alive = false; clearInterval(fastId); clearInterval(slowId); };
       }, [on, mode]);
 
-      // Poll /api/ltp every 3s while engine is on, merge into `live` state
+      // Poll /api/ltp every 3 s while engine is on — keeps live cards populated
       useEffect(() => {
         if (!on || mode !== 'live') return;
         let cancelled = false;
