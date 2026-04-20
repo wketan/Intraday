@@ -619,89 +619,263 @@
     // SCREEN COMPONENTS
     // ===========================================
 
-    function SignalsTab({ sel, setSel }) {
+    function SignalsTab({ sel, setSel, signals = [], candles = {}, live = {}, on }) {
+      const inst = INST[sel];
+      const instCandles = candles[inst.name] || [];
+      const instSignals = signals.filter(s => s.inst === inst.name);
+      const activeSignal = instSignals[0]; // most recent
+      const liveData = live[inst.name];
+      // Build sparkline from real candles if available
+      const sparkData = instCandles.length
+        ? instCandles.slice(-60).map(c => Number(c.close ?? c[4] ?? c))
+        : null;
       return (
-        <div style={{display:'flex', flexDirection:'column', gap:16, padding:'var(--pad-x)'}}>
-          <div style={{display:'flex', gap:12, padding:'var(--pad-x)', background:'var(--bg-1)', borderBottom:'1px solid var(--line-1)', overflowX:'auto'}}>
-            {INST.map((i, idx) => (
-              <button key={idx} className={`card ${sel===idx?'active':''}`}
-                onClick={()=>setSel(idx)} style={{flex:'0 0 auto', minWidth:140, paddingLeft:12, paddingRight:12}}>
-                <div style={{fontSize:13, fontWeight:600, color:'var(--ink-0)'}}>{i.name}</div>
-                <div style={{fontSize:11, color:'var(--ink-3)', marginTop:4}}>Lot: {i.lot}</div>
-              </button>
-            ))}
+        <div style={{display:'flex', flexDirection:'column'}}>
+          {/* instrument selector with real data */}
+          <div className="inst-row">
+            {INST.map((i, idx) => {
+              const l = live[i.name];
+              const cnds = candles[i.name] || [];
+              return (
+                <div key={i.name} className={`inst-card ${idx===sel?'on':''}`} onClick={()=>setSel(idx)}>
+                  <div style={{display:'flex', alignItems:'center', justifyContent:'space-between'}}>
+                    <span className="name">{i.name}</span>
+                    <span className="dim mono" style={{fontSize:10}}>lot {i.lot}</span>
+                  </div>
+                  <div className="price">
+                    {l ? Number(l.ltp).toLocaleString('en-IN', {minimumFractionDigits:2}) : '—'}
+                  </div>
+                  <div className="delta">
+                    {l
+                      ? <><span className={l.chg>=0?'pos':'neg'}>{l.chg>=0?'+':''}{Number(l.chg).toFixed(2)}</span>
+                          <span className={l.pct>=0?'pos':'neg'} style={{marginLeft:8}}>{l.pct>=0?'+':''}{Number(l.pct).toFixed(2)}%</span></>
+                      : <span className="dim">no live data yet</span>}
+                    <span className="dim" style={{marginLeft:10, fontSize:11}}>· {cnds.length} candles</span>
+                  </div>
+                </div>
+              );
+            })}
           </div>
-          <div style={{padding:'var(--pad-x)', background:'var(--bg-1)', borderRadius:8}}>
-            <h4 style={{marginBottom:8}}>Chart</h4>
-            <PriceChart data={[100,102,101,103,105,104,106,108,107,109]} sig={{entry:105}}/>
-          </div>
-          <div style={{padding:'var(--pad-x)', background:'var(--bg-1)', borderRadius:8}}>
-            <h4 style={{marginBottom:12}}>Strategies</h4>
-            <StratBars items={[{name:'ORB',score:25,active:true,dir:'LONG',detail:'break'},{name:'VWAP',score:20,active:true,dir:'LONG',detail:'+above'},{name:'EMA+RSI',score:15,active:true,dir:'LONG',detail:'RSI 65'},{name:'SuperTrend',score:20,active:true,dir:'LONG',detail:'above'},{name:'PDH/PDL',score:0,active:false,dir:null,detail:'—'}]}/>
+
+          <div style={{padding:'8px var(--pad-x) 16px', display:'grid', gridTemplateColumns:'1.55fr 1fr', gap:16}}>
+            {/* LEFT: chart + recent signals */}
+            <div style={{display:'flex', flexDirection:'column', gap:12}}>
+              <div className="panel">
+                <div className="panel-head">
+                  <h3>{inst.name} · chart</h3>
+                  <span style={{flex:1}}/>
+                  <span className="muted mono" style={{fontSize:11}}>
+                    {sparkData ? `${instCandles.length} candles · last ${sparkData[sparkData.length-1]}` : 'no data yet'}
+                  </span>
+                </div>
+                <div style={{padding:14, minHeight:140}}>
+                  {sparkData ? (
+                    <Spark data={sparkData} w={700} h={160}/>
+                  ) : (
+                    <div style={{padding:'40px 0', textAlign:'center', color:'var(--ink-3)', fontSize:12.5}}>
+                      {on ? 'Waiting for candles from server…' : 'Press ▶ Start to fetch historical candles.'}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* RIGHT: active signal */}
+            <div style={{display:'flex', flexDirection:'column', gap:12}}>
+              <div className="panel" style={{borderColor: activeSignal ? 'var(--accent)' : 'var(--line-0)'}}>
+                <div className="panel-head">
+                  <h3 style={{color: activeSignal ? 'var(--accent)' : 'var(--ink-2)'}}>
+                    {activeSignal ? `● ${activeSignal.status || 'Signal'}` : 'No active signal'}
+                  </h3>
+                  <span style={{flex:1}}/>
+                  <span className="muted mono" style={{fontSize:11}}>
+                    {activeSignal ? activeSignal.t : (on ? 'scanning…' : 'idle')}
+                  </span>
+                </div>
+                <div style={{padding:16}}>
+                  {activeSignal ? (
+                    <>
+                      <div style={{display:'flex', alignItems:'center', gap:12, marginBottom:12}}>
+                        <ConfRing value={activeSignal.confidence || 0}/>
+                        <div style={{flex:1}}>
+                          <div style={{fontSize:18, fontWeight:600}}>
+                            {activeSignal.inst} <span className={`chip ${activeSignal.dir==='LONG'?'long':'short'}`}>{activeSignal.dir} {activeSignal.type || ''}</span>
+                          </div>
+                          <div className="muted mono" style={{fontSize:12, marginTop:2}}>
+                            {activeSignal.strike ? `Strike ${activeSignal.strike}${activeSignal.type || ''}` : ''}
+                            {activeSignal.strategies?.length ? ` · ${activeSignal.strategies.length} strategies` : ''}
+                          </div>
+                        </div>
+                      </div>
+                      {activeSignal.reasons?.length > 0 && (
+                        <div style={{padding:12, background:'var(--bg-2)', borderRadius:6, fontSize:11.5, lineHeight:1.6}}>
+                          <div style={{color:'var(--ink-3)', fontSize:10, letterSpacing:'0.08em', textTransform:'uppercase', marginBottom:6, fontWeight:600}}>Why fired</div>
+                          {activeSignal.reasons.slice(0,6).map((r,i) => (
+                            <div key={i} style={{display:'flex', gap:8, color:'var(--ink-1)'}}>
+                              <span style={{color:'var(--accent)'}}>·</span>{r}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <div style={{padding:'20px 0', textAlign:'center', color:'var(--ink-3)', fontSize:12.5}}>
+                      {on ? 'Scanning for confluence…' : 'Engine idle.'}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="panel">
+                <div className="panel-head">
+                  <h3>Recent signals · {inst.name}</h3>
+                  <span style={{flex:1}}/>
+                  <span className="muted mono" style={{fontSize:11}}>{instSignals.length} total</span>
+                </div>
+                <div>
+                  {instSignals.length === 0 ? (
+                    <div style={{padding:'20px 14px', color:'var(--ink-3)', fontSize:12}}>No signals yet on {inst.name}.</div>
+                  ) : instSignals.slice(0,8).map((s,i) => (
+                    <div key={i} style={{display:'flex', alignItems:'center', gap:10, padding:'10px 14px', borderBottom:'1px solid var(--line-0)', fontSize:12}}>
+                      <span className="dim mono" style={{width:44, fontSize:11}}>{s.t}</span>
+                      <span className={`chip ${s.dir==='LONG'?'long':'short'}`}>{s.dir} {s.type||''}</span>
+                      <span className="num dim" style={{fontSize:11}}>{s.strike}</span>
+                      <span style={{flex:1}}/>
+                      <span className="muted" style={{fontSize:11}}>{s.confidence}%</span>
+                      <span className={`chip ${s.status==='OPEN'?'accent':s.status==='WIN'?'long':s.status==='LOSS'?'short':'ghost'}`}>{s.status}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       );
     }
 
-    function JournalTab() {
+    function JournalTab({ trades = [] }) {
+      const closed = trades.filter(t => t.status && t.status !== 'OPEN');
+      const wins = closed.filter(t => t.status === 'WIN').length;
+      const pnl = closed.reduce((a,b) => a + (Number(b.pnl) || 0), 0);
+      const winRate = closed.length ? Math.round((wins/closed.length)*100) : 0;
       return (
-        <div style={{padding:'var(--pad-x)', display:'flex', flexDirection:'column', gap:16}}>
-          <div className="grid">
+        <div style={{padding:'16px var(--pad-x)', display:'flex', flexDirection:'column', gap:14}}>
+          <div className="grid-4">
             <div className="metric">
               <div className="label">Total Trades</div>
-              <div className="val">12</div>
+              <div className="val">{closed.length}</div>
+              <div className="delta dim">{closed.length === 0 ? 'no activity yet' : 'today · all instruments'}</div>
             </div>
             <div className="metric">
               <div className="label">Win Rate</div>
-              <div className="val pos">75%</div>
+              <div className="val">{closed.length ? winRate + '%' : '—'}</div>
+              <div className="delta dim">{closed.length ? `${wins}W · ${closed.length-wins}L` : '—'}</div>
             </div>
             <div className="metric">
-              <div className="label">Net P&L</div>
-              <div className="val pos">+₹8,540</div>
-            </div>
-          </div>
-          <div style={{background:'var(--bg-1)', borderRadius:8, padding:'var(--pad-x)', overflowX:'auto'}}>
-            <table>
-              <thead>
-                <tr>
-                  <th>Inst</th>
-                  <th>Entry</th>
-                  <th>Exit</th>
-                  <th>P&L</th>
-                  <th>Time</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr><td>NIFTY</td><td>20150.50</td><td>20165.00</td><td style={{color:'var(--long)'}}>+₹725</td><td>14:22</td></tr>
-                <tr><td>BANKNIFTY</td><td>50245.00</td><td>50310.00</td><td style={{color:'var(--long)'}}>+₹975</td><td>14:45</td></tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
-      );
-    }
-
-    function StatsTab() {
-      return (
-        <div style={{padding:'var(--pad-x)', display:'flex', flexDirection:'column', gap:16}}>
-          <div className="grid">
-            <div className="metric">
-              <div className="label">Win Rate</div>
-              <div className="val">75%</div>
-            </div>
-            <div className="metric">
-              <div className="label">Total P&L</div>
-              <div className="val pos">+₹8,540</div>
+              <div className="label">Net P&amp;L</div>
+              <div className={`val ${pnl>=0?'pos':'neg'}`}>
+                {closed.length === 0 ? '₹0' : (pnl>=0?'+₹':'−₹') + Math.abs(Math.round(pnl)).toLocaleString('en-IN')}
+              </div>
+              <div className="delta dim">{closed.length ? 'realized' : '—'}</div>
             </div>
             <div className="metric">
               <div className="label">Avg R:R</div>
-              <div className="val">1:2.3</div>
+              <div className="val">—</div>
+              <div className="delta dim">target ≥ 1.5×</div>
             </div>
           </div>
-          <div style={{background:'var(--bg-1)', borderRadius:8, padding:'var(--pad-x)'}}>
-            <h4 style={{marginBottom:12}}>Daily P&L</h4>
-            <PriceChart data={[1000,1200,900,1400,1100,1800,1500,2200,1900,2400]}/>
+          <div className="panel">
+            <div className="panel-head">
+              <h3>Closed Trades</h3>
+              <span style={{flex:1}}/>
+              <span className="muted mono" style={{fontSize:11}}>{closed.length} total</span>
+            </div>
+            {closed.length === 0 ? (
+              <div style={{padding:'40px 20px', textAlign:'center', color:'var(--ink-3)', fontSize:12.5}}>
+                No trades recorded yet · press <span style={{color:'var(--accent)'}}>▶ Start</span> once the market opens to begin.
+              </div>
+            ) : (
+              <table className="tbl">
+                <thead>
+                  <tr>
+                    <th>Time</th><th>Instrument</th><th>Direction</th>
+                    <th className="right">Strike</th><th className="right">Entry → Exit</th>
+                    <th>Result</th><th className="right">P&amp;L</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {closed.map((t,i) => (
+                    <tr key={i}>
+                      <td className="mono" style={{fontSize:11.5}}>{t.t || t.time || '—'} → {t.exitTime || '—'}</td>
+                      <td className="ticker">{t.inst}</td>
+                      <td><span className={`chip ${t.dir==='LONG'?'long':'short'}`}>{t.dir} {t.type||''}</span></td>
+                      <td className="right num">{t.strike || '—'}</td>
+                      <td className="right num" style={{fontSize:12}}>₹{t.premium} → ₹{t.exitPrem}</td>
+                      <td><span className={`chip ${t.status==='WIN'?'long':'short'}`}>{t.status}</span></td>
+                      <td className="right"><span className={(t.pnl||0)>=0?'pos':'neg'}>{((t.pnl||0)>=0?'+₹':'−₹') + Math.abs(Math.round(t.pnl||0)).toLocaleString('en-IN')}</span></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
           </div>
+        </div>
+      );
+    }
+
+    function StatsTab({ trades = [], signals = [] }) {
+      const closed = trades.filter(t => t.status && t.status !== 'OPEN');
+      const wins = closed.filter(t => t.status === 'WIN').length;
+      const pnl = closed.reduce((a,b) => a + (Number(b.pnl)||0), 0);
+      const winRate = closed.length ? Math.round((wins/closed.length)*100) : 0;
+      return (
+        <div style={{padding:'16px var(--pad-x)', display:'flex', flexDirection:'column', gap:14}}>
+          <div className="grid-4">
+            <div className="metric">
+              <div className="label">Win Rate</div>
+              <div className="val">{closed.length ? winRate + '%' : '—'}</div>
+              <div className="delta dim">{closed.length} trades</div>
+            </div>
+            <div className="metric">
+              <div className="label">Total P&amp;L</div>
+              <div className={`val ${pnl>=0?'pos':'neg'}`}>
+                {closed.length === 0 ? '₹0' : (pnl>=0?'+₹':'−₹') + Math.abs(Math.round(pnl)).toLocaleString('en-IN')}
+              </div>
+              <div className="delta dim">realized</div>
+            </div>
+            <div className="metric">
+              <div className="label">Signals Fired</div>
+              <div className="val">{signals.length}</div>
+              <div className="delta dim">{signals.filter(s=>s.status==='OPEN').length} open</div>
+            </div>
+            <div className="metric">
+              <div className="label">Avg R:R</div>
+              <div className="val">—</div>
+              <div className="delta dim">target ≥ 1.5×</div>
+            </div>
+          </div>
+          <div className="panel">
+            <div className="panel-head"><h3>Engine Rules · active config</h3><span style={{flex:1}}/></div>
+            <div style={{padding:'14px 16px', display:'grid', gridTemplateColumns:'repeat(5, 1fr)', gap:10}}>
+              {[
+                {k:'Min Confidence', v:'40%'},
+                {k:'Min Strategies', v:'2 of 5'},
+                {k:'Trade Windows', v:'09:20-11:30 · 14:00-15:15'},
+                {k:'Max / Day', v:'3 per index'},
+                {k:'Risk per Trade', v:'≤ 2.5%'},
+              ].map(r => (
+                <div key={r.k} style={{padding:'8px 12px', background:'var(--bg-2)', borderRadius:6}}>
+                  <div className="dim" style={{fontSize:10, letterSpacing:'0.08em', textTransform:'uppercase', fontWeight:600}}>{r.k}</div>
+                  <div className="num" style={{fontSize:12, marginTop:4, color:'var(--ink-0)'}}>{r.v}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+          {closed.length === 0 && (
+            <div className="panel" style={{padding:'36px 20px', textAlign:'center', color:'var(--ink-3)', fontSize:12.5}}>
+              No historical sessions recorded yet. Stats populate once trades close.
+            </div>
+          )}
         </div>
       );
     }
@@ -808,28 +982,32 @@
     // TICKER TAPE
     // ===========================================
 
-    function TickerTape() {
-      const items = [
-        { name:'NIFTY', spot:20150.50, change:+145.20, pct:+0.73 },
-        { name:'BANKNIFTY', spot:50280.00, change:+380.50, pct:+0.76 },
-        { name:'FINNIFTY', spot:24185.30, change:+156.80, pct:+0.65 },
-        { name:'SENSEX', spot:83512.40, change:+425.30, pct:+0.51 },
-        { name:'INDIA VIX', spot:13.24, change:-0.35, pct:-2.58 },
-      ];
+    function TickerTape({ live = {} }) {
+      // Build live rows from state; show dashes when we don't have data yet
+      const items = INST.map(i => {
+        const d = live[i.name];
+        return d
+          ? { name: i.name, spot: d.ltp, change: d.chg || 0, pct: d.pct || 0, hasData: true }
+          : { name: i.name, spot: null, change: 0, pct: 0, hasData: false };
+      });
       const row = (it, k) => (
         <span key={k} className="tape-item">
           <span className="sym">{it.name}</span>
-          <span className="val">{it.spot.toLocaleString('en-IN', {minimumFractionDigits:2})}</span>
-          <span className={it.change >= 0 ? 'pos' : 'neg'} style={{fontSize:11}}>
-            {it.change >= 0 ? '▲' : '▼'} {it.pct.toFixed(2)}%
+          <span className="val">
+            {it.hasData ? Number(it.spot).toLocaleString('en-IN', {minimumFractionDigits:2}) : '—'}
           </span>
+          {it.hasData && (
+            <span className={it.change >= 0 ? 'pos' : 'neg'} style={{fontSize:11}}>
+              {it.change >= 0 ? '▲' : '▼'} {Math.abs(it.pct).toFixed(2)}%
+            </span>
+          )}
         </span>
       );
       return (
         <div className="tape">
           <div className="label">LIVE · NSE</div>
           <div className="track">
-            {items.map(row)}
+            {items.map((it,i) => row(it, i))}
             {items.map((it,i) => row(it, 'dup-'+i))}
           </div>
         </div>
@@ -1026,16 +1204,17 @@
       const doStart = async () => {
         requestNotify();
         const phase = nsePhase();
-        addLog('INFO', `Start pressed · mode=${mode} · phase=${phase}`);
+        // Flip button immediately so user sees acknowledgment
+        setOn(true);
+        addLog('INFO', `▶ Start pressed · mode=${mode} · phase=${phase}`);
+        showToast(`● Engine ${mode === 'live' ? 'LIVE' : 'REPLAY'} · ${phase}`);
         try {
           if (mode === 'live') {
-            // Check server reachable
             addLog('TICK', 'Pinging server …');
             const ping = await apiFetch('/api/ping');
             if (!ping.ok) throw new Error('server ping failed · HTTP ' + ping.status);
             addLog('INFO', 'Server reachable');
 
-            // Authenticate with broker
             addLog('TICK', 'Authenticating with broker …');
             try {
               const lr = await apiFetch('/api/login', { method:'POST' });
@@ -1047,25 +1226,24 @@
               addLog('TICK', 'Starting live engine …');
               const r = await apiFetch('/api/start', { method:'POST', body: JSON.stringify({ mode:'live' }) });
               if (!r.ok) throw new Error('start HTTP ' + r.status);
-              setOn(true);
               addLog('SIG', 'Engine started · LIVE · scanning ticks every 2s');
-              showToast('● Engine LIVE');
+              showToast('● Engine LIVE · scanning ticks');
             } else {
-              // pre-open / pre-market / closed — run a one-shot scan using historical data
               addLog('INFO', `Market ${phase} · running pre-open analysis instead of live tick loop`);
               await preopenScan();
+              addLog('INFO', `Engine idle · will auto-activate live at 09:15 IST`);
               showToast(phase === 'pre-open' ? 'Pre-open scan complete' : `${phase} · historical scan complete`);
             }
           } else {
             addLog('TICK', `Replay · loading ${replayDays}d @ ${speed}x`);
             await preopenScan();
-            setOn(true);
             addLog('SIG', `Replay running · ${replayDays}d · ${speed}x`);
             showToast('Replay running');
           }
         } catch (e) {
-          addLog('INFO', 'Start failed · ' + (e.message || e));
+          addLog('INFO', '✗ Start failed · ' + (e.message || e));
           showToast('Start failed — check server + auth token');
+          setOn(false); // revert button on hard failure
         }
       };
 
@@ -1212,7 +1390,22 @@
             <button type="button" className="btn ghost" onClick={doReset} title="reset state">⟲</button>
           </div>
 
-          <TickerTape/>
+          <TickerTape live={live}/>
+
+          {/* engine status bar — always visible when engine is on */}
+          {on && (
+            <div style={{padding:'10px var(--pad-x)', background:'var(--accent-faint)', borderBottom:'1px solid var(--accent-dim)',
+              display:'flex', alignItems:'center', gap:14, fontSize:12}}>
+              <span style={{width:8, height:8, borderRadius:99, background:'var(--accent)', boxShadow:'0 0 8px var(--accent)', animation:'heart 1.4s ease-in-out infinite'}}/>
+              <span style={{color:'var(--accent)', fontWeight:600, letterSpacing:'0.08em', textTransform:'uppercase', fontSize:10.5}}>
+                Engine {mode === 'live' ? (nsePhase()==='open' ? 'LIVE · ticks' : `IDLE · ${nsePhase()}`) : `REPLAY · ${replayDays}d @ ${speed}x`}
+              </span>
+              <span style={{flex:1}}/>
+              <span className="muted mono" style={{fontSize:11}}>
+                {Object.keys(candles).length}/{INST.length} inst loaded · {signals.length} signal{signals.length===1?'':'s'} staged · {logLines.length} log lines
+              </span>
+            </div>
+          )}
 
           <div className="hero">
             <div>
@@ -1220,16 +1413,32 @@
               <div className="sub">Six confluence strategies scanning NIFTY, BANKNIFTY and FINNIFTY tick-by-tick. Signals fire only when at least two align with sufficient confidence — and stop loss, targets, and time exit are set before you click.</div>
             </div>
             <div className="rightcol">
-              <div className="metric" style={{minWidth:140, padding:'10px 14px'}}>
-                <div className="label">Today P&L</div>
-                <div className="val pos" style={{fontSize:20}}>+₹8,540</div>
-                <div className="delta pos" style={{fontSize:11}}>+8.5% · 75% win</div>
-              </div>
-              <div className="metric" style={{minWidth:140, padding:'10px 14px'}}>
-                <div className="label">Scanned</div>
-                <div className="val" style={{fontSize:20}}>12,850</div>
-                <div className="delta dim" style={{fontSize:11}}>4 fired · 1 open</div>
-              </div>
+              {(() => {
+                const closed = trades.filter(t => t.status && t.status !== 'OPEN');
+                const pnl = closed.reduce((a, b) => a + (Number(b.pnl) || 0), 0);
+                const wins = closed.filter(t => t.status === 'WIN').length;
+                const winRate = closed.length ? Math.round((wins / closed.length) * 100) : 0;
+                const totalCandles = Object.values(candles).reduce((a,c)=>a+(c && c.length || 0), 0);
+                const fired = signals.length;
+                const open = signals.filter(s => s.status === 'OPEN').length;
+                const pnlCls = pnl >= 0 ? 'pos' : 'neg';
+                return <>
+                  <div className="metric" style={{minWidth:140, padding:'10px 14px'}}>
+                    <div className="label">Today P&amp;L</div>
+                    <div className={`val ${pnlCls}`} style={{fontSize:20}}>
+                      {closed.length === 0 ? '₹0' : (pnl >= 0 ? '+₹' : '−₹') + Math.abs(Math.round(pnl)).toLocaleString('en-IN')}
+                    </div>
+                    <div className={`delta ${pnlCls}`} style={{fontSize:11}}>
+                      {closed.length === 0 ? '— no trades yet' : `${closed.length} trade${closed.length===1?'':'s'} · ${winRate}% win`}
+                    </div>
+                  </div>
+                  <div className="metric" style={{minWidth:140, padding:'10px 14px'}}>
+                    <div className="label">Scanned</div>
+                    <div className="val" style={{fontSize:20}}>{totalCandles.toLocaleString('en-IN')}</div>
+                    <div className="delta dim" style={{fontSize:11}}>{fired} fired · {open} open</div>
+                  </div>
+                </>;
+              })()}
             </div>
           </div>
 
@@ -1243,9 +1452,9 @@
           </div>
 
           <div key={tab} className="reveal-enter" style={{flex:1, overflowY:'auto'}}>
-            {tab === 'signals' && <SignalsTab sel={inst} setSel={setInst}/>}
-            {tab === 'journal' && <JournalTab/>}
-            {tab === 'stats' && <StatsTab/>}
+            {tab === 'signals' && <SignalsTab sel={inst} setSel={setInst} signals={signals} candles={candles} live={live} on={on}/>}
+            {tab === 'journal' && <JournalTab trades={trades}/>}
+            {tab === 'stats' && <StatsTab trades={trades} signals={signals}/>}
             {tab === 'calc' && <CalcTab/>}
             {tab === 'log' && <LogTab logLines={logLines} onClear={()=>setLogLines([])}/>}
           </div>
