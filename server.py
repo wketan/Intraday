@@ -2083,16 +2083,29 @@ def dashboard():
 @app.route("/api/login", methods=["POST"])
 @require_auth
 def api_login():
-    """Explicitly trigger Angel One login"""
+    """Explicitly trigger Angel One login.
+
+    Returns 200 only when the broker session is actually established. A failed
+    login now returns 401 so the client's `response.ok` check reflects reality
+    — previously every call returned 200 and masked broker failures, leaving
+    downstream /api/historical calls to surface 'Not logged in' with no hint
+    that the real problem was the login itself.
+    """
     try:
         ok = engine.client.ensure()
         if ok:
             return jsonify({"status": "ok", "connected": True})
-        else:
-            return jsonify({"status": "failed", "connected": False, "error": "Login returned false. Check server terminal for details."})
+        # Broker login failed — surface as 401 so the client can distinguish
+        # 'auth token wrong' (401 before request is accepted) vs
+        # 'broker session failed' (this 401 after accepting auth).
+        return jsonify({
+            "status": "failed",
+            "connected": False,
+            "error": "Broker login returned false. Check TOTP secret, client_id, password in Railway env vars and server logs.",
+        }), 401
     except Exception as e:
         log.error(f"Login endpoint error: {e}")
-        return jsonify({"status": "failed", "connected": False, "error": str(e)})
+        return jsonify({"status": "failed", "connected": False, "error": str(e)}), 500
 
 @app.route("/api/ltp")
 def api_ltp():

@@ -8,7 +8,7 @@
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate"/>
   <meta http-equiv="Pragma" content="no-cache"/>
   <meta http-equiv="Expires" content="0"/>
-  <meta name="build-stamp" content="2026-04-20T04:00:54Z-8d1615a"/>
+  <meta name="build-stamp" content="2026-04-20T04:16:50Z-pending"/>
   <title>Signal Engine · Intraday</title>
 
   <link rel="manifest" href="manifest.json"/>
@@ -1570,25 +1570,38 @@
             addLog('TICK', 'Authenticating with broker …');
             try {
               const lr = await apiFetch('/api/login', { method:'POST' });
-              if (lr.status === 401) { addLog('INFO', '✗ Auth token rejected (HTTP 401) · check ⚙ Tweaks'); showToast('Auth 401 — check token in Tweaks'); setOn(false); return; }
-              if (lr.ok) {
-                addLog('INFO', 'Broker login OK');
-                // Some backends mint a per-session JWT after broker login. If one is returned, persist it.
-                try {
-                  const body = await lr.clone().json();
-                  const sess = body && (body.token || body.jwt || body.access_token || body.session_token || (body.data && (body.data.jwtToken || body.data.token)));
-                  if (sess && typeof sess === 'string' && sess !== getAuthToken()) {
-                    setAuthToken(sess);
-                    addLog('INFO', '↳ session token refreshed from broker login response');
-                  }
-                  if (body && body.message) addLog('INFO', `↳ ${body.message}`);
-                } catch(_) { /* login response may be empty/non-JSON — that's fine */ }
-              } else {
-                let bodyTxt = '';
-                try { bodyTxt = await lr.text(); } catch(_) {}
-                addLog('INFO', `Broker login skipped · HTTP ${lr.status}${bodyTxt ? ' · ' + bodyTxt.slice(0,200) : ''}`);
+              // Parse body first — backend may return 200 even when broker login actually failed.
+              // We treat the JSON body as authoritative: connected === true ⇒ real success.
+              let loginBody = null;
+              try { loginBody = await lr.clone().json(); } catch(_) { loginBody = null; }
+
+              // Pre-auth 401 (our X-Auth-Token rejected before the broker login was attempted)
+              if (lr.status === 401 && loginBody && loginBody.status !== 'failed') {
+                addLog('INFO', '✗ Auth token rejected (HTTP 401) · check ⚙ Tweaks');
+                showToast('Auth 401 — check token in Tweaks'); setOn(false); return;
               }
-            } catch(e) { addLog('INFO', 'Broker login warning · ' + (e.message || e)); }
+
+              const connected = !!(loginBody && (loginBody.connected === true || loginBody.status === 'ok'));
+              if (!connected) {
+                // Broker login failed — surface the server's actual error
+                const reason = (loginBody && (loginBody.error || loginBody.message)) || `HTTP ${lr.status}`;
+                addLog('INFO', `✗ Broker login FAILED · ${reason}`);
+                showToast('Broker login failed — see log');
+                setOn(false);
+                return;
+              }
+
+              addLog('INFO', 'Broker login OK · broker session active');
+              // Some backends mint a per-session JWT after broker login. If one is returned, persist it.
+              try {
+                const sess = loginBody && (loginBody.token || loginBody.jwt || loginBody.access_token || loginBody.session_token || (loginBody.data && (loginBody.data.jwtToken || loginBody.data.token)));
+                if (sess && typeof sess === 'string' && sess !== getAuthToken()) {
+                  setAuthToken(sess);
+                  addLog('INFO', '↳ session token refreshed from broker login response');
+                }
+                if (loginBody && loginBody.message) addLog('INFO', `↳ ${loginBody.message}`);
+              } catch(_) {}
+            } catch(e) { addLog('INFO', '✗ Broker login error · ' + (e.message || e)); setOn(false); return; }
 
             if (phase === 'open') {
               addLog('TICK', 'Starting live engine …');
