@@ -674,7 +674,7 @@
     // ===========================================
 
     const analyze = (candles, inst, budget = 100000) => {
-      if (!candles || candles.length < 50) return null;
+      if (!candles || candles.length < 20) return null;
 
       const closes = candles.map(c => c.close);
       const highs = candles.map(c => c.high);
@@ -1650,7 +1650,7 @@ function App() {
               (async () => {
                 for (const i of INST) {
                   try {
-                    const hr = await apiJSON(`/api/historical/${i.key || i.name}?days=1`);
+                    const hr = await apiJSON(`/api/historical/${i.key || i.name}?days=3`);
                     const arr = hr.candles || hr.data || hr.bars || (Array.isArray(hr) ? hr : null);
                     if (Array.isArray(arr) && arr.length) {
                       setCandles(prev => ({ ...prev, [i.name]: normCandles(arr) }));
