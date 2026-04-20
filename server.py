@@ -377,6 +377,60 @@ def get_perf():
 # ═══════════════════════════════════════════════════════════════════
 # ANGEL ONE CLIENT
 # ═══════════════════════════════════════════════════════════════════
+def _normalise_totp_secret(raw):
+    """Make the Angel One TOTP secret robust to common copy-paste errors.
+
+    Base32 (RFC 4648) only allows A-Z and 2-7. Angel One's dashboard often
+    presents the secret with dashes or spaces for readability, and users
+    frequently introduce two types of errors when transcribing:
+
+        '0' -> should be 'O'   (zero vs capital-O)
+        '1' -> should be 'I'   (one  vs capital-I)
+        '8', '9' — impossible in base32, always a transcription artefact
+
+    This function:
+      1. Strips whitespace (including newlines), then uppercases.
+      2. Removes formatting chars (space, dash, underscore, dot, colon, /).
+      3. Substitutes 0->O and 1->I (the two widely-accepted confusables).
+      4. Drops any remaining non-[A-Z2-7] characters.
+      5. Pads to a multiple of 8 with '=' so pyotp's b32decode is happy.
+
+    Returns a dict {value: str, changes: [str,...]} where `changes` is a
+    human-readable trail of what was altered — logged (not the secret) so
+    we can diagnose from the Engine Log without leaking the secret.
+    """
+    import re as _re
+    changes = []
+    s = (raw or "")
+    original_len = len(s)
+    # Strip all whitespace incl. newlines
+    s2 = _re.sub(r"\s+", "", s)
+    if s2 != s: changes.append(f"stripped {len(s)-len(s2)} whitespace chars")
+    s = s2.upper()
+    # Drop common formatting characters
+    s2 = s
+    for ch in ("-", "_", ".", ":", "/", ","):
+        s2 = s2.replace(ch, "")
+    if s2 != s: changes.append(f"removed {len(s)-len(s2)} formatting chars (- _ . : / ,)")
+    s = s2
+    # Visual-confusion substitutions
+    n_zero = s.count("0"); n_one = s.count("1")
+    if n_zero: s = s.replace("0", "O"); changes.append(f"substituted {n_zero} '0'→'O'")
+    if n_one:  s = s.replace("1", "I"); changes.append(f"substituted {n_one} '1'→'I'")
+    # Drop any char still outside base32 alphabet (8, 9, lowercase survivors, etc.)
+    s2 = _re.sub(r"[^A-Z2-7]", "", s)
+    dropped = len(s) - len(s2)
+    if dropped: changes.append(f"dropped {dropped} non-base32 chars")
+    s = s2
+    # Pad to multiple of 8 with '='
+    pad = (8 - (len(s) % 8)) % 8
+    if pad: changes.append(f"added {pad} '=' padding char(s)")
+    s = s + ("=" * pad)
+    if not changes and len(s) == original_len:
+        changes = []  # nothing done
+    return {"value": s, "changes": changes}
+
+
 class AngelClient:
     def __init__(self):
         self.api = None; self.connected = False; self.last_login = None
@@ -452,19 +506,26 @@ class AngelClient:
                 log.error(f"❌ {msg}")
                 self.connected = False; self.last_login_error = msg; return False
 
-            # Mirror the original lenient normalisation — upper, strip, drop spaces /
-            # hyphens / underscores (Angel One sometimes shows the secret with dashes
-            # for readability, and users paste them in).
-            raw = CONFIG["totp_secret"]
-            secret = raw.upper().strip().replace(" ", "").replace("-", "").replace("_", "")
+            # Robustly sanitise the TOTP secret. The Angel One dashboard displays
+            # secrets in a way that users frequently copy with formatting characters
+            # (dashes, spaces, dots, colons, newlines) OR with the common "0↔O"
+            # and "1↔I" visual-confusion substitutions. We fix all of the above
+            # before handing to pyotp, and log what was changed so the user can
+            # see the normalisation applied — without leaking the secret itself.
+            raw = CONFIG["totp_secret"] or ""
+            normalised = _normalise_totp_secret(raw)
+            secret = normalised["value"]
+            if normalised["changes"]:
+                log.info("🔑 TOTP secret normalised: " + "; ".join(normalised["changes"]))
 
-            log.info(f"🔐 Attempting login... client_id={CONFIG['client_id']} (attempt #{self.login_attempts})")
+            log.info(f"🔐 Attempting login... client_id={CONFIG['client_id']} (attempt #{self.login_attempts}) · secret len={len(secret)}")
             self.api = SmartConnect(api_key=CONFIG["api_key"])
             try:
                 totp = pyotp.TOTP(secret).now()
             except Exception as te:
-                # pyotp's actual message is already human-readable — surface it verbatim.
-                msg = f"TOTP generation failed: {te}"
+                # Include sanitisation trail so we can diagnose from the client log.
+                detail = "; ".join(normalised["changes"]) if normalised["changes"] else "no changes"
+                msg = f"TOTP generation failed ({te}) · len={len(secret)} · normalisation: {detail}"
                 log.error(f"❌ {msg}")
                 self.connected = False; self.last_login_error = msg; return False
 
