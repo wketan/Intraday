@@ -380,6 +380,11 @@ def get_perf():
 class AngelClient:
     def __init__(self):
         self.api = None; self.connected = False; self.last_login = None
+        # Diagnostics for failed logins — surfaced via /api/login and /api/diag
+        # so the dashboard can show WHY the broker session isn't alive.
+        self.last_login_error = None
+        self.last_login_attempt = None
+        self.login_attempts = 0
         # Greeks cache: (name, expiry_DDMMMYYYY) -> {"ts": epoch, "data": [greeks...]}
         self._greeks_cache = {}
         self._greeks_ttl = 60  # seconds
@@ -436,31 +441,86 @@ class AngelClient:
         return None
     
     def login(self):
+        self.last_login_attempt = datetime.now(IST)
+        self.login_attempts += 1
         try:
-            log.info(f"🔐 Attempting login... client_id={CONFIG['client_id']}")
-            self.api = SmartConnect(api_key=CONFIG["api_key"])
-            # NOTE: a valid base32 TOTP secret will NEVER contain 0 or 1. If the stored
-            # secret has those characters, it is malformed — let pyotp raise so the user fixes it.
+            # Preflight env-var sanity — if any of these are missing, log a clear
+            # message instead of letting SmartAPI throw an opaque error.
+            missing = [k for k in ("api_key","client_id","password","totp_secret") if not CONFIG.get(k)]
+            if missing:
+                msg = f"Missing env vars: {', '.join(missing)} — set them in Railway and redeploy"
+                log.error(f"❌ {msg}")
+                self.connected = False; self.last_login_error = msg; return False
+
             secret = CONFIG["totp_secret"].upper().strip().replace(" ", "")
-            totp = pyotp.TOTP(secret).now()
+            # Base32 sanity — pyotp will raise an opaque 'Invalid base32' otherwise.
+            import re as _re
+            if not _re.fullmatch(r"[A-Z2-7]+=*", secret):
+                msg = "ANGEL_TOTP_SECRET is not a valid base32 string (only A-Z and 2-7 allowed)"
+                log.error(f"❌ {msg}")
+                self.connected = False; self.last_login_error = msg; return False
+
+            log.info(f"🔐 Attempting login... client_id={CONFIG['client_id']} (attempt #{self.login_attempts})")
+            self.api = SmartConnect(api_key=CONFIG["api_key"])
+            try:
+                totp = pyotp.TOTP(secret).now()
+            except Exception as te:
+                msg = f"TOTP generation failed: {te}"
+                log.error(f"❌ {msg}")
+                self.connected = False; self.last_login_error = msg; return False
+
             import concurrent.futures as _cf
             with _cf.ThreadPoolExecutor(max_workers=1) as _ex:
                 try:
                     data = _ex.submit(self.api.generateSession, clientCode=CONFIG["client_id"], password=CONFIG["password"], totp=totp).result(timeout=12)
                 except _cf.TimeoutError:
-                    log.error("❌ Login timeout (12s) — API key invalid or Angel One unreachable")
-                    self.connected = False; return False
-                if data and data.get("status"):
-                    self.connected = True; self.last_login = datetime.now(IST)
-                    log.info("✅ Angel One login successful"); return True
-                log.error(f"❌ Login failed: {data}"); return False
+                    msg = "Login timeout (12s) — API key invalid or Angel One unreachable"
+                    log.error(f"❌ {msg}")
+                    self.connected = False; self.last_login_error = msg; return False
+            # SmartAPI success markers can be status: True / "success"; data may carry tokens.
+            st = data.get("status") if isinstance(data, dict) else None
+            ok = bool(st) or (isinstance(st, str) and st.lower() == "success")
+            if ok:
+                self.connected = True; self.last_login = datetime.now(IST)
+                self.last_login_error = None
+                log.info(f"✅ Angel One login successful (attempt #{self.login_attempts})")
+                return True
+            # Failure path — surface Angel One's exact error. Common: invalid TOTP,
+            # rate limit, account blocked, client code mismatch.
+            err_msg = (data.get("message") or data.get("errorcode") or str(data)) if isinstance(data, dict) else str(data)
+            msg = f"Angel One rejected login: {err_msg}"
+            log.error(f"❌ {msg}")
+            self.connected = False; self.last_login_error = msg
+            return False
         except Exception as e:
-            log.error(f"❌ Login error: {e}"); return False
-    
+            import traceback as _tb
+            tb = _tb.format_exc(limit=3)
+            msg = f"Login exception: {e}"
+            log.error(f"❌ {msg}\n{tb}")
+            self.connected = False; self.last_login_error = msg
+            return False
+
     def ensure(self):
         if not self.connected: return self.login()
         if self.last_login and (datetime.now(IST)-self.last_login).seconds > 18000: return self.login()
         return True
+
+    def diag(self):
+        """Snapshot for /api/diag — safe to expose (no secrets)."""
+        return {
+            "connected": bool(self.connected),
+            "last_login": self.last_login.strftime("%Y-%m-%d %H:%M:%S") if self.last_login else None,
+            "last_login_attempt": self.last_login_attempt.strftime("%Y-%m-%d %H:%M:%S") if self.last_login_attempt else None,
+            "last_login_error": self.last_login_error,
+            "login_attempts": self.login_attempts,
+            "env_present": {
+                "api_key":     bool(CONFIG.get("api_key")),
+                "client_id":   bool(CONFIG.get("client_id")),
+                "password":    bool(CONFIG.get("password")),
+                "totp_secret": bool(CONFIG.get("totp_secret")),
+            },
+            "client_id_hint": (CONFIG.get("client_id") or "")[:4] + "***" if CONFIG.get("client_id") else None,
+        }
     
     def candles(self, token, exchange, interval="FIVE_MINUTE", days=3):
         try:
@@ -2083,29 +2143,41 @@ def dashboard():
 @app.route("/api/login", methods=["POST"])
 @require_auth
 def api_login():
-    """Explicitly trigger Angel One login.
+    """Explicitly trigger Angel One login, forcing a fresh call.
 
-    Returns 200 only when the broker session is actually established. A failed
-    login now returns 401 so the client's `response.ok` check reflects reality
-    — previously every call returned 200 and masked broker failures, leaving
-    downstream /api/historical calls to surface 'Not logged in' with no hint
-    that the real problem was the login itself.
+    Query ?force=1 (default) drops the cached connected state so we always
+    attempt a new generateSession — useful when a previous TOTP was consumed,
+    when the Angel One side invalidated the session, or when the user wants
+    a clean retry from the dashboard.
     """
+    force = flask_request.args.get("force", "1") != "0"
     try:
-        ok = engine.client.ensure()
+        if force:
+            # Drop cached connected flag — forces a fresh generateSession.
+            engine.client.connected = False
+            engine.client.api = None
+        ok = engine.client.login() if force else engine.client.ensure()
         if ok:
-            return jsonify({"status": "ok", "connected": True})
-        # Broker login failed — surface as 401 so the client can distinguish
-        # 'auth token wrong' (401 before request is accepted) vs
-        # 'broker session failed' (this 401 after accepting auth).
+            return jsonify({"status": "ok", "connected": True, "attempts": engine.client.login_attempts})
+        # Real broker-login failure — surface the captured reason.
+        reason = engine.client.last_login_error or "Broker login returned false. Check Railway server logs."
         return jsonify({
             "status": "failed",
             "connected": False,
-            "error": "Broker login returned false. Check TOTP secret, client_id, password in Railway env vars and server logs.",
+            "error": reason,
+            "attempts": engine.client.login_attempts,
         }), 401
     except Exception as e:
-        log.error(f"Login endpoint error: {e}")
+        import traceback as _tb
+        log.error(f"Login endpoint error: {e}\n{_tb.format_exc(limit=3)}")
         return jsonify({"status": "failed", "connected": False, "error": str(e)}), 500
+
+@app.route("/api/diag")
+def api_diag():
+    """Dashboard-visible diagnostics — connected state, last login error,
+    which env vars are present (no secrets leaked). Lets the client show
+    a human-readable reason when broker auth is failing."""
+    return jsonify(engine.client.diag())
 
 @app.route("/api/ltp")
 def api_ltp():
@@ -2433,13 +2505,31 @@ def test_chain(name):
 
 
 def _startup():
-    """Auto-login on server start — works with both Gunicorn (Railway) and direct run."""
+    """Auto-login on server start — works with both Gunicorn (Railway) and direct run.
+
+    On failure, retries up to 3 times with staggered 35s backoff. 35s is chosen
+    so the next attempt lands in a fresh TOTP window (TOTPs rotate every 30s),
+    which helps when Angel One rejected the first login because the previous
+    TOTP was already consumed during a rapid container restart.
+    """
     import time as _t; _t.sleep(5)
     log.info("▶ Auto-startup: loading instrument master...")
-    _master.load()
-    log.info("▶ Auto-startup: logging into Angel One...")
-    ok = engine.client.login()
-    log.info("▶ Auto-startup: login " + ("✅ OK" if ok else "❌ FAILED — click Start in dashboard to retry"))
+    try:
+        _master.load()
+    except Exception as e:
+        log.error(f"▶ Auto-startup: master load failed: {e}")
+
+    for attempt in range(1, 4):
+        log.info(f"▶ Auto-startup: logging into Angel One (attempt {attempt}/3)...")
+        ok = engine.client.login()
+        if ok:
+            log.info("▶ Auto-startup: login ✅ OK")
+            return
+        err = engine.client.last_login_error or "unknown"
+        log.warning(f"▶ Auto-startup: login attempt {attempt}/3 failed — {err}")
+        if attempt < 3:
+            _t.sleep(35)  # next TOTP window
+    log.error("▶ Auto-startup: all 3 login attempts failed. Dashboard /api/diag shows the reason.")
 
 threading.Thread(target=_startup, daemon=True, name="Startup").start()
 
