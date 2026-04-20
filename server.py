@@ -452,19 +452,18 @@ class AngelClient:
                 log.error(f"❌ {msg}")
                 self.connected = False; self.last_login_error = msg; return False
 
-            secret = CONFIG["totp_secret"].upper().strip().replace(" ", "")
-            # Base32 sanity — pyotp will raise an opaque 'Invalid base32' otherwise.
-            import re as _re
-            if not _re.fullmatch(r"[A-Z2-7]+=*", secret):
-                msg = "ANGEL_TOTP_SECRET is not a valid base32 string (only A-Z and 2-7 allowed)"
-                log.error(f"❌ {msg}")
-                self.connected = False; self.last_login_error = msg; return False
+            # Mirror the original lenient normalisation — upper, strip, drop spaces /
+            # hyphens / underscores (Angel One sometimes shows the secret with dashes
+            # for readability, and users paste them in).
+            raw = CONFIG["totp_secret"]
+            secret = raw.upper().strip().replace(" ", "").replace("-", "").replace("_", "")
 
             log.info(f"🔐 Attempting login... client_id={CONFIG['client_id']} (attempt #{self.login_attempts})")
             self.api = SmartConnect(api_key=CONFIG["api_key"])
             try:
                 totp = pyotp.TOTP(secret).now()
             except Exception as te:
+                # pyotp's actual message is already human-readable — surface it verbatim.
                 msg = f"TOTP generation failed: {te}"
                 log.error(f"❌ {msg}")
                 self.connected = False; self.last_login_error = msg; return False
