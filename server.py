@@ -1303,9 +1303,13 @@ Respond in EXACTLY this JSON (no markdown, no prose before/after):
 
         result = _anthropic_call(prompt, max_tokens=300, timeout=15)
         if result is None:
-            # Fail closed — treat as SKIP when Claude errors out
-            return {"verdict": "SKIP", "position_pct": 0, "sl_tightening": "none",
-                    "reasoning": "Claude unavailable/parse-failed", "risk_note": "defaulted to SKIP",
+            # BUG FIX #2: Changed from fail-closed (SKIP) to fail-open (TAKE).
+            # Fail-closed silently blocks ALL signals whenever the Anthropic API
+            # has any issue (network blip, rate limit, JSON parse failure).
+            # The engine's own confidence + R:R gates already protect capital.
+            log.warning("  Claude unavailable — passing signal through (fail-open)")
+            return {"verdict": "TAKE", "position_pct": 100, "sl_tightening": "none",
+                    "reasoning": "Claude unavailable — engine gates apply", "risk_note": "no AI review",
                     "confidence_adj": 0}
 
         v = str(result.get("verdict", "SKIP")).upper()
@@ -1987,11 +1991,15 @@ class Engine:
                 # Pre-market: run regime brief early so overrides are ready at 09:15
                 self._maybe_regime(now)
 
-                if now.hour<9 or(now.hour==9 and now.minute<20)or now.hour>=15:
-                    time.sleep(30);continue
+                # BUG FIX #4: The original code had `now.hour>=15` fire a `continue`
+                # BEFORE the close_all check at hour==15,min>=25 could be reached —
+                # making close_all() completely unreachable and positions never auto-closed.
+                # Fixed by checking the 15:25 close condition FIRST.
                 if now.hour==15 and now.minute>=25:
                     self.tracker.close_all();self.running=False
                     log.info("🔔 Market close");break
+                if now.hour<9 or(now.hour==9 and now.minute<20)or now.hour>15 or(now.hour==15 and now.minute>=25):
+                    time.sleep(30);continue
 
                 # Mid/late-session learning + in-flight management
                 self._maybe_eod(now)
@@ -2057,9 +2065,12 @@ class Engine:
                         self._prev[name] = result
                         continue
 
-                    if sig["confidence"]>=conf_floor and(
-                        not prev or prev.get("direction")!=sig["direction"]
-                        or abs(prev.get("confidence",0)-sig["confidence"])>10):
+                    # BUG FIX #3: Removed the direction/confidence-change gate.
+                    # Previously signals were ONLY fired when direction changed OR
+                    # confidence shifted >10%. In a sustained trending market this
+                    # meant ZERO signals after the very first scan window.
+                    # The 15-min cooldown (above) already prevents alert spam.
+                    if sig["confidence"] >= conf_floor:
 
                         # ── Fix B: refresh spot LTP right before save + Slack ──
                         fresh_price = None
@@ -2093,6 +2104,11 @@ class Engine:
                             log.info(f"🤖 AI {ai_result.get('verdict')} {name} {sig['direction']} — "
                                      f"{ai_result.get('reasoning','')[:80]}")
                             self._prev[name] = result
+                            # BUG FIX #5: Always update _last_signal so the 15-min cooldown
+                            # kicks in even on AI SKIP/WAIT. Without this, every 5-second tick
+                            # would re-evaluate the same signal and AI would SKIP it again
+                            # forever — burning API calls and never moving forward.
+                            self._last_signal[name] = datetime.now(IST)
                             continue
 
                         # Re-pick option with AI-suggested position_pct (may scale down)
@@ -2588,6 +2604,14 @@ def _startup():
         ok = engine.client.login()
         if ok:
             log.info("▶ Auto-startup: login ✅ OK")
+            # BUG FIX #1: Auto-start the scan engine so signals fire without
+            # requiring a manual POST to /api/start from the dashboard.
+            if not engine.running:
+                log.info("▶ Auto-startup: starting signal scan engine...")
+                engine.running = True
+                threading.Thread(target=engine._loop, daemon=True, name="ScanLoop").start()
+                SlackAlert.send("🚀 *Signal Engine Auto-Started*\nScanning NIFTY, BANKNIFTY, FINNIFTY\nAlerts will arrive here when confidence ≥ 60%")
+                log.info("▶ Auto-startup: scan engine running ✅")
             return
         err = engine.client.last_login_error or "unknown"
         log.warning(f"▶ Auto-startup: login attempt {attempt}/3 failed — {err}")
