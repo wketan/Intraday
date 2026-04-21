@@ -1,25 +1,10 @@
 [
   {
-    "date": "2026-04-21",
-    "time": "10:00",
-    "name": "RBI Monetary Policy (illustrative)",
-    "impact": "HIGH",
-    "blackout": { "start": "09:45", "end": "10:45" },
-    "notes": "Skip new entries 15 min before through 45 min after"
-  },
-  {
     "date": "2026-05-07",
     "time": "23:30",
     "name": "US FOMC Meeting Decision",
     "impact": "HIGH",
     "blackout": { "start": "14:30", "end": "15:20" },
     "notes": "Late-session caution ahead of US Fed"
-  },
-  {
-    "date": "2026-04-14",
-    "time": "17:30",
-    "name": "India CPI Release",
-    "impact": "MED",
-    "blackout": { "start": "15:00", "end": "15:20" }
   }
 ]

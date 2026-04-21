@@ -1181,7 +1181,7 @@
               {[
                 {k:'Min Confidence', v:'40%'},
                 {k:'Min Strategies', v:'2 of 5'},
-                {k:'Trade Windows', v:'09:20-11:30 · 14:00-15:15'},
+                {k:'Trade Window', v:'09:20 – 15:20 (full session)'},
                 {k:'Max / Day', v:'3 per index'},
                 {k:'Risk per Trade', v:'≤ 2.5%'},
               ].map(r => (
@@ -1795,8 +1795,13 @@ function App() {
                 if (v && typeof v === 'object') {
                   const ltp = Number(v.ltp  ?? v.last_price ?? 0);
                   const chg = Number(v.chg  ?? v.change     ?? v.net_change ?? 0);
-                  const pct = Number(v.pct  ?? v.percent_change ??
-                    (ltp && chg ? (chg / Math.abs(ltp - chg || 1)) * 100 : 0));
+                  // pct: use server value if present, else derive from prev_close or ltp-chg
+                  const prevClose = Number(v.prev_close ?? v.prevClose ?? 0);
+                  const pct = Number(
+                    v.pct ?? v.percent_change ??
+                    (prevClose > 0 ? (chg / prevClose) * 100 :
+                     (ltp && chg   ? (chg / Math.abs(ltp - chg || 1)) * 100 : 0))
+                  );
                   normalised[sym] = { ...v, ltp, chg, pct };
                 } else {
                   // plain number — keep it, chg/pct will be NaN (unchanged from before)
@@ -1982,8 +1987,8 @@ function App() {
             </div>
           )}
 
-          <footer style={{padding:'24px var(--pad-x) 100px', textAlign:'center', color:'var(--ink-3)', fontSize:11, fontFamily:'JetBrains Mono, monospace', letterSpacing:'0.08em', flexShrink:0}}>
-            SIGNAL ENGINE v2.5 · build <span style={{color:'var(--ink-2)'}}>{(document.querySelector('meta[name=\"build-stamp\"]')||{}).content || 'dev'}</span> · PAPER-TRADING DEMO · NOT INVESTMENT ADVICE
+          <footer style={{padding:'6px var(--pad-x)', textAlign:'center', color:'var(--ink-3)', fontSize:10, fontFamily:'JetBrains Mono, monospace', letterSpacing:'0.06em', flexShrink:0, opacity:0.5, background:'transparent', borderTop:'1px solid var(--border)'}}>
+            SIGNAL ENGINE v2.5 · NOT INVESTMENT ADVICE
           </footer>
         </div>
       );

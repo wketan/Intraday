@@ -2270,9 +2270,21 @@ def api_ltp():
         try:
             d = engine.client.ltp(inst["exchange"], inst["symbol"], inst["token"])
             if d and d.get("ltp"):
-                prices[name] = {"ltp": d["ltp"], "symbol": inst["symbol"], "token": inst["token"]}
+                ltp = float(d["ltp"])
+                # Angel One ltpData returns `close` = previous day's close and `open` = today's open.
+                # Use prev-close for change%; fall back to day-open if prev-close missing.
+                prev_close = float(d.get("close") or d.get("prevClose") or d.get("prev_close") or 0)
+                day_open   = float(d.get("open") or 0)
+                ref = prev_close if prev_close > 0 else day_open
+                chg = round(ltp - ref, 2) if ref > 0 else 0.0
+                pct = round((chg / ref) * 100, 2) if ref > 0 else 0.0
+                prices[name] = {
+                    "ltp": ltp, "symbol": inst["symbol"], "token": inst["token"],
+                    "chg": chg, "pct": pct,
+                    "open": day_open, "prev_close": prev_close,
+                }
         except: pass
-    
+
     return jsonify({"prices": prices, "time": datetime.now(IST).strftime("%H:%M:%S")})
 
 @app.route("/api/historical/<instrument>")
