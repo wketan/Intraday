@@ -680,6 +680,19 @@ class AngelClient:
                         mid = round((best_bid + best_ask) / 2.0, 2)
                         if mid <= 0: continue
 
+                        # Extract OI, volume, and other rich market data from FULL response
+                        oi    = int(float(item.get("openInterest", 0) or 0))
+                        vol   = int(float(item.get("totalTradedVolume", 0)
+                                          or item.get("tradeVolume", 0)
+                                          or item.get("volume", 0) or 0))
+                        gamma  = float(item.get("gamma", 0) or 0)
+                        vega   = float(item.get("vega", 0) or 0)
+                        # Some SmartAPI builds embed Greeks in the FULL response too
+                        delta_raw = float(item.get("delta", 0) or 0)
+                        iv_raw    = float(item.get("impliedVolatility", 0)
+                                         or item.get("iv", 0) or 0)
+                        theta_raw = float(item.get("theta", 0) or 0)
+
                         opts.append({
                             "strike": tk["strike"], "type": tk["type"],
                             "symbol": tk["symbol"],
@@ -688,6 +701,11 @@ class AngelClient:
                             "bid": best_bid, "ask": best_ask,
                             "spread": round(spread, 2),
                             "token": tok, "expiry": tk.get("expiry", ""),
+                            # Rich market data for AI + scoring
+                            "oi": oi, "volume": vol,
+                            "gamma": round(gamma, 5), "vega": round(vega, 3),
+                            "delta_raw": round(delta_raw, 3),
+                            "iv_raw": round(iv_raw, 2), "theta_raw": round(theta_raw, 4),
                         })
                     if rejected_wide or rejected_zero:
                         log.info(f"  Liquidity gate: rejected {rejected_wide} wide-spread, {rejected_zero} zero-side strikes")
@@ -1253,14 +1271,26 @@ class SignalValidation:
 
         ind = signal.get("indicators", {})
         opt_info = ""
+        chain_info = ""
         if option:
-            opt_info = (f"Option: {option.get('symbol','')} | LTP ₹{option.get('ltp',0)} "
-                        f"(bid {option.get('bid')} / ask {option.get('ask')}, spread {option.get('spread')}) | "
-                        f"δ {option.get('delta')} ({option.get('delta_source','?')}) | "
-                        f"IV {option.get('iv')} | θ {option.get('theta')}\n"
-                        f"Entry ₹{option.get('entry')} SL ₹{option.get('sl')} T1 ₹{option.get('target1')} "
-                        f"T2 ₹{option.get('target2')} | {option.get('lots')}×{option.get('lot_size')} = "
-                        f"₹{option.get('capital')} capital")
+            opt_info = (f"SELECTED OPTION: {option.get('symbol','')} | Strike {option.get('strike')} {option.get('type')}\n"
+                        f"  LTP ₹{option.get('ltp',0)} (bid {option.get('bid')} / ask {option.get('ask')}, spread {option.get('spread')})\n"
+                        f"  Greeks: δ={option.get('delta')} ({option.get('delta_source','?')}) "
+                        f"γ={option.get('gamma')} θ={option.get('theta')} vega={option.get('vega')} IV={option.get('iv')}%\n"
+                        f"  OI={option.get('oi',0):,}  Volume={option.get('volume',0):,}\n"
+                        f"  Entry ₹{option.get('entry')} SL ₹{option.get('sl')} T1 ₹{option.get('target1')} T2 ₹{option.get('target2')}\n"
+                        f"  {option.get('lots')}×{option.get('lot_size')} lots = ₹{option.get('capital')} capital | "
+                        f"MaxLoss ₹{option.get('max_loss')} | T1 profit ₹{option.get('t1_profit')} | T2 profit ₹{option.get('t2_profit')}")
+            # Chain snapshot: top 5 candidates for AI to compare
+            snap = option.get("chain_snapshot", [])
+            if snap:
+                chain_info = "\nTOP 5 CHAIN CANDIDATES (ranked by engine score):\n"
+                for i, c in enumerate(snap):
+                    chain_info += (f"  #{i+1} Strike {c.get('strike')} {c.get('type')}: "
+                                   f"₹{c.get('ltp')} δ={c.get('delta')} γ={c.get('gamma')} "
+                                   f"θ={c.get('theta')} IV={c.get('iv')}% "
+                                   f"OI={c.get('oi',0):,} Vol={c.get('volume',0):,} "
+                                   f"RR={c.get('rr')} score={c.get('score')}\n")
 
         regime_txt = ""
         if regime:
@@ -1270,11 +1300,14 @@ class SignalValidation:
 
         prompt = f"""You are a ruthlessly disciplined Indian intraday options trader on a ₹20,000 account.
 Protect capital first, profit second. Only TAKE with clear edge.
+You have full option chain data with Greeks, OI, and volume — use ALL of it.
 
 SIGNAL
 Instrument: {instrument}   Direction: {signal['direction']}   Engine confidence: {signal['confidence']}%
-Entry {signal['entry']}  SL {signal['sl']}  T1 {signal['target1']}  T2 {signal['target2']}  R:R {signal.get('risk_reward',0)}
+Index entry {signal['entry']}  SL {signal['sl']}  T1 {signal['target1']}  T2 {signal['target2']}  R:R {signal.get('risk_reward',0)}
+
 {opt_info}
+{chain_info}
 
 INDICATORS
 RSI {ind.get('rsi','?')}  MACD hist {ind.get('macd','?')}  SuperTrend {ind.get('supertrend','?')}
@@ -1283,23 +1316,33 @@ ATR {ind.get('atr','?')}  Stoch {ind.get('stoch','?')}  ADX {ind.get('adx','?')}
 Reasons: {', '.join(signal.get('reasons',[])[:6])}
 Time: {datetime.now(IST).strftime('%H:%M')} IST{regime_txt}
 
-RULES
+OPTION CHAIN ANALYSIS RULES
+- SKIP if OI < 50,000 (illiquid — huge slippage risk)
+- SKIP if volume < 500 (nobody trading this strike right now)
+- PREFER high OI (>500K) and high volume — signals real market participation
+- PREFER delta 0.35-0.55 for directional trades
+- SKIP if IV > 50% (inflated premiums — IV crush will eat your profit)
+- SKIP if theta decay > ₹5/lot/day relative to target timeline
+- If another chain candidate has clearly better OI/volume/Greeks, note in risk_note
+- HIGH gamma near ATM is good for quick moves but dangerous if wrong
+
+SIGNAL RULES
 - SKIP if RSI>75 for LONG or RSI<25 for SHORT
-- SKIP after 14:30 unless move is already in-progress and premium still has runway
+- SKIP after 14:30 unless move already in-progress and premium has runway
 - SKIP if ATR tiny (no movement to be had)
 - SKIP if SuperTrend disagrees with direction
-- SKIP if option spread looks too wide (>~4-5% of LTP)
-- Scale POSITION_PCT down when the setup is decent but not clean (e.g. fighting VWAP, near resistance)
-- Use SL_TIGHTENING = "trailing_atr" on trending regimes, "breakeven_at_half_t1" on ranging/volatile
-- BANKNIFTY monthly contracts slip harder — be extra conservative there
+- SKIP if spread > 5% of LTP
+- Scale POSITION_PCT down when setup not clean (fighting VWAP, near resistance)
+- Use SL_TIGHTENING = "trailing_atr" on trending regimes, "breakeven_at_half_t1" on ranging
+- BANKNIFTY monthly contracts slip harder — be extra conservative
 
-Respond in EXACTLY this JSON (no markdown, no prose before/after):
+Respond in EXACTLY this JSON (no markdown, no prose):
 {{"verdict": "TAKE" | "SKIP" | "WAIT",
   "position_pct": 25 | 50 | 75 | 100,
   "sl_tightening": "none" | "breakeven_at_half_t1" | "trailing_atr",
   "confidence_adj": integer -20..10,
   "reasoning": "one short line",
-  "risk_note": "one specific risk for this trade"}}"""
+  "risk_note": "one specific risk including OI/volume/Greeks concern if any"}}"""
 
         result = _anthropic_call(prompt, max_tokens=300, timeout=15)
         if result is None:
@@ -1696,6 +1739,23 @@ class OptPicker:
                 if spread_pct <= 0.02: score += 3
                 elif spread_pct <= 0.04: score += 1
 
+            # 6. OI quality (5 pts) — high OI = liquid and active
+            oi = int(o.get("oi", 0) or 0)
+            if oi >= 1_000_000: score += 5
+            elif oi >= 500_000:  score += 3
+            elif oi >= 100_000:  score += 1
+
+            # 7. Volume activity (3 pts) — relative volume vs peers signals momentum
+            vol = int(o.get("volume", 0) or 0)
+            if vol >= 50_000: score += 3
+            elif vol >= 10_000: score += 2
+            elif vol >= 1_000:  score += 1
+
+            # 8. Gamma quality (2 pts) — higher gamma means faster option move near ATM
+            gm = float(o.get("gamma", 0) or 0)
+            if gm >= 0.0005: score += 2
+            elif gm >= 0.0002: score += 1
+
             lots_possible = max(1, int(max_capital / cost_1lot)) if affordable else 0
             scored.append({**o,
                 "delta": round(delta, 3), "delta_source": delta_source,
@@ -1728,6 +1788,18 @@ class OptPicker:
         qty = lots * lot
         capital = round(e * qty)
 
+        # Build chain snapshot for AI (top 5 candidates with rich data)
+        chain_snapshot = []
+        for c in scored[:5]:
+            chain_snapshot.append({
+                "strike": c["strike"], "type": c["type"],
+                "ltp": c["ltp"], "bid": c.get("bid"), "ask": c.get("ask"),
+                "delta": c.get("delta"), "gamma": c.get("gamma"), "theta": c.get("theta"),
+                "vega": c.get("vega"), "iv": c.get("iv"), "oi": c.get("oi"), "volume": c.get("volume"),
+                "score": c["score"], "rr": c.get("rr"), "otm_gaps": c.get("otm_gaps"),
+                "affordable": c.get("affordable"), "lots_possible": c.get("lots_possible"),
+            })
+
         return {
             "action": f"BUY {ot}", "symbol": b["symbol"], "strike": b["strike"], "type": ot,
             "expiry": b.get("expiry", ""), "token": b.get("token", ""),
@@ -1736,12 +1808,15 @@ class OptPicker:
             "sl": sl, "target1": t1, "target2": t2,
             "delta": d, "delta_source": b.get("delta_source", "fallback"),
             "iv": b.get("iv"), "theta": b.get("theta"),
+            "gamma": b.get("gamma"), "vega": b.get("vega"),
+            "oi": b.get("oi"), "volume": b.get("volume"),
             "lot_size": lot, "lots": lots, "qty": qty,
             "capital": capital, "max_loss": round((e - sl) * qty),
             "t1_profit": round((t1 - e) * qty), "t2_profit": round((t2 - e) * qty),
             "rr": b["rr"], "otm_gaps": b["otm_gaps"], "score": b["score"],
             "alternatives": len(scored),
             "position_pct": int(pct * 100),
+            "chain_snapshot": chain_snapshot,
             "source": "LIVE"
         }
 

@@ -8,7 +8,7 @@
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate"/>
   <meta http-equiv="Pragma" content="no-cache"/>
   <meta http-equiv="Expires" content="0"/>
-  <meta name="build-stamp" content="2026-04-22T08:00:00Z-watch-live-split"/>
+  <meta name="build-stamp" content="2026-04-22T10:30:00Z-compact-ui-option-chain-ai"/>
   <title>Signal Engine · Intraday</title>
 
   <link rel="manifest" href="manifest.json"/>
@@ -466,15 +466,14 @@
       padding:11px 13px; border-radius: var(--r-sm); font-family: var(--mono); font-size:14px; outline:none; }
     .calc-input input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-dim); }
 
-    /* ── hero ────────────────────────────── */
-    .hero { padding: 18px var(--pad-x) 4px; display:flex; align-items:flex-end;
-      justify-content:space-between; gap:24px; flex-shrink: 0; flex-wrap: wrap; }
-    .hero .title { font-family: var(--serif); font-size: 34px; line-height:1;
-      letter-spacing:-0.02em; color: var(--ink-0); }
-    .hero .title em { font-style: italic; color: var(--accent); }
-    .hero .sub { font-size: 12.5px; color: var(--ink-2); margin-top: 8px;
-      max-width: 560px; line-height: 1.55; }
-    .hero .rightcol { display:flex; align-items:center; gap:10px; flex-wrap: wrap; }
+    /* ── compact stats bar (replaces hero) ── */
+    .statsbar { padding: 6px var(--pad-x); display:flex; align-items:center; gap:16px;
+      flex-shrink: 0; flex-wrap: wrap; border-bottom: 1px solid var(--line-0); background: var(--bg-0); }
+    .statsbar .stat { display:flex; align-items:baseline; gap:5px; }
+    .statsbar .stat-label { font-size:9.5px; color: var(--ink-3); text-transform:uppercase;
+      letter-spacing:0.07em; font-weight:600; font-family:var(--mono); }
+    .statsbar .stat-val { font-size:13px; font-weight:600; font-family:var(--mono); color:var(--ink-0); }
+    .statsbar .divider { width:1px; height:14px; background:var(--line-1); flex-shrink:0; }
 
     /* ── log terminal ───────────────────── */
     .log { font-family: var(--mono); font-size:11.5px; padding:14px var(--pad-x);
@@ -506,8 +505,7 @@
       .inst-row { grid-template-columns: 1fr; }
     }
     @media (max-width: 720px) {
-      .hero { flex-direction: column; align-items:flex-start; }
-      .hero .rightcol { width: 100%; }
+      .statsbar { gap:10px; }
       .grid-4 { grid-template-columns: 1fr; }
       .grid-3 { grid-template-columns: 1fr; }
       .tweaks { width: calc(100% - 40px); left: 20px; right: 20px; }
@@ -1104,35 +1102,159 @@
                       </div>
                     </div>
 
-                    {/* levels grid */}
-                    {(displaySig.entry || displaySig.sl || displaySig.target1) && (
-                      <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:8, marginBottom:14}}>
-                        {[
-                          { label:'Entry', val:displaySig.entry, color:'var(--accent)' },
-                          { label:'Stop Loss', val:displaySig.sl, color:'var(--short)' },
-                          { label:'Target 1', val:displaySig.target1, color:'var(--long)' },
-                          { label:'Target 2', val:displaySig.target2, color:'var(--long)' },
-                        ].map(({label, val, color}) => val != null && (
-                          <div key={label} style={{background:'var(--bg-2)', borderRadius:6, padding:'8px 10px'}}>
-                            <div style={{fontSize:9, color:'var(--ink-3)', textTransform:'uppercase', letterSpacing:'0.08em', fontWeight:600, marginBottom:3}}>{label}</div>
-                            <div style={{fontSize:14, fontWeight:600, color, fontFamily:'var(--mono)'}}>{fmt(val)}</div>
+                    {/* Option trade block — shown when we have option-level data */}
+                    {displaySig.optEntry != null ? (
+                      <div style={{marginBottom:14}}>
+                        {/* Option identity row */}
+                        <div style={{display:'flex', alignItems:'center', gap:8, marginBottom:8}}>
+                          <span style={{fontSize:11, fontWeight:700, fontFamily:'var(--mono)',
+                            background: displaySig.dir==='LONG'?'var(--long-dim)':'var(--short-dim)',
+                            color: displaySig.dir==='LONG'?'var(--long)':'var(--short)',
+                            padding:'3px 8px', borderRadius:4}}>
+                            BUY {displaySig.type} {displaySig.strike}
+                          </span>
+                          {displaySig.optExpiry && <span style={{fontSize:10, color:'var(--ink-3)', fontFamily:'var(--mono)'}}>{displaySig.optExpiry}</span>}
+                          {displaySig.optSymbol && <span style={{fontSize:10, color:'var(--ink-3)', fontFamily:'var(--mono)', opacity:0.6}}>{displaySig.optSymbol}</span>}
+                        </div>
+
+                        {/* Premium levels */}
+                        <div style={{fontSize:9, color:'var(--ink-3)', textTransform:'uppercase', letterSpacing:'0.08em', fontWeight:600, marginBottom:5}}>Option premium levels</div>
+                        <div style={{display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:6, marginBottom:10}}>
+                          {[
+                            { label:'Entry ₹', val:displaySig.optEntry, color:'var(--accent)' },
+                            { label:'SL ₹', val:displaySig.optSl, color:'var(--short)' },
+                            { label:'Target 1 ₹', val:displaySig.optT1, color:'var(--long)' },
+                          ].map(({label,val,color}) => val != null && (
+                            <div key={label} style={{background:'var(--bg-2)', borderRadius:6, padding:'7px 9px'}}>
+                              <div style={{fontSize:8.5, color:'var(--ink-3)', textTransform:'uppercase', letterSpacing:'0.07em', fontWeight:600, marginBottom:2}}>{label}</div>
+                              <div style={{fontSize:15, fontWeight:700, color, fontFamily:'var(--mono)'}}>{fmt(val)}</div>
+                            </div>
+                          ))}
+                        </div>
+
+                        {/* Trade sizing */}
+                        <div style={{fontSize:9, color:'var(--ink-3)', textTransform:'uppercase', letterSpacing:'0.08em', fontWeight:600, marginBottom:5}}>Trade sizing · ₹20K budget</div>
+                        <div style={{display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:6, marginBottom:10}}>
+                          {displaySig.optLots != null && (
+                            <div style={{background:'var(--bg-2)', borderRadius:6, padding:'7px 9px'}}>
+                              <div style={{fontSize:8.5, color:'var(--ink-3)', textTransform:'uppercase', letterSpacing:'0.07em', fontWeight:600, marginBottom:2}}>Lots × Qty</div>
+                              <div style={{fontSize:13, fontWeight:700, fontFamily:'var(--mono)', color:'var(--ink-0)'}}>{displaySig.optLots}L × {displaySig.optQty || '—'}</div>
+                            </div>
+                          )}
+                          {displaySig.optCapital != null && (
+                            <div style={{background:'var(--bg-2)', borderRadius:6, padding:'7px 9px'}}>
+                              <div style={{fontSize:8.5, color:'var(--ink-3)', textTransform:'uppercase', letterSpacing:'0.07em', fontWeight:600, marginBottom:2}}>Capital</div>
+                              <div style={{fontSize:13, fontWeight:700, fontFamily:'var(--mono)', color:'var(--ink-0)'}}>₹{(displaySig.optCapital||0).toLocaleString('en-IN')}</div>
+                            </div>
+                          )}
+                          {displaySig.optMaxLoss != null && (
+                            <div style={{background:'var(--short-dim)', borderRadius:6, padding:'7px 9px'}}>
+                              <div style={{fontSize:8.5, color:'var(--ink-3)', textTransform:'uppercase', letterSpacing:'0.07em', fontWeight:600, marginBottom:2}}>Max Loss</div>
+                              <div style={{fontSize:13, fontWeight:700, fontFamily:'var(--mono)', color:'var(--short)'}}>₹{(displaySig.optMaxLoss||0).toLocaleString('en-IN')}</div>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Profit projections */}
+                        {(displaySig.optT1Profit != null || displaySig.optT2Profit != null) && (
+                          <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:6, marginBottom:10}}>
+                            {displaySig.optT1Profit != null && (
+                              <div style={{background:'var(--long-dim)', borderRadius:6, padding:'7px 9px'}}>
+                                <div style={{fontSize:8.5, color:'var(--ink-3)', textTransform:'uppercase', letterSpacing:'0.07em', fontWeight:600, marginBottom:2}}>T1 Profit</div>
+                                <div style={{fontSize:13, fontWeight:700, fontFamily:'var(--mono)', color:'var(--long)'}}>+₹{(displaySig.optT1Profit||0).toLocaleString('en-IN')}</div>
+                              </div>
+                            )}
+                            {displaySig.optT2 != null && displaySig.optT2Profit != null && (
+                              <div style={{background:'var(--long-dim)', borderRadius:6, padding:'7px 9px'}}>
+                                <div style={{fontSize:8.5, color:'var(--ink-3)', textTransform:'uppercase', letterSpacing:'0.07em', fontWeight:600, marginBottom:2}}>T2 ₹{fmt(displaySig.optT2)} · Profit</div>
+                                <div style={{fontSize:13, fontWeight:700, fontFamily:'var(--mono)', color:'var(--long)'}}>+₹{(displaySig.optT2Profit||0).toLocaleString('en-IN')}</div>
+                              </div>
+                            )}
                           </div>
-                        ))}
-                        {displaySig.rr != null && (
-                          <div style={{background:'var(--bg-2)', borderRadius:6, padding:'8px 10px'}}>
-                            <div style={{fontSize:9, color:'var(--ink-3)', textTransform:'uppercase', letterSpacing:'0.08em', fontWeight:600, marginBottom:3}}>R : R</div>
-                            <div style={{fontSize:14, fontWeight:600, color: displaySig.rr >= 1.5 ? 'var(--long)' : 'var(--warn)', fontFamily:'var(--mono)'}}>
-                              {Number(displaySig.rr).toFixed(2)}×
+                        )}
+
+                        {/* Greeks + OI/Volume */}
+                        {(displaySig.optDelta != null || displaySig.optIv != null || displaySig.optOi != null) && (
+                          <div style={{background:'var(--bg-2)', borderRadius:6, padding:'8px 10px', marginBottom:10}}>
+                            <div style={{fontSize:9, color:'var(--ink-3)', textTransform:'uppercase', letterSpacing:'0.08em', fontWeight:600, marginBottom:6}}>Greeks · Market depth</div>
+                            <div style={{display:'flex', flexWrap:'wrap', gap:'6px 14px', fontFamily:'var(--mono)', fontSize:11}}>
+                              {displaySig.optDelta != null && <span><span style={{color:'var(--ink-3)'}}>δ</span> {displaySig.optDelta} {displaySig.optDeltaSrc === 'live' ? <span style={{fontSize:9, color:'var(--long)'}}>live</span> : <span style={{fontSize:9, color:'var(--ink-3)'}}>est</span>}</span>}
+                              {displaySig.optGamma != null && displaySig.optGamma > 0 && <span><span style={{color:'var(--ink-3)'}}>γ</span> {displaySig.optGamma}</span>}
+                              {displaySig.optTheta != null && displaySig.optTheta !== 0 && <span><span style={{color:'var(--ink-3)'}}>θ</span> {displaySig.optTheta}</span>}
+                              {displaySig.optVega != null && displaySig.optVega > 0 && <span><span style={{color:'var(--ink-3)'}}>ν</span> {displaySig.optVega}</span>}
+                              {displaySig.optIv != null && <span><span style={{color:'var(--ink-3)'}}>IV</span> {displaySig.optIv}%</span>}
+                              {displaySig.optOi != null && displaySig.optOi > 0 && <span><span style={{color:'var(--ink-3)'}}>OI</span> {(displaySig.optOi||0).toLocaleString('en-IN')}</span>}
+                              {displaySig.optVolume != null && displaySig.optVolume > 0 && <span><span style={{color:'var(--ink-3)'}}>Vol</span> {(displaySig.optVolume||0).toLocaleString('en-IN')}</span>}
+                              {displaySig.optRr != null && <span><span style={{color:'var(--ink-3)'}}>R:R</span> <span style={{color: displaySig.optRr >= 1.5 ? 'var(--long)' : 'var(--warn)'}}>{Number(displaySig.optRr).toFixed(2)}×</span></span>}
                             </div>
                           </div>
                         )}
-                        {displaySig.premium != null && (
-                          <div style={{background:'var(--bg-2)', borderRadius:6, padding:'8px 10px'}}>
-                            <div style={{fontSize:9, color:'var(--ink-3)', textTransform:'uppercase', letterSpacing:'0.08em', fontWeight:600, marginBottom:3}}>Option ₹</div>
-                            <div style={{fontSize:14, fontWeight:600, color:'var(--ink-0)', fontFamily:'var(--mono)'}}>{fmt(displaySig.premium)}</div>
+
+                        {/* Timing */}
+                        {displaySig.timing && (displaySig.timing.target_by || displaySig.timing.est_duration) && (
+                          <div style={{display:'flex', gap:8, marginBottom:10, fontSize:11.5, flexWrap:'wrap'}}>
+                            {displaySig.t && (
+                              <div style={{background:'var(--bg-2)', borderRadius:6, padding:'6px 10px', flex:1}}>
+                                <span style={{color:'var(--ink-3)', fontSize:9, fontWeight:600, textTransform:'uppercase', letterSpacing:'0.07em', marginRight:6}}>Entry</span>
+                                <span style={{fontFamily:'var(--mono)', fontWeight:600}}>{displaySig.t}</span>
+                              </div>
+                            )}
+                            {displaySig.timing.target_by && (
+                              <div style={{background:'var(--bg-2)', borderRadius:6, padding:'6px 10px', flex:1}}>
+                                <span style={{color:'var(--ink-3)', fontSize:9, fontWeight:600, textTransform:'uppercase', letterSpacing:'0.07em', marginRight:6}}>Target by</span>
+                                <span style={{fontFamily:'var(--mono)', fontWeight:600}}>{displaySig.timing.target_by}</span>
+                              </div>
+                            )}
+                            {displaySig.timing.est_duration && (
+                              <div style={{background:'var(--bg-2)', borderRadius:6, padding:'6px 10px', flex:1}}>
+                                <span style={{color:'var(--ink-3)', fontSize:9, fontWeight:600, textTransform:'uppercase', letterSpacing:'0.07em', marginRight:6}}>Duration</span>
+                                <span style={{fontFamily:'var(--mono)', fontWeight:600}}>{displaySig.timing.est_duration}</span>
+                              </div>
+                            )}
+                          </div>
+                        )}
+
+                        {/* AI verdict (LIVE signals only) */}
+                        {displaySig.aiVerdict && (
+                          <div style={{padding:'8px 10px', borderRadius:6, marginBottom:10, fontSize:11.5,
+                            background: displaySig.aiVerdict==='TAKE' ? 'var(--long-dim)' : displaySig.aiVerdict==='SKIP' ? 'var(--short-dim)' : 'var(--warn-dim)',
+                            borderLeft: `3px solid ${displaySig.aiVerdict==='TAKE' ? 'var(--long)' : displaySig.aiVerdict==='SKIP' ? 'var(--short)' : 'var(--warn)'}`}}>
+                            <div style={{fontWeight:700, fontSize:10, textTransform:'uppercase', letterSpacing:'0.08em', marginBottom:3}}>
+                              🤖 AI · {displaySig.aiVerdict} {displaySig.aiPosPct ? `${displaySig.aiPosPct}%` : ''}
+                            </div>
+                            {displaySig.aiReasoning && <div style={{color:'var(--ink-1)'}}>{displaySig.aiReasoning}</div>}
+                            {displaySig.aiRiskNote && <div style={{color:'var(--warn)', fontSize:10.5, marginTop:3}}>⚠ {displaySig.aiRiskNote}</div>}
                           </div>
                         )}
                       </div>
+                    ) : (
+                      /* Fallback: index-level levels when no option data yet */
+                      (displaySig.entry || displaySig.sl || displaySig.target1) && (
+                        <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:8, marginBottom:14}}>
+                          {[
+                            { label:'Index Entry', val:displaySig.entry, color:'var(--accent)' },
+                            { label:'Stop Loss', val:displaySig.sl, color:'var(--short)' },
+                            { label:'Target 1', val:displaySig.target1, color:'var(--long)' },
+                            { label:'Target 2', val:displaySig.target2, color:'var(--long)' },
+                          ].map(({label, val, color}) => val != null && (
+                            <div key={label} style={{background:'var(--bg-2)', borderRadius:6, padding:'8px 10px'}}>
+                              <div style={{fontSize:9, color:'var(--ink-3)', textTransform:'uppercase', letterSpacing:'0.08em', fontWeight:600, marginBottom:3}}>{label}</div>
+                              <div style={{fontSize:14, fontWeight:600, color, fontFamily:'var(--mono)'}}>{fmt(val)}</div>
+                            </div>
+                          ))}
+                          {displaySig.rr != null && (
+                            <div style={{background:'var(--bg-2)', borderRadius:6, padding:'8px 10px'}}>
+                              <div style={{fontSize:9, color:'var(--ink-3)', textTransform:'uppercase', letterSpacing:'0.08em', fontWeight:600, marginBottom:3}}>R : R</div>
+                              <div style={{fontSize:14, fontWeight:600, color: displaySig.rr >= 1.5 ? 'var(--long)' : 'var(--warn)', fontFamily:'var(--mono)'}}>
+                                {Number(displaySig.rr).toFixed(2)}×
+                              </div>
+                            </div>
+                          )}
+                          <div style={{background:'var(--bg-2)', borderRadius:6, padding:'8px 10px', fontSize:10, color:'var(--ink-3)', gridColumn:'1/-1'}}>
+                            Option chain scan fires at 40%+ confidence — premiums, lots & P&L will appear here
+                          </div>
+                        </div>
+                      )
                     )}
 
                     {/* strategy bars */}
@@ -1938,7 +2060,31 @@ function App() {
                   strategies: [],
                   entry: sig.entry, sl: sig.sl, target1: sig.target1,
                   target2: sig.target2, rr: sig.risk_reward,
-                  _minConf: minConf,            // for UI to show threshold
+                  _minConf: minConf,
+                  // Option-level data for detail panel
+                  optEntry: opt ? (opt.entry || opt.ltp) : null,
+                  optSl: opt ? opt.sl : null,
+                  optT1: opt ? opt.target1 : null,
+                  optT2: opt ? opt.target2 : null,
+                  optLots: opt ? opt.lots : null,
+                  optQty: opt ? opt.qty : null,
+                  optLotSize: opt ? opt.lot_size : null,
+                  optCapital: opt ? opt.capital : null,
+                  optMaxLoss: opt ? opt.max_loss : null,
+                  optT1Profit: opt ? opt.t1_profit : null,
+                  optT2Profit: opt ? opt.t2_profit : null,
+                  optDelta: opt ? opt.delta : null,
+                  optDeltaSrc: opt ? opt.delta_source : null,
+                  optIv: opt ? opt.iv : null,
+                  optGamma: opt ? opt.gamma : null,
+                  optTheta: opt ? opt.theta : null,
+                  optVega: opt ? opt.vega : null,
+                  optOi: opt ? opt.oi : null,
+                  optVolume: opt ? opt.volume : null,
+                  optRr: opt ? opt.rr : null,
+                  optSymbol: opt ? opt.symbol : null,
+                  optExpiry: opt ? opt.expiry : null,
+                  timing: result.timing || null,
                 };
               }).filter(Boolean);
               if (watchNow.length) {
@@ -1953,24 +2099,54 @@ function App() {
             // These trigger beep + browser notification.
             const rawAlerts = Array.isArray(s.alerts) ? s.alerts : [];
             if (rawAlerts.length) {
-              const mapped = rawAlerts.map(a => ({
-                id: String(a.id || `${a.instrument}-${a.time}`),
-                inst: a.instrument || '',
-                dir: (a.signal && a.signal.direction) || '',
-                type: (a.option && a.option.type) || ((a.signal && a.signal.direction) === 'LONG' ? 'CE' : 'PE'),
-                strike: (a.option && a.option.strike) || null,
-                premium: (a.option && a.option.ltp) || null,
-                confidence: (a.signal && (a.signal.confidence_ai_adj || a.signal.confidence)) || 0,
-                t: a.time || '',
-                status: 'LIVE',
-                reasons: (a.signal && a.signal.reasons) || [],
-                strategies: [],
-                entry: a.signal && a.signal.entry,
-                sl: a.signal && a.signal.sl,
-                target1: a.signal && a.signal.target1,
-                target2: a.signal && a.signal.target2,
-                rr: a.signal && a.signal.risk_reward,
-              }));
+              const mapped = rawAlerts.map(a => {
+                const sig = a.signal || {};
+                const opt = a.option || null;
+                return {
+                  id: String(a.id || `${a.instrument}-${a.time}`),
+                  inst: a.instrument || '',
+                  dir: sig.direction || '',
+                  type: (opt && opt.type) || (sig.direction === 'LONG' ? 'CE' : 'PE'),
+                  strike: (opt && opt.strike) || null,
+                  premium: (opt && opt.ltp) || null,
+                  confidence: (sig.confidence_ai_adj != null ? sig.confidence_ai_adj : sig.confidence) || 0,
+                  t: a.time || '',
+                  status: 'LIVE',
+                  reasons: sig.reasons || [],
+                  strategies: [],
+                  entry: sig.entry, sl: sig.sl,
+                  target1: sig.target1, target2: sig.target2,
+                  rr: sig.risk_reward,
+                  // Option-level data
+                  optEntry: opt ? (opt.entry || opt.ltp) : null,
+                  optSl: opt ? opt.sl : null,
+                  optT1: opt ? opt.target1 : null,
+                  optT2: opt ? opt.target2 : null,
+                  optLots: opt ? opt.lots : null,
+                  optQty: opt ? opt.qty : null,
+                  optLotSize: opt ? opt.lot_size : null,
+                  optCapital: opt ? opt.capital : null,
+                  optMaxLoss: opt ? opt.max_loss : null,
+                  optT1Profit: opt ? opt.t1_profit : null,
+                  optT2Profit: opt ? opt.t2_profit : null,
+                  optDelta: opt ? opt.delta : null,
+                  optDeltaSrc: opt ? opt.delta_source : null,
+                  optIv: opt ? opt.iv : null,
+                  optGamma: opt ? opt.gamma : null,
+                  optTheta: opt ? opt.theta : null,
+                  optVega: opt ? opt.vega : null,
+                  optOi: opt ? opt.oi : null,
+                  optVolume: opt ? opt.volume : null,
+                  optRr: opt ? opt.rr : null,
+                  optSymbol: opt ? opt.symbol : null,
+                  optExpiry: opt ? opt.expiry : null,
+                  timing: a.timing || null,
+                  aiVerdict: a.ai ? a.ai.verdict : null,
+                  aiReasoning: a.ai ? a.ai.reasoning : null,
+                  aiRiskNote: a.ai ? a.ai.risk_note : null,
+                  aiPosPct: a.ai ? a.ai.position_pct : null,
+                };
+              });
               setSignals(prev => {
                 const existingIds = new Set(prev.filter(s=>s.status==='LIVE').map(s=>s.id));
                 const newOnes = mapped.filter(s => !existingIds.has(s.id));
@@ -2230,42 +2406,51 @@ function App() {
             </div>
           )}
 
-          <div className="hero">
-            <div>
-              <div className="title">Today's <em>edge</em>, engineered.</div>
-              <div className="sub">Six confluence strategies scanning NIFTY, BANKNIFTY and FINNIFTY tick-by-tick. Signals fire only when at least two align with sufficient confidence — and stop loss, targets, and time exit are set before you click.</div>
-            </div>
-            <div className="rightcol">
-              {(() => {
-                const closed = safeTrades.filter(t => t && t.status && t.status !== 'OPEN');
-                const pnl = closed.reduce((a, b) => a + (Number(b.pnl) || 0), 0);
-                const wins = closed.filter(t => t.status === 'WIN').length;
-                const winRate = closed.length ? Math.round((wins / closed.length) * 100) : 0;
-                const totalCandles = Object.values(safeCandles).reduce((a,c)=> a + (Array.isArray(c) ? c.length : 0), 0);
-                const fired = safeSignals.length;
-                const open = safeSignals.filter(s => s && s.status === 'OPEN').length;
-                const pnlCls = pnl >= 0 ? 'pos' : 'neg';
-                return <>
-                  <div className="metric" style={{minWidth:140, padding:'10px 14px'}}>
-                    <div className="label">Today P&amp;L</div>
-                    <div className={`val ${pnlCls}`} style={{fontSize:20}}>
-                      {closed.length === 0 ? '₹0' : (pnl >= 0 ? '+₹' : '−₹') + Math.abs(Math.round(pnl)).toLocaleString('en-IN')}
-                    </div>
-                    <div className={`delta ${pnlCls}`} style={{fontSize:11}}>
-                      {closed.length === 0 ? '— no trades yet' : `${closed.length} trade${closed.length===1?'':'s'} · ${winRate}% win`}
-                    </div>
-                  </div>
-                  <div className="metric" style={{minWidth:140, padding:'10px 14px'}}>
-                    <div className="label">Scanned</div>
-                    <div className="val" style={{fontSize:20}}>{totalCandles.toLocaleString('en-IN')}</div>
-                    <div className="delta dim" style={{fontSize:11}}>{fired} fired · {open} open</div>
-                  </div>
-                </>;
-              })()}
-            </div>
-          </div>
+          {/* ── compact stats bar — replaces hero to save vertical space ── */}
+          {(() => {
+            const closed = safeTrades.filter(t => t && t.status && t.status !== 'OPEN');
+            const pnl = closed.reduce((a, b) => a + (Number(b.pnl) || 0), 0);
+            const wins = closed.filter(t => t.status === 'WIN').length;
+            const winRate = closed.length ? Math.round((wins / closed.length) * 100) : 0;
+            const totalCandles = Object.values(safeCandles).reduce((a,c)=> a + (Array.isArray(c) ? c.length : 0), 0);
+            const liveSigs = safeSignals.filter(s => s && s.status === 'LIVE').length;
+            const watchSigs = safeSignals.filter(s => s && (s.status === 'WATCH' || s.status === 'READY')).length;
+            const pnlColor = pnl >= 0 ? 'var(--long)' : 'var(--short)';
+            return (
+              <div className="statsbar">
+                <div className="stat">
+                  <span className="stat-label">P&amp;L</span>
+                  <span className="stat-val" style={{color: closed.length ? pnlColor : 'var(--ink-3)'}}>
+                    {closed.length === 0 ? '₹—' : (pnl >= 0 ? '+₹' : '−₹') + Math.abs(Math.round(pnl)).toLocaleString('en-IN')}
+                  </span>
+                  {closed.length > 0 && <span style={{fontSize:10, color:'var(--ink-3)'}}>{winRate}% win · {closed.length}T</span>}
+                </div>
+                <div className="divider"/>
+                <div className="stat">
+                  <span className="stat-label">Candles</span>
+                  <span className="stat-val">{totalCandles.toLocaleString('en-IN')}</span>
+                </div>
+                <div className="divider"/>
+                <div className="stat">
+                  <span className="stat-label">Signals</span>
+                  <span className="stat-val">
+                    {liveSigs > 0 && <span style={{color:'var(--accent)'}}>{liveSigs} LIVE </span>}
+                    {watchSigs > 0 && <span style={{color:'var(--ink-2)'}}>{watchSigs} watch</span>}
+                    {liveSigs === 0 && watchSigs === 0 && <span style={{color:'var(--ink-3)'}}>—</span>}
+                  </span>
+                </div>
+                <div className="divider"/>
+                <div className="stat">
+                  <span className="stat-label">Inst</span>
+                  <span className="stat-val">{Object.keys(safeCandles).length}/{INST.length}</span>
+                </div>
+                <span style={{flex:1}}/>
+                <span className="stat-label" style={{fontSize:9, opacity:0.6}}>SIGNAL ENGINE v2.6 · NOT INVESTMENT ADVICE</span>
+              </div>
+            );
+          })()}
 
-          <div className="tabs" style={{marginTop:14}}>
+          <div className="tabs" style={{marginTop:8}}>
             {tabs.map(t => (
               <button key={t.id} className={`tab ${tab===t.id?'on':''}`} onClick={()=>setTab(t.id)}>
                 {t.icon && <span style={{opacity:0.7, fontSize:8}}>{t.icon}</span>}
