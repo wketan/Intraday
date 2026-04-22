@@ -2030,7 +2030,19 @@ class Engine:
                     if df.empty or len(df)<30: continue
                     sig=self.sgen.analyze(df)
                     if not sig: continue
-                    # 15-min cooldown: skip re-signal same instrument
+
+                    # ── Always update latest for dashboard display (NO gates) ──
+                    # This ensures the UI always shows the live scan state,
+                    # even when confidence is below the alert threshold.
+                    _timing_now, _ = estimate_exit_time(sig)
+                    self.latest[name] = {
+                        "instrument": name, "lot_size": inst["lot_size"],
+                        "signal": sig, "option": None,
+                        "timing": _timing_now,
+                        "updated_at": datetime.now(IST).strftime("%H:%M:%S")
+                    }
+
+                    # 15-min cooldown: skip alerts/option-chain for this instrument
                     _last_t=self._last_signal.get(name)
                     if _last_t and (datetime.now(IST)-_last_t).total_seconds()<900: continue
 
