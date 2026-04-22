@@ -8,7 +8,7 @@
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate"/>
   <meta http-equiv="Pragma" content="no-cache"/>
   <meta http-equiv="Expires" content="0"/>
-  <meta name="build-stamp" content="2026-04-22T00:00:00Z-fullfix-signals-replay-strategies"/>
+  <meta name="build-stamp" content="2026-04-22T06:00:00Z-replay-tick-dep-fix"/>
   <title>Signal Engine · Intraday</title>
 
   <link rel="manifest" href="manifest.json"/>
@@ -1490,7 +1490,6 @@ function App() {
       const [replay, setReplay] = useState(null);    // { data, idx, total }
       const [toast, setToast] = useState(null);
       const lastSigId = useRef(null);
-      const replayRef = React.useRef(null);           // mirror of replay state for stable interval reads
       const replayAnalyzedAt = React.useRef({});      // { [instName]: lastAnalyzedIdx }
 
       const addLog = (level, msg) => {
@@ -1891,32 +1890,30 @@ function App() {
         return () => { cancelled = true; clearInterval(id); };
       }, [on, mode]);
 
-      // Keep replayRef in sync so the interval can read latest state without stale closure
-      useEffect(() => { replayRef.current = replay; }, [replay]);
-
-      // Replay tick — stable interval (no replay in deps); reads via replayRef
+      // Replay tick — uses functional updater so it always sees current state; no ref needed.
+      // KEY: guard AND deps include !!replay (so effect re-fires the moment replay is initialised
+      // after candles load — which happens async AFTER setOn(true)).
+      // replay?.done in deps stops the interval cleanly when replay finishes.
+      // replay.idx is NOT in deps — interval stays stable across ticks.
       useEffect(() => {
-        if (!on || mode !== 'replay') return;
+        if (!on || mode !== 'replay' || !replay || replay.done) return;
         const ms = Math.max(50, 220 / Math.max(1, speed));
         const id = setInterval(() => {
-          const r = replayRef.current;
-          if (!r || !r.data || r.done) { clearInterval(id); return; }
-          if (r.idx >= r.total - 1) {
-            setReplay(prev => prev ? { ...prev, done: true } : prev);
-            clearInterval(id);
-            return;
-          }
-          setReplay(prev => prev ? { ...prev, idx: prev.idx + 1 } : prev);
+          setReplay(prev => {
+            if (!prev || prev.done) return prev;
+            if (prev.idx >= prev.total - 1) return { ...prev, done: true };
+            return { ...prev, idx: prev.idx + 1 };
+          });
         }, ms);
         return () => clearInterval(id);
-      }, [on, mode, speed]); // replay intentionally omitted — interval is stable
+      }, [on, mode, speed, !!replay, replay?.done]); // eslint-disable-line react-hooks/exhaustive-deps
 
       // Replay canvas updater + signal generator — fires on every idx change
       useEffect(() => {
         if (!replay) return;
         if (replay.done) {
           setOn(false);
-          addLog('INFO', `✓ Replay complete · ${replay.total} bars scanned · ${signals.length} signals found`);
+          setSignals(prev => { addLog('INFO', `✓ Replay complete · ${replay.total} bars scanned · ${prev.length} signal(s) found`); return prev; });
           return;
         }
         const { data, idx } = replay;
