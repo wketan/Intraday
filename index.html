@@ -8,7 +8,7 @@
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate"/>
   <meta http-equiv="Pragma" content="no-cache"/>
   <meta http-equiv="Expires" content="0"/>
-  <meta name="build-stamp" content="2026-04-22T06:00:00Z-replay-tick-dep-fix"/>
+  <meta name="build-stamp" content="2026-04-22T07:00:00Z-signal-detail-cooldown"/>
   <title>Signal Engine · Intraday</title>
 
   <link rel="manifest" href="manifest.json"/>
@@ -953,6 +953,8 @@
     // ===========================================
 
     function SignalsTab({ sel, setSel, signals = [], candles = {}, live = {}, on }) {
+      const [selectedSig, setSelectedSig] = React.useState(null);
+
       const sigArr = Array.isArray(signals) ? signals : [];
       const candObj = (candles && typeof candles === 'object' && !Array.isArray(candles)) ? candles : {};
       const liveObj = (live && typeof live === 'object' && !Array.isArray(live)) ? live : {};
@@ -960,25 +962,32 @@
       const rawCandles = candObj[inst.name];
       const instCandles = Array.isArray(rawCandles) ? rawCandles : [];
       const instSignals = sigArr.filter(s => s && s.inst === inst.name);
-      const activeSignal = instSignals[0]; // most recent
-      const liveData = live[inst.name];
-      // Build sparkline from real candles if available
+      // selectedSig > most-recent signal > null
+      const displaySig = selectedSig || instSignals[0] || null;
       const sparkData = instCandles.length
-        ? instCandles.slice(-60).map(c => Number(c.close ?? c[4] ?? c))
+        ? instCandles.slice(-80).map(c => Number(c.close ?? c[4] ?? c)).filter(n => n > 0)
         : null;
+
+      // Clear selection when switching instruments
+      React.useEffect(() => { setSelectedSig(null); }, [sel]);
+
+      // Helper: format price
+      const fmt = v => v != null ? Number(v).toLocaleString('en-IN', {minimumFractionDigits:2, maximumFractionDigits:2}) : '—';
+
       return (
         <div style={{display:'flex', flexDirection:'column'}}>
-          {/* instrument selector with real data */}
+          {/* ── instrument cards ── */}
           <div className="inst-row">
             {INST.map((i, idx) => {
               const l = liveObj[i.name];
               const rawC = candObj[i.name];
               const cnds = Array.isArray(rawC) ? rawC : [];
+              const instSigs = sigArr.filter(s => s && s.inst === i.name);
               return (
                 <div key={i.name} className={`inst-card ${idx===sel?'on':''}`} onClick={()=>setSel(idx)}>
                   <div style={{display:'flex', alignItems:'center', justifyContent:'space-between'}}>
                     <span className="name">{i.name}</span>
-                    <span className="dim mono" style={{fontSize:10}}>lot {i.lot}</span>
+                    <span className="dim mono" style={{fontSize:10}}>{instSigs.length > 0 ? `${instSigs.length} sig` : `lot ${i.lot}`}</span>
                   </div>
                   <div className="price">
                     {l ? Number(l.ltp).toLocaleString('en-IN', {minimumFractionDigits:2}) : '—'}
@@ -996,93 +1005,181 @@
           </div>
 
           <div style={{padding:'8px var(--pad-x) 16px', display:'grid', gridTemplateColumns:'1.55fr 1fr', gap:16}}>
-            {/* LEFT: chart + recent signals */}
+            {/* ── LEFT: chart ── */}
             <div style={{display:'flex', flexDirection:'column', gap:12}}>
               <div className="panel">
                 <div className="panel-head">
-                  <h3>{inst.name} · chart</h3>
+                  <h3>{inst.name} · price chart</h3>
                   <span style={{flex:1}}/>
                   <span className="muted mono" style={{fontSize:11}}>
-                    {sparkData ? `${instCandles.length} candles · last ${sparkData[sparkData.length-1]}` : 'no data yet'}
+                    {sparkData ? `${instCandles.length} bars · last ${sparkData[sparkData.length-1]?.toFixed(2) ?? '?'}` : 'no data yet'}
                   </span>
                 </div>
-                <div style={{padding:14, minHeight:140}}>
-                  {sparkData ? (
+                <div style={{padding:14, minHeight:160}}>
+                  {sparkData && sparkData.length > 1 ? (
                     <Spark data={sparkData} w={700} h={160}/>
                   ) : (
-                    <div style={{padding:'40px 0', textAlign:'center', color:'var(--ink-3)', fontSize:12.5}}>
-                      {on ? 'Waiting for candles from server…' : 'Press ▶ Start to fetch historical candles.'}
+                    <div style={{padding:'50px 0', textAlign:'center', color:'var(--ink-3)', fontSize:12.5}}>
+                      {on ? 'Waiting for candles…' : 'Press ▶ Start to load historical candles.'}
                     </div>
                   )}
+                </div>
+              </div>
+
+              {/* ── All-instrument signal feed ── */}
+              <div className="panel">
+                <div className="panel-head">
+                  <h3>All signals · all instruments</h3>
+                  <span style={{flex:1}}/>
+                  <span className="muted mono" style={{fontSize:11}}>{sigArr.length} total</span>
+                </div>
+                <div style={{maxHeight:260, overflowY:'auto'}}>
+                  {sigArr.length === 0 ? (
+                    <div style={{padding:'20px 14px', color:'var(--ink-3)', fontSize:12}}>
+                      {on ? 'Scanning for confluence…' : 'No signals yet — press ▶ Start.'}
+                    </div>
+                  ) : sigArr.slice(0, 50).map((s, i) => {
+                    const isSelected = displaySig && s.id === displaySig.id;
+                    return (
+                      <div key={s.id || i}
+                        onClick={() => setSelectedSig(s)}
+                        style={{display:'flex', alignItems:'center', gap:10, padding:'9px 14px',
+                          borderBottom:'1px solid var(--line-0)', fontSize:12, cursor:'pointer',
+                          background: isSelected ? 'var(--accent-faint)' : 'transparent',
+                          borderLeft: isSelected ? '2px solid var(--accent)' : '2px solid transparent',
+                          transition:'background 120ms'}}>
+                        <span className="dim mono" style={{width:36, fontSize:10, flexShrink:0}}>{s.t}</span>
+                        <span className="dim mono" style={{width:62, fontSize:10, color:'var(--ink-2)', flexShrink:0}}>{s.inst}</span>
+                        <span className={`chip ${s.dir==='LONG'?'long':'short'}`}>{s.dir} {s.type||''}</span>
+                        <span className="num dim" style={{fontSize:11, flexShrink:0}}>{s.strike}</span>
+                        <span style={{flex:1}}/>
+                        {s.rr != null && <span className="dim mono" style={{fontSize:10}}>R:R {Number(s.rr).toFixed(1)}</span>}
+                        <span className="muted" style={{fontSize:11, width:30, textAlign:'right'}}>{s.confidence}%</span>
+                        <span className={`chip ${s.status==='OPEN'?'accent':s.status==='WIN'?'long':s.status==='LOSS'?'short':'ghost'}`}
+                          style={{fontSize:9}}>{s.status}</span>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             </div>
 
-            {/* RIGHT: active signal */}
+            {/* ── RIGHT: signal detail ── */}
             <div style={{display:'flex', flexDirection:'column', gap:12}}>
-              <div className="panel" style={{borderColor: activeSignal ? 'var(--accent)' : 'var(--line-0)'}}>
+              <div className="panel" style={{borderColor: displaySig ? (displaySig.dir==='LONG'?'var(--long)':'var(--short)') : 'var(--line-0)'}}>
                 <div className="panel-head">
-                  <h3 style={{color: activeSignal ? 'var(--accent)' : 'var(--ink-2)'}}>
-                    {activeSignal ? `● ${activeSignal.status || 'Signal'}` : 'No active signal'}
+                  <h3 style={{color: displaySig ? (displaySig.dir==='LONG'?'var(--long)':'var(--short)') : 'var(--ink-2)'}}>
+                    {displaySig ? `● ${displaySig.status || 'Signal'}` : 'No signal selected'}
                   </h3>
                   <span style={{flex:1}}/>
-                  <span className="muted mono" style={{fontSize:11}}>
-                    {activeSignal ? activeSignal.t : (on ? 'scanning…' : 'idle')}
+                  {displaySig && selectedSig && (
+                    <button type="button" className="btn ghost" style={{fontSize:10, padding:'2px 8px'}}
+                      onClick={() => setSelectedSig(null)}>← latest</button>
+                  )}
+                  <span className="muted mono" style={{fontSize:11, marginLeft:6}}>
+                    {displaySig ? displaySig.t : (on ? 'scanning…' : 'idle')}
                   </span>
                 </div>
-                <div style={{padding:16}}>
-                  {activeSignal ? (
-                    <>
-                      <div style={{display:'flex', alignItems:'center', gap:12, marginBottom:12}}>
-                        <ConfRing value={activeSignal.confidence || 0}/>
-                        <div style={{flex:1}}>
-                          <div style={{fontSize:18, fontWeight:600}}>
-                            {activeSignal.inst} <span className={`chip ${activeSignal.dir==='LONG'?'long':'short'}`}>{activeSignal.dir} {activeSignal.type || ''}</span>
-                          </div>
-                          <div className="muted mono" style={{fontSize:12, marginTop:2}}>
-                            {activeSignal.strike ? `Strike ${activeSignal.strike}${activeSignal.type || ''}` : ''}
-                            {activeSignal.strategies?.length ? ` · ${activeSignal.strategies.length} strategies` : ''}
-                          </div>
+
+                {displaySig ? (
+                  <div style={{padding:14}}>
+                    {/* header: instrument + direction */}
+                    <div style={{display:'flex', alignItems:'center', gap:12, marginBottom:14}}>
+                      <ConfRing value={displaySig.confidence || 0}/>
+                      <div style={{flex:1}}>
+                        <div style={{fontSize:18, fontWeight:700}}>
+                          {displaySig.inst} &nbsp;
+                          <span className={`chip ${displaySig.dir==='LONG'?'long':'short'}`}
+                            style={{fontSize:12}}>{displaySig.dir} {displaySig.type||''}</span>
+                        </div>
+                        <div className="muted mono" style={{fontSize:11.5, marginTop:3}}>
+                          {displaySig.strike ? `Strike ${displaySig.strike}${displaySig.type||''}` : ''}
+                          {displaySig.strategies?.length ? ` · ${displaySig.strategies.filter(s=>s.active).length}/${displaySig.strategies.length} strategies` : ''}
                         </div>
                       </div>
-                      {activeSignal.reasons?.length > 0 && (
-                        <div style={{padding:12, background:'var(--bg-2)', borderRadius:6, fontSize:11.5, lineHeight:1.6}}>
-                          <div style={{color:'var(--ink-3)', fontSize:10, letterSpacing:'0.08em', textTransform:'uppercase', marginBottom:6, fontWeight:600}}>Why fired</div>
-                          {activeSignal.reasons.slice(0,6).map((r,i) => (
-                            <div key={i} style={{display:'flex', gap:8, color:'var(--ink-1)'}}>
-                              <span style={{color:'var(--accent)'}}>·</span>{r}
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </>
-                  ) : (
-                    <div style={{padding:'20px 0', textAlign:'center', color:'var(--ink-3)', fontSize:12.5}}>
-                      {on ? 'Scanning for confluence…' : 'Engine idle.'}
                     </div>
-                  )}
-                </div>
+
+                    {/* levels grid */}
+                    {(displaySig.entry || displaySig.sl || displaySig.target1) && (
+                      <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:8, marginBottom:14}}>
+                        {[
+                          { label:'Entry', val:displaySig.entry, color:'var(--accent)' },
+                          { label:'Stop Loss', val:displaySig.sl, color:'var(--short)' },
+                          { label:'Target 1', val:displaySig.target1, color:'var(--long)' },
+                          { label:'Target 2', val:displaySig.target2, color:'var(--long)' },
+                        ].map(({label, val, color}) => val != null && (
+                          <div key={label} style={{background:'var(--bg-2)', borderRadius:6, padding:'8px 10px'}}>
+                            <div style={{fontSize:9, color:'var(--ink-3)', textTransform:'uppercase', letterSpacing:'0.08em', fontWeight:600, marginBottom:3}}>{label}</div>
+                            <div style={{fontSize:14, fontWeight:600, color, fontFamily:'var(--mono)'}}>{fmt(val)}</div>
+                          </div>
+                        ))}
+                        {displaySig.rr != null && (
+                          <div style={{background:'var(--bg-2)', borderRadius:6, padding:'8px 10px'}}>
+                            <div style={{fontSize:9, color:'var(--ink-3)', textTransform:'uppercase', letterSpacing:'0.08em', fontWeight:600, marginBottom:3}}>R : R</div>
+                            <div style={{fontSize:14, fontWeight:600, color: displaySig.rr >= 1.5 ? 'var(--long)' : 'var(--warn)', fontFamily:'var(--mono)'}}>
+                              {Number(displaySig.rr).toFixed(2)}×
+                            </div>
+                          </div>
+                        )}
+                        {displaySig.premium != null && (
+                          <div style={{background:'var(--bg-2)', borderRadius:6, padding:'8px 10px'}}>
+                            <div style={{fontSize:9, color:'var(--ink-3)', textTransform:'uppercase', letterSpacing:'0.08em', fontWeight:600, marginBottom:3}}>Option ₹</div>
+                            <div style={{fontSize:14, fontWeight:600, color:'var(--ink-0)', fontFamily:'var(--mono)'}}>{fmt(displaySig.premium)}</div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* strategy bars */}
+                    {displaySig.strategies?.length > 0 && (
+                      <div style={{marginBottom:12}}>
+                        <div style={{fontSize:9, color:'var(--ink-3)', textTransform:'uppercase', letterSpacing:'0.08em', fontWeight:600, marginBottom:8}}>Strategy confluence</div>
+                        <StratBars items={displaySig.strategies.map(s=>({...s, dir:displaySig.dir}))}/>
+                      </div>
+                    )}
+
+                    {/* reasons */}
+                    {displaySig.reasons?.length > 0 && (
+                      <div style={{padding:'10px 12px', background:'var(--bg-2)', borderRadius:6, fontSize:11.5, lineHeight:1.7}}>
+                        <div style={{color:'var(--ink-3)', fontSize:9, letterSpacing:'0.08em', textTransform:'uppercase', marginBottom:5, fontWeight:600}}>Why this signal fired</div>
+                        {displaySig.reasons.map((r, i) => (
+                          <div key={i} style={{display:'flex', gap:8, color:'var(--ink-1)'}}>
+                            <span style={{color:'var(--accent)'}}>·</span>{r}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div style={{padding:'30px 0', textAlign:'center', color:'var(--ink-3)', fontSize:12.5}}>
+                    {on ? 'Scanning for confluence…' : 'Click any signal in the list to inspect it.'}
+                  </div>
+                )}
               </div>
 
+              {/* instrument signal count summary */}
               <div className="panel">
-                <div className="panel-head">
-                  <h3>Recent signals · {inst.name}</h3>
-                  <span style={{flex:1}}/>
-                  <span className="muted mono" style={{fontSize:11}}>{instSignals.length} total</span>
-                </div>
+                <div className="panel-head"><h3>By instrument</h3></div>
                 <div>
-                  {instSignals.length === 0 ? (
-                    <div style={{padding:'20px 14px', color:'var(--ink-3)', fontSize:12}}>No signals yet on {inst.name}.</div>
-                  ) : instSignals.slice(0,8).map((s,i) => (
-                    <div key={i} style={{display:'flex', alignItems:'center', gap:10, padding:'10px 14px', borderBottom:'1px solid var(--line-0)', fontSize:12}}>
-                      <span className="dim mono" style={{width:44, fontSize:11}}>{s.t}</span>
-                      <span className={`chip ${s.dir==='LONG'?'long':'short'}`}>{s.dir} {s.type||''}</span>
-                      <span className="num dim" style={{fontSize:11}}>{s.strike}</span>
-                      <span style={{flex:1}}/>
-                      <span className="muted" style={{fontSize:11}}>{s.confidence}%</span>
-                      <span className={`chip ${s.status==='OPEN'?'accent':s.status==='WIN'?'long':s.status==='LOSS'?'short':'ghost'}`}>{s.status}</span>
-                    </div>
-                  ))}
+                  {INST.map(i => {
+                    const sigs = sigArr.filter(s => s && s.inst === i.name);
+                    const longs = sigs.filter(s => s.dir === 'LONG').length;
+                    const shorts = sigs.filter(s => s.dir === 'SHORT').length;
+                    if (!sigs.length) return (
+                      <div key={i.name} style={{padding:'9px 14px', borderBottom:'1px solid var(--line-0)', fontSize:12, display:'flex', gap:10, color:'var(--ink-3)'}}>
+                        <span style={{width:90}}>{i.name}</span><span>no signals</span>
+                      </div>
+                    );
+                    return (
+                      <div key={i.name} style={{padding:'9px 14px', borderBottom:'1px solid var(--line-0)', fontSize:12, display:'flex', alignItems:'center', gap:10}}>
+                        <span style={{width:90, fontWeight:600}}>{i.name}</span>
+                        <span style={{color:'var(--long)'}}>{longs}× LONG</span>
+                        {shorts > 0 && <><span className="dim">·</span><span style={{color:'var(--short)'}}>{shorts}× SHORT</span></>}
+                        <span style={{flex:1}}/>
+                        <span className="dim mono" style={{fontSize:11}}>{sigs.length} total</span>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             </div>
@@ -1557,10 +1654,12 @@ function App() {
             try {
               const sig = analyze(normCandles(arr), i, 100000);
               if (sig && sig.direction && sig.direction !== 'NONE') {
-                const entry = { id: `PRE-${i.name}-${Date.now()}`, inst: i.name, t: new Date(Date.now()+5.5*3600*1000).toISOString().slice(11,16),
+                const entry = { id: `PRE-${i.name}-${Date.now()}`, inst: i.name,
+                  t: new Date(Date.now()+5.5*3600*1000).toISOString().slice(11,16),
                   dir: sig.direction, type: sig.option?.type || (sig.direction==='LONG'?'CE':'PE'),
                   strike: sig.option?.strike, premium: sig.option?.ltp, confidence: sig.confidence,
-                  strategies: sig.strategies, reasons: sig.reasons, status: 'PRE-OPEN' };
+                  strategies: sig.strategies, reasons: sig.reasons, status: 'PRE-OPEN',
+                  entry: sig.entry, sl: sig.sl, target1: sig.target1, target2: sig.target2, rr: sig.rr, risk: sig.risk };
                 results.push(entry);
                 addLog('SIG', `${i.name} · ${sig.direction} ${sig.confidence}% · ${sig.strategies.length} strategies · ${sig.reasons[0] || ''}`);
               } else {
@@ -1926,31 +2025,43 @@ function App() {
             if ((prev[name] || []).length === visible.length) return prev;
             return { ...prev, [name]: visible };
           });
-          // Run analyze every 3 bars to catch signals (not every tick — keeps UI smooth)
-          const lastAt = replayAnalyzedAt.current[name] || 0;
-          if (visible.length >= 20 && idx - lastAt >= 3) {
-            replayAnalyzedAt.current[name] = idx;
+          // Analyze every 3 bars; but require 12-bar (60 min) cooldown for SAME direction.
+          // Direction change always fires immediately (catches reversals).
+          const lastState = replayAnalyzedAt.current[name] || { idx: 0, dir: null };
+          const barsSinceLast = idx - lastState.idx;
+          const shouldAnalyze = visible.length >= 20 && (barsSinceLast >= 3);
+          if (shouldAnalyze) {
             const instDef = INST.find(i => i.name === name);
             if (!instDef) return;
             try {
               const sig = analyze(visible, instDef, 100000);
               if (sig && sig.direction && sig.confidence >= 60) {
-                const lastC = visible[visible.length - 1];
-                const t = lastC.time
-                  ? new Date(lastC.time).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })
-                  : `bar ${idx}`;
-                const sigId = `REPLAY-${name}-${idx}`;
-                setSignals(prev => {
-                  if (prev.some(s => s.id === sigId)) return prev;
-                  beep(880);
-                  return [{
-                    id: sigId, inst: name, dir: sig.direction,
-                    type: sig.option?.type || (sig.direction === 'LONG' ? 'CE' : 'PE'),
-                    strike: sig.option?.strike, confidence: sig.confidence, t,
-                    status: 'REPLAY', reasons: sig.reasons || [], strategies: sig.strategies || [],
-                    entry: sig.entry, sl: sig.sl, target1: sig.target1,
-                  }, ...prev];
-                });
+                // 60-min cooldown per direction (12 bars × 5 min) — allow direction flip immediately
+                const sameDir = sig.direction === lastState.dir;
+                const cooldownOk = !sameDir || barsSinceLast >= 12;
+                replayAnalyzedAt.current[name] = { idx, dir: sig.direction };
+                if (cooldownOk) {
+                  const lastC = visible[visible.length - 1];
+                  const t = lastC.time
+                    ? new Date(lastC.time).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })
+                    : `bar ${idx}`;
+                  const sigId = `REPLAY-${name}-${idx}`;
+                  setSignals(prev => {
+                    if (prev.some(s => s.id === sigId)) return prev;
+                    beep(880);
+                    return [{
+                      id: sigId, inst: name, dir: sig.direction,
+                      type: sig.option?.type || (sig.direction === 'LONG' ? 'CE' : 'PE'),
+                      strike: sig.option?.strike, confidence: sig.confidence, t,
+                      status: 'REPLAY', reasons: sig.reasons || [], strategies: sig.strategies || [],
+                      entry: sig.entry, sl: sig.sl, target1: sig.target1,
+                      target2: sig.target2, rr: sig.rr, risk: sig.risk,
+                    }, ...prev];
+                  });
+                }
+              } else {
+                // Update analyzed-at even when no signal so we don't hammer analyze()
+                replayAnalyzedAt.current[name] = { idx, dir: lastState.dir };
               }
             } catch(e) { /* signal calc errors are non-fatal */ }
           }
