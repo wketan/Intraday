@@ -1262,7 +1262,7 @@ class SignalValidation:
     through when Claude errored out."""
 
     @staticmethod
-    def analyze(instrument, signal, option, regime=None):
+    def analyze(instrument, signal, option, regime=None, chain_analytics=None):
         api_key = CONFIG.get("anthropic_api_key", "")
         if not api_key:
             # No Claude configured → pass-through so the engine still works
@@ -1292,6 +1292,29 @@ class SignalValidation:
                                    f"OI={c.get('oi',0):,} Vol={c.get('volume',0):,} "
                                    f"RR={c.get('rr')} score={c.get('score')}\n")
 
+        # Build chain-level analytics block for the AI prompt
+        chain_anal_txt = ""
+        ca = chain_analytics or {}
+        if ca:
+            atm_ce = ca.get("atm_ce") or {}
+            atm_pe = ca.get("atm_pe") or {}
+            top_ce = ca.get("top_vol_ce") or []
+            top_pe = ca.get("top_vol_pe") or []
+            chain_anal_txt = f"""
+OPTION CHAIN MARKET SNAPSHOT (scan from live chain — use this as primary signal):
+  ATM = {ca.get('atm')} | PCR (OI) = {ca.get('pcr')} | PCR (Vol) = {ca.get('pcr_vol')}
+  PCR interpretation: <0.7 bullish, 0.7-1.0 neutral, >1.0 bearish
+  IV Skew (PE-CE) = {ca.get('iv_skew')} | positive = put premium (bearish fear), negative = call premium (bullish)
+  Max Pain Strike = {ca.get('max_pain')} (highest combined OI — strong gravitational level)
+  CE OI total: {ca.get('total_ce_oi',0):,} | Vol: {ca.get('total_ce_vol',0):,}
+  PE OI total: {ca.get('total_pe_oi',0):,} | Vol: {ca.get('total_pe_vol',0):,}
+  Max OI CE: {ca.get('max_oi_ce_strike')} ({ca.get('max_oi_ce_oi',0):,} OI) — resistance ceiling
+  Max OI PE: {ca.get('max_oi_pe_strike')} ({ca.get('max_oi_pe_oi',0):,} OI) — support floor
+  ATM CE ({atm_ce.get('strike')}): ₹{atm_ce.get('ltp')} δ={atm_ce.get('delta')} γ={atm_ce.get('gamma')} IV={atm_ce.get('iv')}% OI={atm_ce.get('oi',0):,} Vol={atm_ce.get('volume',0):,}
+  ATM PE ({atm_pe.get('strike')}): ₹{atm_pe.get('ltp')} δ={atm_pe.get('delta')} γ={atm_pe.get('gamma')} IV={atm_pe.get('iv')}% OI={atm_pe.get('oi',0):,} Vol={atm_pe.get('volume',0):,}
+  Volume leaders CE: {' | '.join(f"{o.get('strike')} ₹{o.get('ltp')} vol={o.get('volume',0):,}" for o in top_ce)}
+  Volume leaders PE: {' | '.join(f"{o.get('strike')} ₹{o.get('ltp')} vol={o.get('volume',0):,}" for o in top_pe)}"""
+
         regime_txt = ""
         if regime:
             regime_txt = (f"\nToday's regime: {regime.get('regime')} / bias {regime.get('bias')} "
@@ -1300,49 +1323,58 @@ class SignalValidation:
 
         prompt = f"""You are a ruthlessly disciplined Indian intraday options trader on a ₹20,000 account.
 Protect capital first, profit second. Only TAKE with clear edge.
-You have full option chain data with Greeks, OI, and volume — use ALL of it.
+You have full option chain data — use Greeks, OI, PCR, IV skew, volume as PRIMARY signals.
+The index signal is a trigger; the option chain confirms or denies it.
 
-SIGNAL
+INDEX SIGNAL (trigger)
 Instrument: {instrument}   Direction: {signal['direction']}   Engine confidence: {signal['confidence']}%
 Index entry {signal['entry']}  SL {signal['sl']}  T1 {signal['target1']}  T2 {signal['target2']}  R:R {signal.get('risk_reward',0)}
+{chain_anal_txt}
 
 {opt_info}
 {chain_info}
 
-INDICATORS
+PRICE INDICATORS
 RSI {ind.get('rsi','?')}  MACD hist {ind.get('macd','?')}  SuperTrend {ind.get('supertrend','?')}
 EMA9/21/50 {ind.get('ema9','?')}/{ind.get('ema21','?')}/{ind.get('ema50','?')}  VWAP {ind.get('vwap','?')}
 ATR {ind.get('atr','?')}  Stoch {ind.get('stoch','?')}  ADX {ind.get('adx','?')}  VolRatio {ind.get('vol_ratio','?')}x
 Reasons: {', '.join(signal.get('reasons',[])[:6])}
 Time: {datetime.now(IST).strftime('%H:%M')} IST{regime_txt}
 
-OPTION CHAIN ANALYSIS RULES
+HOW TO READ THE CHAIN DATA
+- PCR < 0.7 = bullish (more CEs, less put protection needed)
+- PCR > 1.0 = bearish (heavy put buying = hedging against fall)
+- IV skew > +2 = market pricing fear (PE premium = bears are nervous)
+- Max pain is where market makers want price to go — trade WITH it near expiry
+- High volume on ATM CE = call buying = bullish momentum
+- High volume on ATM PE = put buying = bearish momentum
+- SKIP if direction conflicts with PCR AND IV skew AND volume leader (all three aligned against you)
+
+OPTION RULES
 - SKIP if OI < 50,000 (illiquid — huge slippage risk)
-- SKIP if volume < 500 (nobody trading this strike right now)
-- PREFER high OI (>500K) and high volume — signals real market participation
+- SKIP if volume < 500 (no participation)
+- PREFER high OI + high volume — real participation
 - PREFER delta 0.35-0.55 for directional trades
-- SKIP if IV > 50% (inflated premiums — IV crush will eat your profit)
-- SKIP if theta decay > ₹5/lot/day relative to target timeline
-- If another chain candidate has clearly better OI/volume/Greeks, note in risk_note
-- HIGH gamma near ATM is good for quick moves but dangerous if wrong
+- SKIP if IV > 50% (IV crush risk)
+- If another strike has clearly better OI/volume, note it
 
 SIGNAL RULES
 - SKIP if RSI>75 for LONG or RSI<25 for SHORT
-- SKIP after 14:30 unless move already in-progress and premium has runway
-- SKIP if ATR tiny (no movement to be had)
-- SKIP if SuperTrend disagrees with direction
+- SKIP after 14:30 unless premium has clear runway
+- SKIP if ATR tiny
+- SKIP if SuperTrend disagrees
 - SKIP if spread > 5% of LTP
-- Scale POSITION_PCT down when setup not clean (fighting VWAP, near resistance)
-- Use SL_TIGHTENING = "trailing_atr" on trending regimes, "breakeven_at_half_t1" on ranging
-- BANKNIFTY monthly contracts slip harder — be extra conservative
+- Scale POSITION_PCT down when setup not clean
+- SL_TIGHTENING = "trailing_atr" on trending, "breakeven_at_half_t1" on ranging
+- BANKNIFTY monthly slips harder
 
 Respond in EXACTLY this JSON (no markdown, no prose):
 {{"verdict": "TAKE" | "SKIP" | "WAIT",
   "position_pct": 25 | 50 | 75 | 100,
   "sl_tightening": "none" | "breakeven_at_half_t1" | "trailing_atr",
   "confidence_adj": integer -20..10,
-  "reasoning": "one short line",
-  "risk_note": "one specific risk including OI/volume/Greeks concern if any"}}"""
+  "reasoning": "one short line mentioning key chain signal that confirmed/denied",
+  "risk_note": "one specific risk including PCR/IV/OI concern if any"}}"""
 
         result = _anthropic_call(prompt, max_tokens=300, timeout=15)
         if result is None:
@@ -1573,8 +1605,9 @@ class EventCalendar:
 # Back-compat shim so older code paths referring to AIAnalysis still work
 class AIAnalysis:
     @staticmethod
-    def analyze(instrument, signal, option, regime=None):
-        return SignalValidation.analyze(instrument, signal, option, regime=regime)
+    def analyze(instrument, signal, option, regime=None, chain_analytics=None):
+        return SignalValidation.analyze(instrument, signal, option, regime=regime,
+                                        chain_analytics=chain_analytics)
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -1819,6 +1852,90 @@ class OptPicker:
             "chain_snapshot": chain_snapshot,
             "source": "LIVE"
         }
+
+    @staticmethod
+    def chain_analytics(chain, atm):
+        """Compute option-chain-level analytics from the raw chain list.
+
+        Returns a dict with PCR, OI concentration, volume leaders, IV skew,
+        max pain strike, and ATM CE/PE snapshot — used by the AI prompt.
+        """
+        if not chain: return {}
+        try:
+            ce_list = [o for o in chain if o.get("type") == "CE" and o.get("ltp", 0) > 0]
+            pe_list = [o for o in chain if o.get("type") == "PE" and o.get("ltp", 0) > 0]
+
+            # ── PCR (Put-Call Ratio) by OI ──
+            total_ce_oi = sum(o.get("oi", 0) or 0 for o in ce_list)
+            total_pe_oi = sum(o.get("oi", 0) or 0 for o in pe_list)
+            pcr = round(total_pe_oi / max(total_ce_oi, 1), 3)
+
+            # ── PCR by volume ──
+            total_ce_vol = sum(o.get("volume", 0) or 0 for o in ce_list)
+            total_pe_vol = sum(o.get("volume", 0) or 0 for o in pe_list)
+            pcr_vol = round(total_pe_vol / max(total_ce_vol, 1), 3)
+
+            # ── Max OI strike (support/resistance where options writers are most exposed) ──
+            max_oi_ce = max(ce_list, key=lambda x: x.get("oi", 0) or 0, default=None)
+            max_oi_pe = max(pe_list, key=lambda x: x.get("oi", 0) or 0, default=None)
+
+            # ── Volume leaders (active strikes being traded right now) ──
+            top_vol_ce = sorted(ce_list, key=lambda x: x.get("volume", 0) or 0, reverse=True)[:2]
+            top_vol_pe = sorted(pe_list, key=lambda x: x.get("volume", 0) or 0, reverse=True)[:2]
+
+            # ── ATM CE and PE snapshot ──
+            def atm_option(lst):
+                if not lst: return None
+                return min(lst, key=lambda x: abs(float(x.get("strike", 0)) - atm))
+
+            atm_ce = atm_option(ce_list)
+            atm_pe = atm_option(pe_list)
+
+            # ── IV skew: ATM PE IV vs CE IV — positive = market pricing downside ──
+            ce_iv = float(atm_ce.get("iv_raw", 0) or atm_ce.get("iv", 0) or 0) if atm_ce else 0
+            pe_iv = float(atm_pe.get("iv_raw", 0) or atm_pe.get("iv", 0) or 0) if atm_pe else 0
+            iv_skew = round(pe_iv - ce_iv, 2)  # positive = put skew (bearish insurance premium)
+
+            # ── Max pain: strike where total OI (CE+PE) is highest = resistance ──
+            oi_by_strike = {}
+            for o in chain:
+                k = float(o.get("strike", 0))
+                oi_by_strike[k] = oi_by_strike.get(k, 0) + (o.get("oi", 0) or 0)
+            max_pain_strike = max(oi_by_strike, key=oi_by_strike.get) if oi_by_strike else atm
+
+            return {
+                "pcr": pcr,
+                "pcr_vol": pcr_vol,
+                "total_ce_oi": total_ce_oi,
+                "total_pe_oi": total_pe_oi,
+                "total_ce_vol": total_ce_vol,
+                "total_pe_vol": total_pe_vol,
+                "max_pain": max_pain_strike,
+                "max_oi_ce_strike": max_oi_ce.get("strike") if max_oi_ce else None,
+                "max_oi_ce_oi": max_oi_ce.get("oi") if max_oi_ce else 0,
+                "max_oi_pe_strike": max_oi_pe.get("strike") if max_oi_pe else None,
+                "max_oi_pe_oi": max_oi_pe.get("oi") if max_oi_pe else 0,
+                "top_vol_ce": [{"strike": o.get("strike"), "volume": o.get("volume"), "ltp": o.get("ltp")} for o in top_vol_ce],
+                "top_vol_pe": [{"strike": o.get("strike"), "volume": o.get("volume"), "ltp": o.get("ltp")} for o in top_vol_pe],
+                "atm_ce": {
+                    "strike": atm_ce.get("strike"), "ltp": atm_ce.get("ltp"),
+                    "delta": atm_ce.get("delta"), "gamma": atm_ce.get("gamma"),
+                    "theta": atm_ce.get("theta"), "iv": ce_iv,
+                    "oi": atm_ce.get("oi"), "volume": atm_ce.get("volume"),
+                } if atm_ce else None,
+                "atm_pe": {
+                    "strike": atm_pe.get("strike"), "ltp": atm_pe.get("ltp"),
+                    "delta": atm_pe.get("delta"), "gamma": atm_pe.get("gamma"),
+                    "theta": atm_pe.get("theta"), "iv": pe_iv,
+                    "oi": atm_pe.get("oi"), "volume": atm_pe.get("volume"),
+                } if atm_pe else None,
+                "iv_skew": iv_skew,  # positive = put skew (bearish), negative = call skew (bullish)
+                "atm": atm,
+            }
+        except Exception as e:
+            log.warning(f"  chain_analytics error: {e}")
+            return {}
+
 
 # ═══════════════════════════════════════════════════════════════════
 # P&L TRACKER
@@ -2121,12 +2238,16 @@ class Engine:
                     _last_t=self._last_signal.get(name)
                     if _last_t and (datetime.now(IST)-_last_t).total_seconds()<900: continue
 
-                    # Fetch real option chain at 40%+ for dashboard display
+                    # Fetch real option chain at 10%+ confidence so every signal
+                    # gets a real strike/premium recommendation, not just index levels.
+                    # Also compute chain-level analytics (PCR, IV skew, OI concentration)
+                    # for the AI to cross-reference against index signals.
                     opt=None
                     chain=None
                     atm=None
                     greeks=None
-                    if sig["confidence"]>=40 and sig.get("direction") in ("LONG","SHORT"):
+                    chain_anal={}
+                    if sig["confidence"]>=10 and sig.get("direction") in ("LONG","SHORT"):
                         try:
                             chain,atm=self.client.option_chain(inst,sig["price"])
                             if chain:
@@ -2135,6 +2256,11 @@ class Engine:
                                     inst.get("expiry_prefix", name), expiry) if expiry else None
                                 opt=self.opick.pick(sig,inst,chain,atm,CONFIG.get("budget",20000),
                                                     greeks=greeks)
+                                # Compute chain-level analytics for AI
+                                chain_anal = OptPicker.chain_analytics(chain, atm)
+                                log.info(f"  Chain analytics: PCR={chain_anal.get('pcr')} "
+                                         f"IV_skew={chain_anal.get('iv_skew')} "
+                                         f"max_pain={chain_anal.get('max_pain')}")
                         except Exception as ce:
                             log.warning(f"  Chain fetch failed for {name}: {ce}")
 
@@ -2142,7 +2268,8 @@ class Engine:
                     timing, _ = estimate_exit_time(sig)
 
                     result={"instrument":name,"lot_size":inst["lot_size"],"signal":sig,"option":opt,
-                            "timing":timing,"updated_at":datetime.now(IST).strftime("%H:%M:%S")}
+                            "timing":timing,"chain_analytics":chain_anal,
+                            "updated_at":datetime.now(IST).strftime("%H:%M:%S")}
 
                     prev=self._prev.get(name,{}).get("signal",{})
                     # Hard R:R gate — honour regime min_rr override (≥1.5)
@@ -2185,7 +2312,8 @@ class Engine:
                                 pass
 
                         # ── Layer B: validation + sizing + SL rule ──
-                        ai_result = SignalValidation.analyze(name, sig, opt, regime=regime)
+                        ai_result = SignalValidation.analyze(name, sig, opt, regime=regime,
+                                                               chain_analytics=chain_anal)
 
                         if ai_result and ai_result.get("verdict") in ("SKIP", "WAIT"):
                             log.info(f"🤖 AI {ai_result.get('verdict')} {name} {sig['direction']} — "

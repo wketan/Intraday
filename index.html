@@ -8,7 +8,7 @@
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate"/>
   <meta http-equiv="Pragma" content="no-cache"/>
   <meta http-equiv="Expires" content="0"/>
-  <meta name="build-stamp" content="2026-04-22T10:30:00Z-compact-ui-option-chain-ai"/>
+  <meta name="build-stamp" content="2026-04-22T11:30:00Z-chain-analytics-pcr-ivskew"/>
   <title>Signal Engine · Intraday</title>
 
   <link rel="manifest" href="manifest.json"/>
@@ -1048,8 +1048,8 @@
                           background: isSelected ? 'var(--accent-faint)' : 'transparent',
                           borderLeft: isSelected ? '2px solid var(--accent)' : '2px solid transparent',
                           transition:'background 120ms'}}>
-                        <span className="dim mono" style={{width:36, fontSize:10, flexShrink:0}}>{s.t}</span>
-                        <span className="dim mono" style={{width:62, fontSize:10, color:'var(--ink-2)', flexShrink:0}}>{s.inst}</span>
+                        <span className="dim mono" style={{minWidth:52, fontSize:10, flexShrink:0}}>{s.t}</span>
+                        <span className="dim mono" style={{minWidth:68, fontSize:10, color:'var(--ink-2)', flexShrink:0}}>{s.inst}</span>
                         <span className={`chip ${s.dir==='LONG'?'long':'short'}`}>{s.dir} {s.type||''}</span>
                         <span className="num dim" style={{fontSize:11, flexShrink:0}}>{s.strike}</span>
                         <span style={{flex:1}}/>
@@ -1214,6 +1214,47 @@
                           </div>
                         )}
 
+                        {/* Chain analytics — PCR, IV skew, ATM data from live chain */}
+                        {displaySig.chainAnalytics && (() => {
+                          const ca = displaySig.chainAnalytics;
+                          const pcr = ca.pcr;
+                          const pcrColor = pcr < 0.7 ? 'var(--long)' : pcr > 1.0 ? 'var(--short)' : 'var(--warn)';
+                          const pcrLabel = pcr < 0.7 ? 'bullish' : pcr > 1.0 ? 'bearish' : 'neutral';
+                          const ivSkew = ca.iv_skew;
+                          const ivColor = ivSkew > 2 ? 'var(--short)' : ivSkew < -2 ? 'var(--long)' : 'var(--ink-2)';
+                          return (
+                            <div style={{background:'var(--bg-2)', borderRadius:6, padding:'8px 10px', marginBottom:10}}>
+                              <div style={{fontSize:9, color:'var(--ink-3)', textTransform:'uppercase', letterSpacing:'0.08em', fontWeight:600, marginBottom:7}}>Option chain analysis</div>
+                              <div style={{display:'flex', flexWrap:'wrap', gap:'4px 14px', fontFamily:'var(--mono)', fontSize:11, marginBottom:6}}>
+                                <span><span style={{color:'var(--ink-3)'}}>PCR</span> <span style={{color:pcrColor, fontWeight:700}}>{pcr}</span> <span style={{fontSize:9, color:pcrColor}}>({pcrLabel})</span></span>
+                                <span><span style={{color:'var(--ink-3)'}}>PCR vol</span> {ca.pcr_vol}</span>
+                                {ivSkew !== 0 && <span><span style={{color:'var(--ink-3)'}}>IV skew</span> <span style={{color:ivColor}}>{ivSkew > 0 ? '+' : ''}{ivSkew}</span></span>}
+                                {ca.max_pain && <span><span style={{color:'var(--ink-3)'}}>Max pain</span> {ca.max_pain}</span>}
+                              </div>
+                              <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:5, fontSize:10}}>
+                                {ca.atm_ce && <div style={{background:'var(--long-dim)', borderRadius:4, padding:'4px 8px'}}>
+                                  <div style={{color:'var(--long)', fontWeight:700, marginBottom:2}}>ATM {ca.atm_ce.strike} CE ₹{ca.atm_ce.ltp}</div>
+                                  <div style={{color:'var(--ink-2)', fontFamily:'var(--mono)'}}>
+                                    δ {ca.atm_ce.delta} · OI {(ca.atm_ce.oi||0).toLocaleString('en-IN')} · Vol {(ca.atm_ce.volume||0).toLocaleString('en-IN')}
+                                  </div>
+                                </div>}
+                                {ca.atm_pe && <div style={{background:'var(--short-dim)', borderRadius:4, padding:'4px 8px'}}>
+                                  <div style={{color:'var(--short)', fontWeight:700, marginBottom:2}}>ATM {ca.atm_pe.strike} PE ₹{ca.atm_pe.ltp}</div>
+                                  <div style={{color:'var(--ink-2)', fontFamily:'var(--mono)'}}>
+                                    δ {ca.atm_pe.delta} · OI {(ca.atm_pe.oi||0).toLocaleString('en-IN')} · Vol {(ca.atm_pe.volume||0).toLocaleString('en-IN')}
+                                  </div>
+                                </div>}
+                              </div>
+                              {(ca.max_oi_ce_strike || ca.max_oi_pe_strike) && (
+                                <div style={{marginTop:5, fontSize:10, color:'var(--ink-3)', fontFamily:'var(--mono)'}}>
+                                  {ca.max_oi_ce_strike && <span>CE wall: <span style={{color:'var(--long)'}}>{ca.max_oi_ce_strike}</span> ({(ca.max_oi_ce_oi||0).toLocaleString('en-IN')} OI) </span>}
+                                  {ca.max_oi_pe_strike && <span>PE wall: <span style={{color:'var(--short)'}}>{ca.max_oi_pe_strike}</span> ({(ca.max_oi_pe_oi||0).toLocaleString('en-IN')} OI)</span>}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })()}
+
                         {/* AI verdict (LIVE signals only) */}
                         {displaySig.aiVerdict && (
                           <div style={{padding:'8px 10px', borderRadius:6, marginBottom:10, fontSize:11.5,
@@ -1228,33 +1269,84 @@
                         )}
                       </div>
                     ) : (
-                      /* Fallback: index-level levels when no option data yet */
-                      (displaySig.entry || displaySig.sl || displaySig.target1) && (
-                        <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:8, marginBottom:14}}>
-                          {[
-                            { label:'Index Entry', val:displaySig.entry, color:'var(--accent)' },
-                            { label:'Stop Loss', val:displaySig.sl, color:'var(--short)' },
-                            { label:'Target 1', val:displaySig.target1, color:'var(--long)' },
-                            { label:'Target 2', val:displaySig.target2, color:'var(--long)' },
-                          ].map(({label, val, color}) => val != null && (
-                            <div key={label} style={{background:'var(--bg-2)', borderRadius:6, padding:'8px 10px'}}>
-                              <div style={{fontSize:9, color:'var(--ink-3)', textTransform:'uppercase', letterSpacing:'0.08em', fontWeight:600, marginBottom:3}}>{label}</div>
-                              <div style={{fontSize:14, fontWeight:600, color, fontFamily:'var(--mono)'}}>{fmt(val)}</div>
+                      /* Estimated option recommendation — shown when live chain data not yet available */
+                      (() => {
+                        const instDef = INST.find(i => i.name === displaySig.inst) || INST[0];
+                        const gap = instDef.gap;
+                        const optType = displaySig.type || (displaySig.dir === 'LONG' ? 'CE' : 'PE');
+                        const indexEntry = displaySig.entry;
+                        if (!indexEntry) return null;
+                        const atm = Math.round(indexEntry / gap) * gap;
+                        // For CE: prefer ATM or 1 strike OTM (more affordable). For PE: ATM or 1 OTM.
+                        const recStrike = optType === 'CE' ? atm : atm;
+                        // Rough premium estimate using ivFactor (same as client-side analyze())
+                        const ivFactor = { NIFTY: 0.0034, BANKNIFTY: 0.0050, FINNIFTY: 0.0054 }[displaySig.inst] || 0.0040;
+                        const idxRisk = displaySig.sl ? Math.abs(displaySig.entry - displaySig.sl) : gap * 0.5;
+                        const estEntry = Math.max(Math.round(indexEntry * ivFactor), 10);
+                        const estSl = Math.max(Math.round(estEntry * 0.60), 5);
+                        const estT1 = Math.round(estEntry + idxRisk * ivFactor * 1.5);
+                        const estT2 = Math.round(estEntry + idxRisk * ivFactor * 2.5);
+                        const lotSize = instDef.lot;
+                        const budget = 20000;
+                        const estLots = Math.max(1, Math.min(3, Math.floor((budget * 0.5) / (estEntry * lotSize))));
+                        const estCapital = estEntry * lotSize * estLots;
+                        return (
+                          <div style={{marginBottom:14}}>
+                            {/* Option identity */}
+                            <div style={{display:'flex', alignItems:'center', gap:8, marginBottom:10}}>
+                              <span style={{fontSize:12, fontWeight:700, fontFamily:'var(--mono)',
+                                background: displaySig.dir==='LONG'?'var(--long-dim)':'var(--short-dim)',
+                                color: displaySig.dir==='LONG'?'var(--long)':'var(--short)',
+                                padding:'4px 10px', borderRadius:4}}>
+                                BUY {recStrike} {optType}
+                              </span>
+                              <span style={{fontSize:10, color:'var(--warn)', fontFamily:'var(--mono)'}}>est · live scan loading</span>
                             </div>
-                          ))}
-                          {displaySig.rr != null && (
-                            <div style={{background:'var(--bg-2)', borderRadius:6, padding:'8px 10px'}}>
-                              <div style={{fontSize:9, color:'var(--ink-3)', textTransform:'uppercase', letterSpacing:'0.08em', fontWeight:600, marginBottom:3}}>R : R</div>
-                              <div style={{fontSize:14, fontWeight:600, color: displaySig.rr >= 1.5 ? 'var(--long)' : 'var(--warn)', fontFamily:'var(--mono)'}}>
-                                {Number(displaySig.rr).toFixed(2)}×
+
+                            {/* Estimated premium levels */}
+                            <div style={{fontSize:9, color:'var(--ink-3)', textTransform:'uppercase', letterSpacing:'0.08em', fontWeight:600, marginBottom:5}}>Estimated option premiums</div>
+                            <div style={{display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:6, marginBottom:10}}>
+                              {[
+                                { label:'Entry ₹ ~', val:estEntry, color:'var(--accent)' },
+                                { label:'SL ₹ ~', val:estSl, color:'var(--short)' },
+                                { label:'Target 1 ₹ ~', val:estT1, color:'var(--long)' },
+                              ].map(({label,val,color}) => (
+                                <div key={label} style={{background:'var(--bg-2)', borderRadius:6, padding:'7px 9px', opacity:0.85}}>
+                                  <div style={{fontSize:8.5, color:'var(--ink-3)', textTransform:'uppercase', letterSpacing:'0.07em', fontWeight:600, marginBottom:2}}>{label}</div>
+                                  <div style={{fontSize:15, fontWeight:700, color, fontFamily:'var(--mono)'}}>{val}</div>
+                                </div>
+                              ))}
+                            </div>
+
+                            {/* Sizing estimate */}
+                            <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:6, marginBottom:10}}>
+                              <div style={{background:'var(--bg-2)', borderRadius:6, padding:'7px 9px', opacity:0.85}}>
+                                <div style={{fontSize:8.5, color:'var(--ink-3)', textTransform:'uppercase', letterSpacing:'0.07em', fontWeight:600, marginBottom:2}}>Lots × {lotSize}</div>
+                                <div style={{fontSize:13, fontWeight:700, fontFamily:'var(--mono)'}}>{estLots}L</div>
+                              </div>
+                              <div style={{background:'var(--bg-2)', borderRadius:6, padding:'7px 9px', opacity:0.85}}>
+                                <div style={{fontSize:8.5, color:'var(--ink-3)', textTransform:'uppercase', letterSpacing:'0.07em', fontWeight:600, marginBottom:2}}>Capital ~</div>
+                                <div style={{fontSize:13, fontWeight:700, fontFamily:'var(--mono)'}}>₹{estCapital.toLocaleString('en-IN')}</div>
                               </div>
                             </div>
-                          )}
-                          <div style={{background:'var(--bg-2)', borderRadius:6, padding:'8px 10px', fontSize:10, color:'var(--ink-3)', gridColumn:'1/-1'}}>
-                            Option chain scan fires at 40%+ confidence — premiums, lots & P&L will appear here
+
+                            {/* Index reference (clearly labelled) */}
+                            <div style={{background:'var(--bg-2)', borderRadius:6, padding:'8px 10px', marginBottom:8}}>
+                              <div style={{fontSize:9, color:'var(--ink-3)', textTransform:'uppercase', letterSpacing:'0.08em', fontWeight:600, marginBottom:5}}>Index reference levels</div>
+                              <div style={{display:'flex', gap:14, flexWrap:'wrap', fontFamily:'var(--mono)', fontSize:11}}>
+                                {displaySig.entry != null && <span><span style={{color:'var(--ink-3)'}}>Entry</span> <span style={{color:'var(--accent)'}}>{fmt(displaySig.entry)}</span></span>}
+                                {displaySig.sl != null && <span><span style={{color:'var(--ink-3)'}}>SL</span> <span style={{color:'var(--short)'}}>{fmt(displaySig.sl)}</span></span>}
+                                {displaySig.target1 != null && <span><span style={{color:'var(--ink-3)'}}>T1</span> <span style={{color:'var(--long)'}}>{fmt(displaySig.target1)}</span></span>}
+                                {displaySig.rr != null && <span><span style={{color:'var(--ink-3)'}}>R:R</span> <span style={{color: displaySig.rr >= 1.5 ? 'var(--long)' : 'var(--warn)'}}>{Number(displaySig.rr).toFixed(2)}×</span></span>}
+                              </div>
+                            </div>
+
+                            <div style={{fontSize:10, color:'var(--ink-3)', padding:'4px 0', lineHeight:1.5}}>
+                              ⏳ Live option chain scan triggers at 10%+ confidence. Premiums above are estimated — real strikes, greeks, OI and lots will replace these once chain data loads.
+                            </div>
                           </div>
-                        </div>
-                      )
+                        );
+                      })()
                     )}
 
                     {/* strategy bars */}
@@ -2085,6 +2177,7 @@ function App() {
                   optSymbol: opt ? opt.symbol : null,
                   optExpiry: opt ? opt.expiry : null,
                   timing: result.timing || null,
+                  chainAnalytics: result.chain_analytics || null,
                 };
               }).filter(Boolean);
               if (watchNow.length) {
