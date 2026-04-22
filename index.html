@@ -8,7 +8,7 @@
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate"/>
   <meta http-equiv="Pragma" content="no-cache"/>
   <meta http-equiv="Expires" content="0"/>
-  <meta name="build-stamp" content="2026-04-20T04:36:33Z-totp-normalise"/>
+  <meta name="build-stamp" content="2026-04-22T00:00:00Z-fullfix-signals-replay-strategies"/>
   <title>Signal Engine · Intraday</title>
 
   <link rel="manifest" href="manifest.json"/>
@@ -639,11 +639,29 @@
       },
 
       supertrend: (high, low, close, period = 10, mult = 3) => {
+        // Proper SuperTrend: track band state across candles (not just raw bands)
         const hl2 = high.map((h, i) => (h + low[i]) / 2);
-        const atr = TA.atr(high, low, close, period);
-        const upper = hl2.map((h, i) => h + (atr[i] || 0) * mult);
-        const lower = hl2.map((h, i) => h - (atr[i] || 0) * mult);
-        return { upper, lower };
+        const atrArr = TA.atr(high, low, close, period);
+        const n = close.length;
+        const fUpper = new Array(n).fill(0);
+        const fLower = new Array(n).fill(0);
+        const trend  = new Array(n).fill(1);  // 1 = bull, -1 = bear
+        for (let i = 0; i < n; i++) {
+          const bU = hl2[i] + mult * (atrArr[i] || 0);
+          const bL = hl2[i] - mult * (atrArr[i] || 0);
+          if (i === 0) { fUpper[i] = bU; fLower[i] = bL; trend[i] = 1; continue; }
+          // Upper band narrows (only decreases); resets on breakout above
+          fUpper[i] = (bU < fUpper[i-1] || close[i-1] > fUpper[i-1]) ? bU : fUpper[i-1];
+          // Lower band widens (only increases); resets on breakdown below
+          fLower[i] = (bL > fLower[i-1] || close[i-1] < fLower[i-1]) ? bL : fLower[i-1];
+          // Trend: flip on decisive closes above/below prior band
+          if      (close[i] > fUpper[i-1]) trend[i] =  1;
+          else if (close[i] < fLower[i-1]) trend[i] = -1;
+          else                              trend[i] =  trend[i-1];
+        }
+        // SuperTrend line = dynamic support when bull, resistance when bear
+        const line = trend.map((t, i) => t === 1 ? fLower[i] : fUpper[i]);
+        return { trend, line, upper: fUpper, lower: fLower };
       },
 
       stoch: (high, low, close, k = 14) => {
@@ -699,14 +717,16 @@
 
       let direction = null, confidence = 0, strategies = [];
 
-      // ORB
-      const orbSize = (h - l) * 0.5;
-      const orbTop = l + orbSize, orbBot = h - orbSize;
+      // ORB — use FIRST 6 candles (30 min of 5-min bars) as the actual opening range
+      const orbWin = candles.slice(0, Math.min(6, Math.max(1, Math.floor(candles.length * 0.08))));
+      const orbHigh = Math.max(...orbWin.map(x => x.high));
+      const orbLow  = Math.min(...orbWin.map(x => x.low));
       let orbPts = 0;
-      if (c > orbTop) { direction = 'LONG'; orbPts = 25; }
-      else if (c < orbBot) { direction = 'SHORT'; orbPts = 25; }
+      if      (c > orbHigh * 1.0003)  { direction = 'LONG';  orbPts = 25; }
+      else if (c < orbLow  * 0.9997)  { direction = 'SHORT'; orbPts = 25; }
       else orbPts = 10;
-      strategies.push({ name: 'ORB', score: orbPts, active: orbPts === 25, detail: orbPts === 25 ? 'breakout' : 'inside' });
+      strategies.push({ name: 'ORB', score: orbPts, active: orbPts === 25,
+        detail: orbPts === 25 ? `break ${c > orbHigh ? 'high' : 'low'} (${orbWin.length}b range)` : 'inside range' });
 
       // VWAP
       const vwapVal = vwap[idx];
@@ -723,13 +743,13 @@
       else emaPts = rsiVal > 60 || rsiVal < 40 ? 15 : 8;
       strategies.push({ name: 'EMA+RSI', score: emaPts, active: emaPts >= 15, detail: `RSI ${rsiVal.toFixed(0)}` });
 
-      // SuperTrend
-      const st_u = st.upper[idx], st_l = st.lower[idx];
+      // SuperTrend — use proper trend state (1=bull / -1=bear)
+      const stTrend = st.trend[idx]; // 1 = bullish, -1 = bearish
       let stPts = 0;
-      if (c > st_u && direction !== 'SHORT') { direction = 'LONG'; stPts = 20; }
-      else if (c < st_l && direction !== 'LONG') { direction = 'SHORT'; stPts = 20; }
+      if (stTrend === 1 && direction !== 'SHORT')  { direction = 'LONG';  stPts = 20; }
+      else if (stTrend === -1 && direction !== 'LONG') { direction = 'SHORT'; stPts = 20; }
       else stPts = 8;
-      strategies.push({ name: 'SuperTrend', score: stPts, active: stPts >= 15, detail: c > st_u ? 'above' : 'below' });
+      strategies.push({ name: 'SuperTrend', score: stPts, active: stPts >= 15, detail: stTrend === 1 ? '▲ bull' : '▼ bear' });
 
       // PDH/PDL
       const pdh = Math.max(...highs.slice(Math.max(0, idx - 20)));
@@ -1470,6 +1490,8 @@ function App() {
       const [replay, setReplay] = useState(null);    // { data, idx, total }
       const [toast, setToast] = useState(null);
       const lastSigId = useRef(null);
+      const replayRef = React.useRef(null);           // mirror of replay state for stable interval reads
+      const replayAnalyzedAt = React.useRef({});      // { [instName]: lastAnalyzedIdx }
 
       const addLog = (level, msg) => {
         const ist = new Date(Date.now() + 5.5*3600*1000);
@@ -1534,7 +1556,7 @@ function App() {
             addLog('TICK', `${i.name} · ${arr.length} candles loaded · last close ${arr[arr.length-1].close || arr[arr.length-1][4] || '?'}`);
             // analyze
             try {
-              const sig = analyze(arr, i, 100000);
+              const sig = analyze(normCandles(arr), i, 100000);
               if (sig && sig.direction && sig.direction !== 'NONE') {
                 const entry = { id: `PRE-${i.name}-${Date.now()}`, inst: i.name, t: new Date(Date.now()+5.5*3600*1000).toISOString().slice(11,16),
                   dir: sig.direction, type: sig.option?.type || (sig.direction==='LONG'?'CE':'PE'),
@@ -1670,10 +1692,39 @@ function App() {
               showToast(phase === 'pre-open' ? 'Pre-open scan complete' : `${phase} · historical scan complete`);
             }
           } else {
-            addLog('TICK', `Replay · loading ${replayDays}d @ ${speed}x`);
-            await preopenScan();
-            addLog('SIG', `Replay running · ${replayDays}d · ${speed}x`);
-            showToast('Replay running');
+            // ── REPLAY MODE ──────────────────────────────────────────
+            addLog('TICK', `Replay · loading ${replayDays}d of history for all instruments …`);
+            const allData = {};
+            let maxLen = 0;
+            for (const i of INST) {
+              try {
+                const r = await apiJSON(`/api/historical/${i.key}?days=${replayDays}`);
+                const arr = r.candles || r.data || (Array.isArray(r) ? r : null);
+                if (Array.isArray(arr) && arr.length >= 20) {
+                  allData[i.name] = normCandles(arr);
+                  maxLen = Math.max(maxLen, allData[i.name].length);
+                  addLog('TICK', `${i.name} · ${arr.length} candles loaded`);
+                } else {
+                  addLog('INFO', `${i.name} · insufficient data (${arr ? arr.length : 0} candles)`);
+                }
+              } catch(e) {
+                addLog('INFO', `${i.name} · replay load failed · ${e.message || e}`);
+              }
+            }
+            if (maxLen < 20) {
+              addLog('INFO', '✗ No candle data for replay — check auth token and broker session');
+              showToast('Replay failed: no data from server');
+              setOn(false); return;
+            }
+            // Seed chart with first 20 candles so it's immediately visible
+            const seed = {};
+            Object.entries(allData).forEach(([name, arr]) => { seed[name] = arr.slice(0, 20); });
+            setCandles(seed);
+            replayAnalyzedAt.current = {};
+            const replayState = { data: allData, idx: 20, total: maxLen, done: false };
+            setReplay(replayState);
+            addLog('SIG', `▶ Replay started · ${maxLen} bars · ${speed}x speed · analyzing …`);
+            showToast(`▶ Replay · ${replayDays}d · ${speed}x`);
           }
         } catch (e) {
           addLog('INFO', '✗ Start failed · ' + (e.message || e));
@@ -1734,15 +1785,38 @@ function App() {
             const s = await apiJSON('/api/status');
             if (!alive) return;
             lastStatusErr = ''; // success — reset throttle
-            if (Array.isArray(s.signals)) setSignals(s.signals);
-            if (Array.isArray(s.trades))  setTrades(s.trades);
-            if (s.live && typeof s.live === 'object' && !Array.isArray(s.live)) setLive(s.live);
-            if (Array.isArray(s.log))     setLogLines(s.log.slice(-200));
-            const latest = Array.isArray(s.signals) ? s.signals[0] : null;
-            if (latest && latest.id && latest.id !== lastSigId.current) {
-              lastSigId.current = latest.id;
-              notifySignal(latest);
+            // s.signals is a per-instrument dict; s.alerts is the real array of fired signals
+            const rawAlerts = Array.isArray(s.alerts) ? s.alerts : [];
+            if (rawAlerts.length) {
+              const mapped = rawAlerts.map(a => ({
+                id: String(a.id || `${a.instrument}-${a.time}`),
+                inst: a.instrument || '',
+                dir: (a.signal && a.signal.direction) || '',
+                type: (a.option && a.option.type) || ((a.signal && a.signal.direction) === 'LONG' ? 'CE' : 'PE'),
+                strike: (a.option && a.option.strike) || null,
+                premium: (a.option && a.option.ltp) || null,
+                confidence: (a.signal && (a.signal.confidence_ai_adj || a.signal.confidence)) || 0,
+                t: a.time || '',
+                status: 'LIVE',
+                reasons: (a.signal && a.signal.reasons) || [],
+                strategies: [],
+                entry: a.signal && a.signal.entry,
+                sl: a.signal && a.signal.sl,
+                target1: a.signal && a.signal.target1,
+              }));
+              setSignals(prev => {
+                const existingIds = new Set(prev.map(s => s.id));
+                const newOnes = mapped.filter(s => !existingIds.has(s.id));
+                return newOnes.length ? [...newOnes, ...prev].slice(0, 200) : prev;
+              });
+              const latest = mapped[0];
+              if (latest && latest.id !== lastSigId.current) {
+                lastSigId.current = latest.id;
+                notifySignal(latest);
+              }
             }
+            if (Array.isArray(s.trades))  setTrades(s.trades);
+            if (Array.isArray(s.log))     setLogLines(s.log.slice(-200));
           } catch(e) {
             const msg = e.message || String(e);
             if (msg !== lastStatusErr) {
@@ -1817,18 +1891,74 @@ function App() {
         return () => { cancelled = true; clearInterval(id); };
       }, [on, mode]);
 
-      // replay tick
+      // Keep replayRef in sync so the interval can read latest state without stale closure
+      useEffect(() => { replayRef.current = replay; }, [replay]);
+
+      // Replay tick — stable interval (no replay in deps); reads via replayRef
       useEffect(() => {
-        if (!on || mode !== 'replay' || !replay) return;
+        if (!on || mode !== 'replay') return;
+        const ms = Math.max(50, 220 / Math.max(1, speed));
         const id = setInterval(() => {
-          setReplay(r => {
-            if (!r) return r;
-            if (r.idx >= r.total - 1) { clearInterval(id); setOn(false); addLog('INFO','Replay complete'); return r; }
-            return { ...r, idx: r.idx + 1 };
-          });
-        }, Math.max(60, 180 / Math.max(1, speed)));
+          const r = replayRef.current;
+          if (!r || !r.data || r.done) { clearInterval(id); return; }
+          if (r.idx >= r.total - 1) {
+            setReplay(prev => prev ? { ...prev, done: true } : prev);
+            clearInterval(id);
+            return;
+          }
+          setReplay(prev => prev ? { ...prev, idx: prev.idx + 1 } : prev);
+        }, ms);
         return () => clearInterval(id);
-      }, [on, mode, replay, speed]);
+      }, [on, mode, speed]); // replay intentionally omitted — interval is stable
+
+      // Replay canvas updater + signal generator — fires on every idx change
+      useEffect(() => {
+        if (!replay) return;
+        if (replay.done) {
+          setOn(false);
+          addLog('INFO', `✓ Replay complete · ${replay.total} bars scanned · ${signals.length} signals found`);
+          return;
+        }
+        const { data, idx } = replay;
+        if (!data) return;
+        Object.entries(data).forEach(([name, allCandles]) => {
+          const visible = allCandles.slice(0, Math.min(idx, allCandles.length));
+          if (visible.length === 0) return;
+          // Update visible candles for chart animation
+          setCandles(prev => {
+            if ((prev[name] || []).length === visible.length) return prev;
+            return { ...prev, [name]: visible };
+          });
+          // Run analyze every 3 bars to catch signals (not every tick — keeps UI smooth)
+          const lastAt = replayAnalyzedAt.current[name] || 0;
+          if (visible.length >= 20 && idx - lastAt >= 3) {
+            replayAnalyzedAt.current[name] = idx;
+            const instDef = INST.find(i => i.name === name);
+            if (!instDef) return;
+            try {
+              const sig = analyze(visible, instDef, 100000);
+              if (sig && sig.direction && sig.confidence >= 60) {
+                const lastC = visible[visible.length - 1];
+                const t = lastC.time
+                  ? new Date(lastC.time).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })
+                  : `bar ${idx}`;
+                const sigId = `REPLAY-${name}-${idx}`;
+                setSignals(prev => {
+                  if (prev.some(s => s.id === sigId)) return prev;
+                  beep(880);
+                  return [{
+                    id: sigId, inst: name, dir: sig.direction,
+                    type: sig.option?.type || (sig.direction === 'LONG' ? 'CE' : 'PE'),
+                    strike: sig.option?.strike, confidence: sig.confidence, t,
+                    status: 'REPLAY', reasons: sig.reasons || [], strategies: sig.strategies || [],
+                    entry: sig.entry, sl: sig.sl, target1: sig.target1,
+                  }, ...prev];
+                });
+              }
+            } catch(e) { /* signal calc errors are non-fatal */ }
+          }
+        });
+      }, [replay]); // eslint-disable-line react-hooks/exhaustive-deps
 
       const persist = (edits) => {
         Object.entries(edits).forEach(([k, v]) => localStorage.setItem(`se_${k}`, v));
