@@ -2094,6 +2094,7 @@ class Engine:
         self.client=AngelClient();self.sgen=SignalGen();self.opick=OptPicker()
         self.tracker=PLTracker(self.client);self.latest={};self.alerts=[]
         self.running=False;self._prev={};self._last_signal={}
+        self._chain_cache={}   # { name: {ts, opt, analytics, atm} } — 30s TTL per instrument
         self._regime=None
         self._last_regime_run=None
         self._last_eod_run=None
@@ -2223,55 +2224,73 @@ class Engine:
                     sig=self.sgen.analyze(df)
                     if not sig: continue
 
-                    # ── Always update latest for dashboard display (NO gates) ──
-                    # This ensures the UI always shows the live scan state,
-                    # even when confidence is below the alert threshold.
-                    _timing_now, _ = estimate_exit_time(sig)
-                    self.latest[name] = {
-                        "instrument": name, "lot_size": inst["lot_size"],
-                        "signal": sig, "option": None,
-                        "timing": _timing_now,
-                        "updated_at": datetime.now(IST).strftime("%H:%M:%S")
-                    }
+                    # ════════════════════════════════════════════════════════
+                    # STEP 1: Fetch option chain + analytics ALWAYS
+                    # This must happen OUTSIDE the alert cooldown so that
+                    # self.latest always carries real option data (strike,
+                    # premium, Greeks, PCR) — not null.
+                    # Rate-limited: re-fetch at most every 30s per instrument.
+                    # ════════════════════════════════════════════════════════
+                    now_ts = time.time()
+                    opt         = None
+                    chain       = None
+                    atm_val     = None
+                    greeks      = None
+                    chain_anal  = {}
 
-                    # 15-min cooldown: skip alerts/option-chain for this instrument
-                    _last_t=self._last_signal.get(name)
-                    if _last_t and (datetime.now(IST)-_last_t).total_seconds()<900: continue
-
-                    # Fetch real option chain at 10%+ confidence so every signal
-                    # gets a real strike/premium recommendation, not just index levels.
-                    # Also compute chain-level analytics (PCR, IV skew, OI concentration)
-                    # for the AI to cross-reference against index signals.
-                    opt=None
-                    chain=None
-                    atm=None
-                    greeks=None
-                    chain_anal={}
-                    if sig["confidence"]>=10 and sig.get("direction") in ("LONG","SHORT"):
+                    # Use cached chain if fetched in the last 30 s
+                    _cc = self._chain_cache.get(name, {})
+                    _cc_age = now_ts - _cc.get("ts", 0)
+                    if _cc_age < 30 and _cc.get("opt") is not None:
+                        opt         = _cc["opt"]
+                        chain_anal  = _cc["analytics"]
+                        atm_val     = _cc["atm"]
+                        log.info(f"  {name}: using cached chain (age {_cc_age:.0f}s)")
+                    elif sig.get("direction") in ("LONG", "SHORT"):
                         try:
-                            chain,atm=self.client.option_chain(inst,sig["price"])
+                            chain, atm_val = self.client.option_chain(inst, sig["price"])
                             if chain:
-                                expiry = chain[0].get("expiry","") if chain else ""
+                                expiry = chain[0].get("expiry", "") if chain else ""
                                 greeks = self.client.option_greeks(
                                     inst.get("expiry_prefix", name), expiry) if expiry else None
-                                opt=self.opick.pick(sig,inst,chain,atm,CONFIG.get("budget",20000),
-                                                    greeks=greeks)
-                                # Compute chain-level analytics for AI
-                                chain_anal = OptPicker.chain_analytics(chain, atm)
-                                log.info(f"  Chain analytics: PCR={chain_anal.get('pcr')} "
-                                         f"IV_skew={chain_anal.get('iv_skew')} "
-                                         f"max_pain={chain_anal.get('max_pain')}")
+                                opt = self.opick.pick(sig, inst, chain, atm_val,
+                                                      CONFIG.get("budget", 20000), greeks=greeks)
+                                chain_anal = OptPicker.chain_analytics(chain, atm_val)
+                                # Cache for 30 s to avoid hitting rate limits every 5-s scan
+                                self._chain_cache[name] = {
+                                    "ts": now_ts, "opt": opt,
+                                    "analytics": chain_anal, "atm": atm_val
+                                }
+                                log.info(f"  {name}: chain fetched — {opt.get('strike')} "
+                                         f"{opt.get('type')} ₹{opt.get('ltp')} | "
+                                         f"PCR={chain_anal.get('pcr')} skew={chain_anal.get('iv_skew')}")
                         except Exception as ce:
                             log.warning(f"  Chain fetch failed for {name}: {ce}")
 
-                    # Estimate exit time
+                    # ════════════════════════════════════════════════════════
+                    # STEP 2: Always update self.latest with real option data
+                    # (dashboard polls this; must reflect current scan state)
+                    # ════════════════════════════════════════════════════════
                     timing, _ = estimate_exit_time(sig)
+                    self.latest[name] = {
+                        "instrument": name, "lot_size": inst["lot_size"],
+                        "signal": sig, "option": opt,
+                        "timing": timing, "chain_analytics": chain_anal,
+                        "updated_at": datetime.now(IST).strftime("%H:%M:%S")
+                    }
 
-                    result={"instrument":name,"lot_size":inst["lot_size"],"signal":sig,"option":opt,
-                            "timing":timing,"chain_analytics":chain_anal,
-                            "updated_at":datetime.now(IST).strftime("%H:%M:%S")}
+                    # ════════════════════════════════════════════════════════
+                    # STEP 3: 15-min cooldown gates ALERT ONLY — not chain fetch
+                    # ════════════════════════════════════════════════════════
+                    _last_t = self._last_signal.get(name)
+                    if _last_t and (datetime.now(IST) - _last_t).total_seconds() < 900: continue
 
-                    prev=self._prev.get(name,{}).get("signal",{})
+                    result = {"instrument": name, "lot_size": inst["lot_size"],
+                              "signal": sig, "option": opt,
+                              "timing": timing, "chain_analytics": chain_anal,
+                              "updated_at": datetime.now(IST).strftime("%H:%M:%S")}
+
+                    prev = self._prev.get(name, {}).get("signal", {})
                     # Hard R:R gate — honour regime min_rr override (≥1.5)
                     if sig.get("risk_reward", 0) < min_rr_floor:
                         log.info(f"⛔ R:R gate blocked {name} {sig['direction']} "

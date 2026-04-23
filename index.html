@@ -8,7 +8,7 @@
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate"/>
   <meta http-equiv="Pragma" content="no-cache"/>
   <meta http-equiv="Expires" content="0"/>
-  <meta name="build-stamp" content="2026-04-22T11:30:00Z-chain-analytics-pcr-ivskew"/>
+  <meta name="build-stamp" content="2026-04-22T12:30:00Z-fix-chain-cooldown-premium-formula"/>
   <title>Signal Engine · Intraday</title>
 
   <link rel="manifest" href="manifest.json"/>
@@ -1277,15 +1277,21 @@
                         const indexEntry = displaySig.entry;
                         if (!indexEntry) return null;
                         const atm = Math.round(indexEntry / gap) * gap;
-                        // For CE: prefer ATM or 1 strike OTM (more affordable). For PE: ATM or 1 OTM.
-                        const recStrike = optType === 'CE' ? atm : atm;
-                        // Rough premium estimate using ivFactor (same as client-side analyze())
+                        const recStrike = atm; // ATM strike
+                        // ivFactor converts index level → approximate ATM premium
                         const ivFactor = { NIFTY: 0.0034, BANKNIFTY: 0.0050, FINNIFTY: 0.0054 }[displaySig.inst] || 0.0040;
+                        // ATM option delta ≈ 0.45 — use this to convert INDEX MOVES → OPTION MOVES
+                        const atmDelta = 0.45;
                         const idxRisk = displaySig.sl ? Math.abs(displaySig.entry - displaySig.sl) : gap * 0.5;
+                        const idxT1 = displaySig.target1 ? Math.abs(displaySig.target1 - displaySig.entry) : idxRisk * 1.5;
+                        const idxT2 = displaySig.target2 ? Math.abs(displaySig.target2 - displaySig.entry) : idxRisk * 2.5;
+                        // estEntry = ATM premium estimate from index level
                         const estEntry = Math.max(Math.round(indexEntry * ivFactor), 10);
-                        const estSl = Math.max(Math.round(estEntry * 0.60), 5);
-                        const estT1 = Math.round(estEntry + idxRisk * ivFactor * 1.5);
-                        const estT2 = Math.round(estEntry + idxRisk * ivFactor * 2.5);
+                        // Option SL: premium drops by idxRisk × delta (when index moves against us)
+                        const estSl = Math.max(Math.round(estEntry - idxRisk * atmDelta), 5);
+                        // Option T1/T2: premium rises by index move × delta (when index moves our way)
+                        const estT1 = Math.round(estEntry + idxT1 * atmDelta);
+                        const estT2 = Math.round(estEntry + idxT2 * atmDelta);
                         const lotSize = instDef.lot;
                         const budget = 20000;
                         const estLots = Math.max(1, Math.min(3, Math.floor((budget * 0.5) / (estEntry * lotSize))));
