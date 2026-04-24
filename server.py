@@ -38,7 +38,7 @@ CONFIG = {
     "lookback_days":     3,
     "target_points_min": int(os.environ.get("TARGET_MIN", "10")),
     "target_points_max": int(os.environ.get("TARGET_MAX", "15")),
-    "min_confidence":    int(os.environ.get("MIN_CONFIDENCE", "60")),
+    "min_confidence":    int(os.environ.get("MIN_CONFIDENCE", "45")),
     "budget":            int(os.environ.get("BUDGET", "20000")),
 
     # ── Slack Alert Config ──
@@ -681,10 +681,14 @@ class AngelClient:
                         if mid <= 0: continue
 
                         # Extract OI, volume, and other rich market data from FULL response
-                        oi    = int(float(item.get("openInterest", 0) or 0))
-                        vol   = int(float(item.get("totalTradedVolume", 0)
-                                          or item.get("tradeVolume", 0)
-                                          or item.get("volume", 0) or 0))
+                        # Angel One SmartAPI uses "opnInterest" (not "openInterest")
+                        # Try all known field variants across different API builds
+                        oi    = int(float(
+                            item.get("opnInterest") or item.get("openInterest") or
+                            item.get("oi") or 0))
+                        vol   = int(float(
+                            item.get("tradeVolume") or item.get("totalTradedVolume") or
+                            item.get("netTradedVolume") or item.get("volume") or 0))
                         gamma  = float(item.get("gamma", 0) or 0)
                         vega   = float(item.get("vega", 0) or 0)
                         # Some SmartAPI builds embed Greeks in the FULL response too
@@ -1093,19 +1097,21 @@ class SignalGen:
         if av < avg_atr * 0.6:
             conf=max(10,conf-10); penalties.append(f"Low ATR ({av:.1f} vs avg {avg_atr:.1f}) — no momentum")
         
-        # Late session penalty: theta decay accelerates after 2:30 PM
+        # Hard time gate: no new entries after 14:50 (not enough time for trade to run)
+        # Use a hard block rather than just penalty — any signal here is low quality
         now_hr = datetime.now(IST).hour
         now_min = datetime.now(IST).minute
+        if now_hr >= 15 or (now_hr == 14 and now_min >= 50):
+            return None   # Hard block — return no signal rather than a useless late one
         if now_hr == 14 and now_min >= 30:
             conf=max(10,conf-5); penalties.append("Late session — theta decay risk")
-        elif now_hr >= 15:
-            conf=max(10,conf-10); penalties.append("Market closing — avoid new entries")
         
-        # Margin too thin: bull-bear spread too narrow = unclear direction
+        # Margin too thin: bull-bear spread too narrow = truly ambiguous signal
+        # Raised threshold from 8 → 5 (was too aggressive, killed valid trending signals)
         spread = abs(bs - be)
-        if spread < 8:
-            conf=max(10,conf-8); penalties.append(f"Bull/Bear split too close ({bs}B vs {be}S)")
-        
+        if spread < 5:
+            conf=max(10,conf-6); penalties.append(f"Bull/Bear split close ({bs}B vs {be}S)")
+
         reasons = br if direction=="LONG" else ber
         if penalties:
             reasons = reasons + [f"⚠️ {p}" for p in penalties]
@@ -2266,6 +2272,54 @@ class Engine:
                                          f"PCR={chain_anal.get('pcr')} skew={chain_anal.get('iv_skew')}")
                         except Exception as ce:
                             log.warning(f"  Chain fetch failed for {name}: {ce}")
+
+                    # ════════════════════════════════════════════════════════
+                    # STEP 1b: Option chain confidence boost
+                    # The index signal gives ~30-50% confidence. Chain data
+                    # (PCR, IV skew, ATM volume) can confirm or deny direction
+                    # and push a signal over the alert threshold.
+                    # ════════════════════════════════════════════════════════
+                    if chain_anal:
+                        ca_boost = 0
+                        ca_notes = []
+                        pcr    = chain_anal.get("pcr", 1.0) or 1.0
+                        iv_sk  = chain_anal.get("iv_skew", 0) or 0
+                        ce_vol = chain_anal.get("total_ce_vol", 0) or 0
+                        pe_vol = chain_anal.get("total_pe_vol", 0) or 0
+                        dir_   = sig.get("direction")
+
+                        # PCR confirms direction
+                        if dir_ == "SHORT" and pcr > 1.1:
+                            ca_boost += 10; ca_notes.append(f"PCR {pcr:.2f} confirms bearish")
+                        elif dir_ == "SHORT" and pcr > 0.9:
+                            ca_boost += 5; ca_notes.append(f"PCR {pcr:.2f} neutral")
+                        elif dir_ == "SHORT" and pcr < 0.7:
+                            ca_boost -= 8; ca_notes.append(f"⚠️ PCR {pcr:.2f} bullish — contradicts SHORT")
+                        if dir_ == "LONG" and pcr < 0.7:
+                            ca_boost += 10; ca_notes.append(f"PCR {pcr:.2f} confirms bullish")
+                        elif dir_ == "LONG" and pcr < 0.9:
+                            ca_boost += 5; ca_notes.append(f"PCR {pcr:.2f} neutral")
+                        elif dir_ == "LONG" and pcr > 1.1:
+                            ca_boost -= 8; ca_notes.append(f"⚠️ PCR {pcr:.2f} bearish — contradicts LONG")
+
+                        # IV skew confirms direction (put skew = bearish pressure)
+                        if dir_ == "SHORT" and iv_sk > 2:
+                            ca_boost += 7; ca_notes.append(f"IV skew +{iv_sk:.1f} put premium (bearish fear)")
+                        elif dir_ == "LONG" and iv_sk < -2:
+                            ca_boost += 7; ca_notes.append(f"IV skew {iv_sk:.1f} call premium (bullish)")
+
+                        # Volume leadership confirms momentum
+                        if dir_ == "SHORT" and pe_vol > ce_vol * 1.3:
+                            ca_boost += 8; ca_notes.append(f"PE vol {pe_vol:,} > CE {ce_vol:,} (bearish flow)")
+                        elif dir_ == "LONG" and ce_vol > pe_vol * 1.3:
+                            ca_boost += 8; ca_notes.append(f"CE vol {ce_vol:,} > PE {pe_vol:,} (bullish flow)")
+
+                        # Apply boost (cap at 25 pts from chain, min 0 after deductions)
+                        ca_boost = max(-15, min(25, ca_boost))
+                        if ca_boost != 0:
+                            sig["confidence"] = min(95, max(10, sig["confidence"] + ca_boost))
+                            sig.setdefault("reasons", []).extend(ca_notes)
+                            log.info(f"  {name}: chain boost {ca_boost:+d}pts → conf={sig['confidence']}%")
 
                     # ════════════════════════════════════════════════════════
                     # STEP 2: Always update self.latest with real option data
