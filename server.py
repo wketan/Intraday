@@ -110,6 +110,95 @@ INSTRUMENTS = {
 }
 
 # ═══════════════════════════════════════════════════════════════════
+# SWING / POSITIONAL STOCK UNIVERSE
+# Tokens resolved dynamically from InstrumentMaster at runtime.
+# nse_fo_name = the name key in Angel One's NFO instrument master (OPTSTK).
+# ═══════════════════════════════════════════════════════════════════
+SWING_STOCKS = {
+    # ── Indices — swing uses monthly expiry ─────────────────────────
+    "NIFTY_SW":     {"nse_sym":"Nifty 50",           "nse_fo":"NIFTY",      "exchange":"NSE","type":"INDEX","fo_eligible":True,"lot_size":75,  "strike_gap":50,  "token":"99926000"},
+    "BANKNIFTY_SW": {"nse_sym":"Nifty Bank",          "nse_fo":"BANKNIFTY",  "exchange":"NSE","type":"INDEX","fo_eligible":True,"lot_size":30,  "strike_gap":100, "token":"99926009"},
+    "FINNIFTY_SW":  {"nse_sym":"Nifty Fin Services",  "nse_fo":"FINNIFTY",   "exchange":"NSE","type":"INDEX","fo_eligible":True,"lot_size":60,  "strike_gap":50,  "token":"99926037"},
+    # ── Nifty 50 stocks ─────────────────────────────────────────────
+    "RELIANCE":    {"nse_sym":"RELIANCE",   "nse_fo":"RELIANCE",   "exchange":"NSE","type":"STOCK","fo_eligible":True,"lot_size":250, "strike_gap":20},
+    "TCS":         {"nse_sym":"TCS",        "nse_fo":"TCS",        "exchange":"NSE","type":"STOCK","fo_eligible":True,"lot_size":150, "strike_gap":50},
+    "HDFCBANK":    {"nse_sym":"HDFCBANK",   "nse_fo":"HDFCBANK",   "exchange":"NSE","type":"STOCK","fo_eligible":True,"lot_size":550, "strike_gap":10},
+    "INFY":        {"nse_sym":"INFY",       "nse_fo":"INFY",       "exchange":"NSE","type":"STOCK","fo_eligible":True,"lot_size":400, "strike_gap":20},
+    "ICICIBANK":   {"nse_sym":"ICICIBANK",  "nse_fo":"ICICIBANK",  "exchange":"NSE","type":"STOCK","fo_eligible":True,"lot_size":700, "strike_gap":10},
+    "SBIN":        {"nse_sym":"SBIN",       "nse_fo":"SBIN",       "exchange":"NSE","type":"STOCK","fo_eligible":True,"lot_size":1500,"strike_gap":5},
+    "BAJFINANCE":  {"nse_sym":"BAJFINANCE", "nse_fo":"BAJFINANCE", "exchange":"NSE","type":"STOCK","fo_eligible":True,"lot_size":125, "strike_gap":50},
+    "KOTAKBANK":   {"nse_sym":"KOTAKBANK",  "nse_fo":"KOTAKBANK",  "exchange":"NSE","type":"STOCK","fo_eligible":True,"lot_size":400, "strike_gap":20},
+    "LT":          {"nse_sym":"LT",         "nse_fo":"LT",         "exchange":"NSE","type":"STOCK","fo_eligible":True,"lot_size":150, "strike_gap":50},
+    "AXISBANK":    {"nse_sym":"AXISBANK",   "nse_fo":"AXISBANK",   "exchange":"NSE","type":"STOCK","fo_eligible":True,"lot_size":625, "strike_gap":10},
+    "ASIANPAINT":  {"nse_sym":"ASIANPAINT", "nse_fo":"ASIANPAINT", "exchange":"NSE","type":"STOCK","fo_eligible":True,"lot_size":200, "strike_gap":25},
+    "MARUTI":      {"nse_sym":"MARUTI",     "nse_fo":"MARUTI",     "exchange":"NSE","type":"STOCK","fo_eligible":True,"lot_size":37,  "strike_gap":100},
+    "TITAN":       {"nse_sym":"TITAN",      "nse_fo":"TITAN",      "exchange":"NSE","type":"STOCK","fo_eligible":True,"lot_size":375, "strike_gap":20},
+    "WIPRO":       {"nse_sym":"WIPRO",      "nse_fo":"WIPRO",      "exchange":"NSE","type":"STOCK","fo_eligible":True,"lot_size":1500,"strike_gap":5},
+    "ULTRACEMCO":  {"nse_sym":"ULTRACEMCO", "nse_fo":"ULTRACEMCO", "exchange":"NSE","type":"STOCK","fo_eligible":True,"lot_size":100, "strike_gap":50},
+    "NESTLEIND":   {"nse_sym":"NESTLEIND",  "nse_fo":"NESTLEIND",  "exchange":"NSE","type":"STOCK","fo_eligible":True,"lot_size":40,  "strike_gap":100},
+    "TECHM":       {"nse_sym":"TECHM",      "nse_fo":"TECHM",      "exchange":"NSE","type":"STOCK","fo_eligible":True,"lot_size":600, "strike_gap":10},
+    "SUNPHARMA":   {"nse_sym":"SUNPHARMA",  "nse_fo":"SUNPHARMA",  "exchange":"NSE","type":"STOCK","fo_eligible":True,"lot_size":700, "strike_gap":10},
+    "POWERGRID":   {"nse_sym":"POWERGRID",  "nse_fo":"POWERGRID",  "exchange":"NSE","type":"STOCK","fo_eligible":True,"lot_size":3000,"strike_gap":5},
+    "NTPC":        {"nse_sym":"NTPC",       "nse_fo":"NTPC",       "exchange":"NSE","type":"STOCK","fo_eligible":True,"lot_size":3000,"strike_gap":5},
+    "ONGC":        {"nse_sym":"ONGC",       "nse_fo":"ONGC",       "exchange":"NSE","type":"STOCK","fo_eligible":True,"lot_size":1925,"strike_gap":5},
+    "COALINDIA":   {"nse_sym":"COALINDIA",  "nse_fo":"COALINDIA",  "exchange":"NSE","type":"STOCK","fo_eligible":True,"lot_size":2800,"strike_gap":5},
+    "BPCL":        {"nse_sym":"BPCL",       "nse_fo":"BPCL",       "exchange":"NSE","type":"STOCK","fo_eligible":True,"lot_size":1800,"strike_gap":5},
+    "CIPLA":       {"nse_sym":"CIPLA",      "nse_fo":"CIPLA",      "exchange":"NSE","type":"STOCK","fo_eligible":True,"lot_size":650, "strike_gap":10},
+    "HCLTECH":     {"nse_sym":"HCLTECH",    "nse_fo":"HCLTECH",    "exchange":"NSE","type":"STOCK","fo_eligible":True,"lot_size":700, "strike_gap":10},
+    "DIVISLAB":    {"nse_sym":"DIVISLAB",   "nse_fo":"DIVISLAB",   "exchange":"NSE","type":"STOCK","fo_eligible":True,"lot_size":200, "strike_gap":50},
+    "MM":          {"nse_sym":"M&M",        "nse_fo":"M&M",        "exchange":"NSE","type":"STOCK","fo_eligible":True,"lot_size":350, "strike_gap":20},
+    "EICHERMOT":   {"nse_sym":"EICHERMOT",  "nse_fo":"EICHERMOT",  "exchange":"NSE","type":"STOCK","fo_eligible":True,"lot_size":175, "strike_gap":25},
+    "TATACONSUM":  {"nse_sym":"TATACONSUM", "nse_fo":"TATACONSUM", "exchange":"NSE","type":"STOCK","fo_eligible":True,"lot_size":1150,"strike_gap":5},
+    "BAJAJFINSV":  {"nse_sym":"BAJAJFINSV", "nse_fo":"BAJAJFINSV", "exchange":"NSE","type":"STOCK","fo_eligible":True,"lot_size":1000,"strike_gap":5},
+    "HEROMOTOCO":  {"nse_sym":"HEROMOTOCO", "nse_fo":"HEROMOTOCO", "exchange":"NSE","type":"STOCK","fo_eligible":True,"lot_size":300, "strike_gap":20},
+    "DRREDDY":     {"nse_sym":"DRREDDY",    "nse_fo":"DRREDDY",    "exchange":"NSE","type":"STOCK","fo_eligible":True,"lot_size":125, "strike_gap":50},
+    "ADANIPORTS":  {"nse_sym":"ADANIPORTS", "nse_fo":"ADANIPORTS", "exchange":"NSE","type":"STOCK","fo_eligible":True,"lot_size":1000,"strike_gap":10},
+    "JSWSTEEL":    {"nse_sym":"JSWSTEEL",   "nse_fo":"JSWSTEEL",   "exchange":"NSE","type":"STOCK","fo_eligible":True,"lot_size":900, "strike_gap":10},
+    "TATASTEEL":   {"nse_sym":"TATASTEEL",  "nse_fo":"TATASTEEL",  "exchange":"NSE","type":"STOCK","fo_eligible":True,"lot_size":5500,"strike_gap":5},
+    "GRASIM":      {"nse_sym":"GRASIM",     "nse_fo":"GRASIM",     "exchange":"NSE","type":"STOCK","fo_eligible":True,"lot_size":475, "strike_gap":10},
+    "BRITANNIA":   {"nse_sym":"BRITANNIA",  "nse_fo":"BRITANNIA",  "exchange":"NSE","type":"STOCK","fo_eligible":True,"lot_size":200, "strike_gap":25},
+    "HINDALCO":    {"nse_sym":"HINDALCO",   "nse_fo":"HINDALCO",   "exchange":"NSE","type":"STOCK","fo_eligible":True,"lot_size":2150,"strike_gap":5},
+    "APOLLOHOSP":  {"nse_sym":"APOLLOHOSP", "nse_fo":"APOLLOHOSP", "exchange":"NSE","type":"STOCK","fo_eligible":True,"lot_size":125, "strike_gap":50},
+    "INDUSINDBK":  {"nse_sym":"INDUSINDBK", "nse_fo":"INDUSINDBK", "exchange":"NSE","type":"STOCK","fo_eligible":True,"lot_size":700, "strike_gap":10},
+    "SHRIRAMFIN":  {"nse_sym":"SHRIRAMFIN", "nse_fo":"SHRIRAMFIN", "exchange":"NSE","type":"STOCK","fo_eligible":True,"lot_size":375, "strike_gap":20},
+    "SBILIFE":     {"nse_sym":"SBILIFE",    "nse_fo":"SBILIFE",    "exchange":"NSE","type":"STOCK","fo_eligible":True,"lot_size":750, "strike_gap":10},
+    "HDFCLIFE":    {"nse_sym":"HDFCLIFE",   "nse_fo":"HDFCLIFE",   "exchange":"NSE","type":"STOCK","fo_eligible":True,"lot_size":1100,"strike_gap":5},
+    "BAJAJ_AUTO":  {"nse_sym":"BAJAJ-AUTO", "nse_fo":"BAJAJ-AUTO", "exchange":"NSE","type":"STOCK","fo_eligible":True,"lot_size":75,  "strike_gap":100},
+    "TATAMOTORS":  {"nse_sym":"TATAMOTORS", "nse_fo":"TATAMOTORS", "exchange":"NSE","type":"STOCK","fo_eligible":True,"lot_size":2000,"strike_gap":5},
+    "TATAPOWER":   {"nse_sym":"TATAPOWER",  "nse_fo":"TATAPOWER",  "exchange":"NSE","type":"STOCK","fo_eligible":True,"lot_size":4275,"strike_gap":2},
+    "ITC":         {"nse_sym":"ITC",        "nse_fo":"ITC",        "exchange":"NSE","type":"STOCK","fo_eligible":True,"lot_size":3200,"strike_gap":5},
+    # ── High-quality F&O mid/large caps ─────────────────────────────
+    "VEDL":        {"nse_sym":"VEDL",       "nse_fo":"VEDL",       "exchange":"NSE","type":"STOCK","fo_eligible":True,"lot_size":2000,"strike_gap":5},
+    "ZOMATO":      {"nse_sym":"ZOMATO",     "nse_fo":"ZOMATO",     "exchange":"NSE","type":"STOCK","fo_eligible":True,"lot_size":3750,"strike_gap":2},
+    "ADANIENT":    {"nse_sym":"ADANIENT",   "nse_fo":"ADANIENT",   "exchange":"NSE","type":"STOCK","fo_eligible":True,"lot_size":750, "strike_gap":10},
+    "PIDILITIND":  {"nse_sym":"PIDILITIND", "nse_fo":"PIDILITIND", "exchange":"NSE","type":"STOCK","fo_eligible":True,"lot_size":375, "strike_gap":20},
+    "HAVELLS":     {"nse_sym":"HAVELLS",    "nse_fo":"HAVELLS",    "exchange":"NSE","type":"STOCK","fo_eligible":True,"lot_size":500, "strike_gap":10},
+    "HAL":         {"nse_sym":"HAL",        "nse_fo":"HAL",        "exchange":"NSE","type":"STOCK","fo_eligible":True,"lot_size":300, "strike_gap":25},
+    "BEL":         {"nse_sym":"BEL",        "nse_fo":"BEL",        "exchange":"NSE","type":"STOCK","fo_eligible":True,"lot_size":4550,"strike_gap":5},
+    "IRCTC":       {"nse_sym":"IRCTC",      "nse_fo":"IRCTC",      "exchange":"NSE","type":"STOCK","fo_eligible":True,"lot_size":875, "strike_gap":10},
+    "TVSMOTOR":    {"nse_sym":"TVSMOTOR",   "nse_fo":"TVSMOTOR",   "exchange":"NSE","type":"STOCK","fo_eligible":True,"lot_size":350, "strike_gap":20},
+    "CHOLAFIN":    {"nse_sym":"CHOLAFIN",   "nse_fo":"CHOLAFIN",   "exchange":"NSE","type":"STOCK","fo_eligible":True,"lot_size":1000,"strike_gap":10},
+    "HDFCAMC":     {"nse_sym":"HDFCAMC",    "nse_fo":"HDFCAMC",    "exchange":"NSE","type":"STOCK","fo_eligible":True,"lot_size":300, "strike_gap":25},
+    "ICICIGI":     {"nse_sym":"ICICIGI",    "nse_fo":"ICICIGI",    "exchange":"NSE","type":"STOCK","fo_eligible":True,"lot_size":600, "strike_gap":10},
+    "ICICIPRULI":  {"nse_sym":"ICICIPRULI", "nse_fo":"ICICIPRULI", "exchange":"NSE","type":"STOCK","fo_eligible":True,"lot_size":1500,"strike_gap":5},
+    "MUTHOOTFIN":  {"nse_sym":"MUTHOOTFIN", "nse_fo":"MUTHOOTFIN", "exchange":"NSE","type":"STOCK","fo_eligible":True,"lot_size":375, "strike_gap":20},
+    "MOTHERSON":   {"nse_sym":"MOTHERSON",  "nse_fo":"MOTHERSON",  "exchange":"NSE","type":"STOCK","fo_eligible":True,"lot_size":3500,"strike_gap":5},
+    "BALKRISIND":  {"nse_sym":"BALKRISIND", "nse_fo":"BALKRISIND", "exchange":"NSE","type":"STOCK","fo_eligible":True,"lot_size":375, "strike_gap":20},
+    "INDHOTEL":    {"nse_sym":"INDHOTEL",   "nse_fo":"INDHOTEL",   "exchange":"NSE","type":"STOCK","fo_eligible":True,"lot_size":1500,"strike_gap":5},
+    "CANBK":       {"nse_sym":"CANBK",      "nse_fo":"CANBK",      "exchange":"NSE","type":"STOCK","fo_eligible":True,"lot_size":3000,"strike_gap":2},
+    "PNB":         {"nse_sym":"PNB",        "nse_fo":"PNB",        "exchange":"NSE","type":"STOCK","fo_eligible":True,"lot_size":7600,"strike_gap":2},
+    "FEDERALBNK":  {"nse_sym":"FEDERALBNK", "nse_fo":"FEDERALBNK", "exchange":"NSE","type":"STOCK","fo_eligible":True,"lot_size":6000,"strike_gap":2},
+    "SAIL":        {"nse_sym":"SAIL",       "nse_fo":"SAIL",       "exchange":"NSE","type":"STOCK","fo_eligible":True,"lot_size":6750,"strike_gap":2},
+    "NMDC":        {"nse_sym":"NMDC",       "nse_fo":"NMDC",       "exchange":"NSE","type":"STOCK","fo_eligible":True,"lot_size":4500,"strike_gap":5},
+    "IDFCFIRSTB":  {"nse_sym":"IDFCFIRSTB", "nse_fo":"IDFCFIRSTB", "exchange":"NSE","type":"STOCK","fo_eligible":True,"lot_size":4500,"strike_gap":2},
+    "BANKINDIA":   {"nse_sym":"BANKINDIA",  "nse_fo":"BANKINDIA",  "exchange":"NSE","type":"STOCK","fo_eligible":True,"lot_size":4500,"strike_gap":2},
+    "SBICARD":     {"nse_sym":"SBICARD",    "nse_fo":"SBICARD",    "exchange":"NSE","type":"STOCK","fo_eligible":True,"lot_size":2000,"strike_gap":5},
+    "NAUKRI":      {"nse_sym":"NAUKRI",     "nse_fo":"NAUKRI",     "exchange":"NSE","type":"STOCK","fo_eligible":True,"lot_size":150, "strike_gap":50},
+    "AMBUJACEM":   {"nse_sym":"AMBUJACEM",  "nse_fo":"AMBUJACEM",  "exchange":"NSE","type":"STOCK","fo_eligible":True,"lot_size":2000,"strike_gap":5},
+    "BIOCON":      {"nse_sym":"BIOCON",     "nse_fo":"BIOCON",     "exchange":"NSE","type":"STOCK","fo_eligible":True,"lot_size":3500,"strike_gap":5},
+}
+
+# ═══════════════════════════════════════════════════════════════════
 # LOGGING
 # ═══════════════════════════════════════════════════════════════════
 logging.basicConfig(
@@ -302,6 +391,34 @@ def init_db():
             action TEXT, reasoning TEXT, raw_json TEXT
         )
     """)
+    # ── Swing / Positional position tracker ──────────────────────────
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS swing_positions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            instrument TEXT NOT NULL, instrument_type TEXT,
+            direction TEXT NOT NULL,
+            entry_date TEXT NOT NULL, entry_time TEXT,
+            spot_entry REAL, spot_sl REAL, spot_target1 REAL, spot_target2 REAL,
+            option_symbol TEXT, option_strike REAL, option_type TEXT,
+            option_expiry TEXT, option_token TEXT, option_dte INTEGER,
+            option_entry REAL, option_sl REAL, option_target1 REAL,
+            lot_size INTEGER, lots INTEGER, capital REAL,
+            status TEXT DEFAULT 'OPEN',
+            exit_date TEXT, exit_price REAL, option_exit REAL,
+            pnl_pct REAL, pnl_rupees REAL, result TEXT,
+            hold_days INTEGER,
+            last_ai_decision TEXT, last_ai_reasoning TEXT, last_ai_ts TEXT,
+            reasons TEXT, indicators TEXT, source TEXT DEFAULT 'AUTO'
+        )
+    """)
+    # Migrate existing swing_positions table if needed
+    sw_cols = {r[1] for r in c.execute("PRAGMA table_info(swing_positions)").fetchall()}
+    for col_decl in [("last_ai_decision","TEXT"),("last_ai_reasoning","TEXT"),("last_ai_ts","TEXT"),("source","TEXT"),("hold_days","INTEGER")]:
+        col, typ = col_decl
+        if col not in sw_cols:
+            try: c.execute(f"ALTER TABLE swing_positions ADD COLUMN {col} {typ}")
+            except Exception as e: log.warning(f"  swing migrate add {col}: {e}")
+
     conn.commit(); conn.close()
     log.info("📊 Database ready")
 
@@ -606,6 +723,32 @@ class AngelClient:
         except Exception as e:
             log.error(f"Candle err: {e}"); return pd.DataFrame()
     
+    def daily_candles(self, token, exchange="NSE", days=90):
+        """Fetch daily OHLCV candles — used for swing analysis.
+        Returns list of dicts {ts, open, high, low, close, volume} or []."""
+        try:
+            if not self.ensure(): return []
+            from_dt = (datetime.now(IST) - timedelta(days=days)).strftime("%Y-%m-%d 09:15")
+            to_dt   = datetime.now(IST).strftime("%Y-%m-%d %H:%M")
+            params  = {"exchange": exchange, "symboltoken": str(token),
+                       "interval": "ONE_DAY", "fromdate": from_dt, "todate": to_dt}
+            import concurrent.futures as _cf3
+            with _cf3.ThreadPoolExecutor(max_workers=1) as _ex3:
+                try:
+                    resp = _ex3.submit(self.api.getCandleData, params).result(timeout=15)
+                except _cf3.TimeoutError:
+                    log.error(f"[Swing] daily_candles timeout for token {token}")
+                    return []
+            if resp and resp.get("status") and resp.get("data"):
+                raw = resp["data"]  # [[ts, o, h, l, c, v], ...]
+                return [{"ts": r[0], "open": float(r[1]), "high": float(r[2]),
+                         "low": float(r[3]), "close": float(r[4]),
+                         "volume": float(r[5])} for r in raw if len(r) >= 6]
+            return []
+        except Exception as e:
+            log.error(f"[Swing] daily_candles err token={token}: {e}")
+            return []
+
     def ltp(self, exchange, symbol, token):
         """Get LTP for a single instrument."""
         try:
@@ -805,6 +948,7 @@ class InstrumentMaster:
     def __init__(self):
         self.data = []
         self.nfo = {}
+        self.nse_eq = {}   # symbol_upper → {token, lot_size}  (NSE equity)
         self.loaded = False
         self.load_time = None
     
@@ -871,6 +1015,27 @@ class InstrumentMaster:
                 nfo_count += 1
             
             log.info(f"  Master: {nfo_count} NFO options indexed")
+
+            # Also index NSE equity for swing daily candle lookups
+            eq_count = 0
+            self.nse_eq = {}
+            for item in self.data:
+                if item.get("exch_seg") != "NSE": continue
+                itype = item.get("instrumenttype", "")
+                # EQ = equity, AMXIDX = index
+                if itype not in ("EQ", "AMXIDX", ""): continue
+                sym = (item.get("symbol") or "").upper()
+                name = (item.get("name") or item.get("symbol") or "").upper()
+                tok = item.get("token", "")
+                if not tok or not sym: continue
+                # Store by both symbol (e.g. "RELIANCE-EQ") and name (e.g. "RELIANCE")
+                self.nse_eq[sym] = {"token": tok, "symbol": sym, "name": name}
+                bare = sym.replace("-EQ", "").replace("-BE", "")
+                if bare and bare not in self.nse_eq:
+                    self.nse_eq[bare] = {"token": tok, "symbol": sym, "name": name}
+                eq_count += 1
+            log.info(f"  Master: {eq_count} NSE equity instruments indexed")
+
             self.loaded = True
             self.load_time = datetime.now(IST)
             return True
@@ -933,6 +1098,65 @@ class InstrumentMaster:
                     results.append({**info, "dte": dte})
         
         log.info(f"  Found {len(results)} option tokens for {name_prefix} (wanted {len(strikes)*2})")
+        return results
+
+    def find_equity_token(self, symbol):
+        """Return NSE equity token for a stock symbol (e.g. 'RELIANCE' or 'RELIANCE-EQ')."""
+        if not self.ensure(): return None
+        sym = symbol.upper().replace(" ", "").replace("&", "&")
+        hit = self.nse_eq.get(sym) or self.nse_eq.get(sym + "-EQ") or self.nse_eq.get(sym.replace("&", ""))
+        if hit: return hit["token"]
+        # Fuzzy: try dropping common suffixes/prefixes
+        for candidate, info in self.nse_eq.items():
+            if candidate.startswith(sym) or sym.startswith(candidate):
+                return info["token"]
+        return None
+
+    def find_swing_options(self, fo_name, spot, direction, min_dte=15, num_strikes=5):
+        """Like find_options but prefers expiry with ≥ min_dte days remaining.
+        For swing trades we want time — weekly expiry is too short."""
+        if not self.ensure(): return []
+        today = datetime.now(IST).date()
+        # Collect all future expiries for this name
+        expiries_by_date = {}
+        for (name, strike, otype, expiry), info in self.nfo.items():
+            if name != fo_name: continue
+            try:
+                d = datetime.strptime(expiry, "%d%b%Y").date()
+                if d >= today:
+                    expiries_by_date[expiry] = d
+            except: continue
+        if not expiries_by_date:
+            log.debug(f"  [Swing] No future expiries for {fo_name}")
+            return []
+        # Sort and pick first expiry with ≥ min_dte; fallback to nearest
+        sorted_exp = sorted(expiries_by_date.items(), key=lambda x: x[1])
+        chosen_exp, chosen_date = None, None
+        for exp, d in sorted_exp:
+            dte = (d - today).days
+            if dte >= min_dte:
+                chosen_exp, chosen_date = exp, d
+                break
+        if not chosen_exp:
+            # All expiries are < min_dte — take the furthest available
+            chosen_exp, chosen_date = sorted_exp[-1]
+        dte = (chosen_date - today).days
+        log.info(f"  [Swing] {fo_name} expiry {chosen_exp} ({dte} DTE)")
+        # Generate strikes around spot
+        gap = 1
+        for info in SWING_STOCKS.values():
+            if info.get("nse_fo") == fo_name:
+                gap = info.get("strike_gap", 50); break
+        atm = round(spot / gap) * gap
+        strikes = [atm + i * gap for i in range(-num_strikes, num_strikes + 1)]
+        right = "CE" if direction == "LONG" else "PE"
+        results = []
+        for s in strikes:
+            key = (fo_name, float(s), right, chosen_exp)
+            info = self.nfo.get(key)
+            if info:
+                results.append({**info, "dte": dte})
+        log.info(f"  [Swing] Found {len(results)} {right} option tokens for {fo_name}")
         return results
 
 # Global instance — loaded once
@@ -2686,6 +2910,546 @@ class Engine:
             "slack_enabled":CONFIG["slack_enabled"] and bool(CONFIG["slack_webhook"])}
 
 # ═══════════════════════════════════════════════════════════════════
+# SWING POSITION DB HELPERS
+# ═══════════════════════════════════════════════════════════════════
+def swing_pos_save(data):
+    """Insert a new swing position row. Returns new row id."""
+    q = """INSERT INTO swing_positions
+           (instrument,instrument_type,direction,entry_date,entry_time,
+            spot_entry,spot_sl,spot_target1,spot_target2,
+            option_symbol,option_strike,option_type,option_expiry,option_token,option_dte,
+            option_entry,option_sl,option_target1,lot_size,lots,capital,
+            source,reasons,indicators)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)"""
+    ind = json.dumps(data.get("indicators") or {})
+    reas = json.dumps(data.get("reasons") or [])
+    params = (
+        data["instrument"], data.get("instrument_type","STOCK"),
+        data["direction"],
+        data.get("entry_date", datetime.now(IST).strftime("%Y-%m-%d")),
+        data.get("entry_time", datetime.now(IST).strftime("%H:%M")),
+        data.get("spot_entry"), data.get("spot_sl"),
+        data.get("spot_target1"), data.get("spot_target2"),
+        data.get("option_symbol"), data.get("option_strike"),
+        data.get("option_type"), data.get("option_expiry"),
+        data.get("option_token"), data.get("option_dte"),
+        data.get("option_entry"), data.get("option_sl"), data.get("option_target1"),
+        data.get("lot_size"), data.get("lots",1), data.get("capital"),
+        data.get("source","AUTO"), reas, ind,
+    )
+    result = db_exec(q, params)
+    return result
+
+def swing_pos_list(status=None):
+    if status:
+        rows = db_exec("SELECT * FROM swing_positions WHERE status=? ORDER BY id DESC", (status,), fetch=True)
+    else:
+        rows = db_exec("SELECT * FROM swing_positions ORDER BY id DESC LIMIT 200", fetch=True)
+    return [dict(r) for r in rows] if rows else []
+
+def swing_pos_update(pos_id, **kwargs):
+    if not kwargs: return
+    sets = ", ".join(f"{k}=?" for k in kwargs)
+    vals = list(kwargs.values()) + [pos_id]
+    db_exec(f"UPDATE swing_positions SET {sets} WHERE id=?", vals)
+
+def swing_pos_close(pos_id, exit_price, option_exit=None):
+    pos = db_exec("SELECT * FROM swing_positions WHERE id=?", (pos_id,), fetchone=True)
+    if not pos: return None
+    pos = dict(pos)
+    entry_date = pos.get("entry_date","")
+    today = datetime.now(IST).strftime("%Y-%m-%d")
+    hold_days = 0
+    try:
+        from datetime import date as _date
+        d0 = _date.fromisoformat(entry_date)
+        d1 = _date.fromisoformat(today)
+        hold_days = (d1 - d0).days
+    except: pass
+    opt_entry = pos.get("option_entry") or 0
+    lots      = pos.get("lots") or 1
+    lot_size  = pos.get("lot_size") or 1
+    direction = pos.get("direction","LONG")
+    qty       = lots * lot_size
+    if option_exit is not None and opt_entry > 0:
+        pnl_per = (option_exit - opt_entry) if direction == "LONG" else (opt_entry - option_exit)
+        pnl_rs  = round(pnl_per * qty, 0)
+        pnl_pct = round(pnl_per / max(opt_entry, 0.01) * 100, 1) if direction == "LONG" else round(-pnl_per / max(opt_entry, 0.01) * 100, 1)
+    elif pos.get("spot_entry") and exit_price:
+        spot_entry = pos.get("spot_entry")
+        pnl_per = (exit_price - spot_entry) if direction == "LONG" else (spot_entry - exit_price)
+        pnl_rs  = round(pnl_per * qty, 0)
+        pnl_pct = round(pnl_per / max(spot_entry, 0.01) * 100, 1)
+    else:
+        pnl_rs = 0; pnl_pct = 0
+    result = "WIN" if pnl_rs >= 0 else "LOSS"
+    swing_pos_update(pos_id, status="CLOSED", exit_date=today,
+                     exit_price=exit_price, option_exit=option_exit,
+                     pnl_rupees=pnl_rs, pnl_pct=pnl_pct,
+                     result=result, hold_days=hold_days)
+    return {"pnl_rupees": pnl_rs, "pnl_pct": pnl_pct, "result": result}
+
+def swing_perf():
+    rows = db_exec("SELECT * FROM swing_positions WHERE status='CLOSED'", fetch=True)
+    if not rows: return {"total":0,"wins":0,"losses":0,"win_rate":0,"total_pnl":0,"avg_hold_days":0}
+    rows = [dict(r) for r in rows]
+    wins = [r for r in rows if r.get("result")=="WIN"]
+    losses = [r for r in rows if r.get("result")=="LOSS"]
+    pnls = [r.get("pnl_rupees") or 0 for r in rows]
+    hold = [r.get("hold_days") or 0 for r in rows if r.get("hold_days")]
+    return {
+        "total": len(rows), "wins": len(wins), "losses": len(losses),
+        "win_rate": round(len(wins)/len(rows)*100,1) if rows else 0,
+        "total_pnl": round(sum(pnls),0),
+        "avg_win": round(sum(r.get("pnl_rupees",0) or 0 for r in wins)/max(len(wins),1),0),
+        "avg_loss": round(sum(r.get("pnl_rupees",0) or 0 for r in losses)/max(len(losses),1),0),
+        "avg_hold_days": round(sum(hold)/max(len(hold),1),1),
+    }
+
+
+# ═══════════════════════════════════════════════════════════════════
+# SWING ANALYSIS  — daily-timeframe technical signal engine
+# ═══════════════════════════════════════════════════════════════════
+class SwingAnalysis:
+    """
+    Scores a daily candle series for swing trade setups.
+    Returns a signal dict (direction, confidence, levels, reasons) or None.
+    """
+
+    @staticmethod
+    def _ema(series, span):
+        return series.ewm(span=span, adjust=False).mean()
+
+    @staticmethod
+    def analyze(name, candles, info):
+        """
+        candles: list of dicts {ts, open, high, low, close, volume} — oldest first.
+        Returns signal dict or None if no clear setup.
+        """
+        try:
+            if len(candles) < 35: return None
+            closes  = pd.Series([c["close"]  for c in candles], dtype=float)
+            highs   = pd.Series([c["high"]   for c in candles], dtype=float)
+            lows    = pd.Series([c["low"]    for c in candles], dtype=float)
+            volumes = pd.Series([c["volume"] for c in candles], dtype=float)
+
+            # ── Indicators ───────────────────────────────────────────
+            ema9   = SwingAnalysis._ema(closes, 9)
+            ema21  = SwingAnalysis._ema(closes, 21)
+            ema50  = SwingAnalysis._ema(closes, 50)
+            ema200 = SwingAnalysis._ema(closes, 200) if len(closes) >= 60 else ema50.copy()
+
+            # RSI-14
+            delta    = closes.diff()
+            avg_g    = delta.clip(lower=0).ewm(com=13, adjust=False).mean()
+            avg_l    = (-delta).clip(lower=0).ewm(com=13, adjust=False).mean()
+            rsi      = 100 - 100 / (1 + avg_g / (avg_l + 1e-9))
+
+            # MACD (12/26/9)
+            macd_line   = SwingAnalysis._ema(closes, 12) - SwingAnalysis._ema(closes, 26)
+            signal_line = SwingAnalysis._ema(macd_line, 9)
+            macd_hist   = macd_line - signal_line
+
+            # ATR-14
+            tr = pd.concat([
+                highs - lows,
+                (highs - closes.shift()).abs(),
+                (lows  - closes.shift()).abs(),
+            ], axis=1).max(axis=1)
+            atr14 = tr.rolling(14).mean()
+
+            vol_avg20 = volumes.rolling(20).mean()
+
+            # ── Current (last bar) values ─────────────────────────────
+            c       = closes.iloc[-1]
+            p_close = closes.iloc[-2]
+            c9      = ema9.iloc[-1];  c21 = ema21.iloc[-1]
+            c50     = ema50.iloc[-1]; c200 = ema200.iloc[-1]
+            c_rsi   = rsi.iloc[-1]
+            c_hist  = macd_hist.iloc[-1]; p_hist = macd_hist.iloc[-2]
+            c_macd  = macd_line.iloc[-1]; c_sig = signal_line.iloc[-1]
+            c_atr   = atr14.iloc[-1]
+            c_vol   = volumes.iloc[-1]; c_vol_avg = vol_avg20.iloc[-1]
+            high20  = highs.rolling(20).max().iloc[-2]   # excl today
+            low20   = lows.rolling(20).min().iloc[-2]
+
+            # ── Scoring ───────────────────────────────────────────────
+            ls = 0; ss = 0; reasons = []   # long_score, short_score
+
+            # 1. EMA trend stack (most important — 25 pts)
+            if c9 > c21 > c50:
+                ls += 25; reasons.append("EMA bullish stack 9>21>50")
+            if c9 < c21 < c50:
+                ss += 25; reasons.append("EMA bearish stack 9<21<50")
+            if c > c200:
+                ls += 10; reasons.append("Above 200 EMA — major uptrend")
+            else:
+                ss += 8;  reasons.append("Below 200 EMA — major downtrend")
+
+            # 2. RSI momentum zone (20 pts)
+            if 45 <= c_rsi <= 65:
+                ls += 20; reasons.append(f"RSI {c_rsi:.0f} — momentum zone (not overbought)")
+            elif c_rsi > 70:
+                ls -= 10; reasons.append(f"RSI {c_rsi:.0f} — overbought risk")
+            if 35 <= c_rsi <= 55:
+                ss += 15; reasons.append(f"RSI {c_rsi:.0f} — bearish momentum zone")
+            elif c_rsi < 30:
+                ss -= 10; reasons.append(f"RSI {c_rsi:.0f} — oversold (fade risk)")
+
+            # 3. MACD (20 pts for fresh cross, 10 for expanding)
+            if c_hist > 0 and p_hist <= 0:
+                ls += 20; reasons.append("MACD fresh bullish crossover")
+            elif c_hist > 0 and c_hist > p_hist:
+                ls += 10; reasons.append("MACD histogram expanding bullish")
+            if c_hist < 0 and p_hist >= 0:
+                ss += 20; reasons.append("MACD fresh bearish crossover")
+            elif c_hist < 0 and c_hist < p_hist:
+                ss += 10; reasons.append("MACD histogram expanding bearish")
+
+            # 4. Breakout / breakdown (20 pts)
+            if c > high20:
+                ls += 20; reasons.append(f"20-day breakout above {high20:.0f}")
+            elif c > c21 and 40 <= c_rsi <= 55:
+                ls += 10; reasons.append("Pullback to 21 EMA — bounce entry")
+            if c < low20:
+                ss += 20; reasons.append(f"20-day breakdown below {low20:.0f}")
+
+            # 5. Volume confirmation (15 pts)
+            vol_ratio = c_vol / max(c_vol_avg, 1)
+            if vol_ratio >= 1.5:
+                boost = 15 if ls > ss else 15
+                if ls > ss: ls += boost
+                else:       ss += boost
+                reasons.append(f"Volume surge {vol_ratio:.1f}× avg — conviction move")
+            elif vol_ratio >= 1.2:
+                if ls > ss: ls += 8
+                else:       ss += 8
+                reasons.append(f"Above-avg volume {vol_ratio:.1f}×")
+
+            # ── Determine direction ───────────────────────────────────
+            gap = 15  # min margin between long/short score
+            if ls >= 45 and ls >= ss + gap:
+                direction = "LONG"; confidence = min(95, ls)
+            elif ss >= 45 and ss >= ls + gap:
+                direction = "SHORT"; confidence = min(95, ss)
+            else:
+                return None   # no clear setup
+
+            # ── Risk levels (2 × ATR SL, 3-5 × ATR targets) ──────────
+            sl_mult = 2.0; t1_mult = 3.0; t2_mult = 5.0
+            if direction == "LONG":
+                entry = c
+                sl     = round(c - sl_mult * c_atr, 2)
+                t1     = round(c + t1_mult * c_atr, 2)
+                t2     = round(c + t2_mult * c_atr, 2)
+            else:
+                entry = c
+                sl     = round(c + sl_mult * c_atr, 2)
+                t1     = round(c - t1_mult * c_atr, 2)
+                t2     = round(c - t2_mult * c_atr, 2)
+
+            rr = round(abs(t1 - entry) / max(abs(sl - entry), 0.01), 2)
+
+            return {
+                "direction": direction, "confidence": confidence,
+                "price": round(c, 2), "entry": round(entry, 2),
+                "sl": sl, "target1": t1, "target2": t2,
+                "risk_reward": rr, "atr": round(c_atr, 2),
+                "rsi": round(c_rsi, 1),
+                "ema9": round(c9, 2), "ema21": round(c21, 2),
+                "ema50": round(c50, 2), "ema200": round(c200, 2),
+                "macd_hist": round(c_hist, 4), "macd_line": round(c_macd, 4),
+                "vol_ratio": round(vol_ratio, 2),
+                "reasons": reasons,
+                "timeframe": "DAILY", "hold_days_est": "3-15 days",
+            }
+
+        except Exception as e:
+            log.warning(f"[SwingAnalysis] {name} error: {e}")
+            return None
+
+
+# ═══════════════════════════════════════════════════════════════════
+# SWING ENGINE — multi-day scanner + AI exit analysis
+# ═══════════════════════════════════════════════════════════════════
+class SwingEngine:
+    """
+    Scans SWING_STOCKS on daily candles every SCAN_MIN minutes.
+    Picks swing-expiry options (monthly, ≥15 DTE).
+    Tracks open positions in SQLite + runs Claude AI exit analysis.
+    """
+    SCAN_MIN = 30          # re-scan every 30 min during market hours
+    MIN_CONF = 55          # minimum confidence to surface signal
+    ALERT_CONF = 65        # minimum confidence to send Slack alert
+    EXIT_RECHECK_MIN = 120 # AI exit recheck interval (2 h)
+
+    def __init__(self, client):
+        self.client  = client
+        self.signals = {}    # name → latest signal snapshot
+        self.running = False
+        self._last_scan   = {}    # name → timestamp of last scan
+        self._last_exit_check = datetime.now(IST)
+
+    def start(self):
+        if self.running: return
+        self.running = True
+        threading.Thread(target=self._loop, daemon=True, name="SwingLoop").start()
+        log.info("[Swing] Engine started — scanning on 30-min cycle")
+
+    def _loop(self):
+        # Stagger swing start by 60s so it doesn't hammer API at same time as intraday
+        time.sleep(60)
+        while self.running:
+            try:
+                now = datetime.now(IST)
+                if 9 <= now.hour < 15 or (now.hour == 15 and now.minute < 30):
+                    self._scan_all()
+                    # Periodic AI exit check on open positions
+                    mins_since = (now - self._last_exit_check).total_seconds() / 60
+                    if mins_since >= self.EXIT_RECHECK_MIN:
+                        self._ai_exit_all_open()
+                        self._last_exit_check = now
+                time.sleep(self.SCAN_MIN * 60)
+            except Exception as e:
+                log.error(f"[Swing] Loop error: {e}")
+                time.sleep(60)
+
+    def _scan_all(self):
+        log.info(f"[Swing] Scanning {len(SWING_STOCKS)} instruments...")
+        for name, info in SWING_STOCKS.items():
+            try:
+                self._scan_instrument(name, info)
+                time.sleep(0.5)   # gentle throttle
+            except Exception as e:
+                log.warning(f"[Swing] {name} error: {e}")
+
+    def _resolve_token(self, name, info):
+        """Return (equity_token, ltp_exchange, ltp_symbol) for candle + LTP calls."""
+        # INDEX types have hardcoded tokens
+        if info.get("type") == "INDEX":
+            tok = info.get("token")
+            return tok, info["exchange"], info["nse_sym"]
+        # STOCK — look up from instrument master
+        sym = info.get("nse_sym", name)
+        tok = _master.find_equity_token(sym)
+        if not tok:
+            log.debug(f"[Swing] No equity token for {name} ({sym})")
+        return tok, info["exchange"], sym
+
+    def _scan_instrument(self, name, info):
+        token, exch, sym = self._resolve_token(name, info)
+        if not token: return
+
+        candles = self.client.daily_candles(token, exch, days=90)
+        if len(candles) < 35:
+            log.debug(f"[Swing] {name}: only {len(candles)} daily candles — skipping")
+            return
+
+        sig = SwingAnalysis.analyze(name, candles, info)
+        if not sig: return
+
+        # Enrich with live LTP
+        ltp_data = self.client.ltp(exch, sym, token)
+        spot = (ltp_data or {}).get("ltp") or sig["price"]
+        sig["price"] = round(float(spot), 2)
+
+        # Option picking for F&O eligible instruments (≥ MIN_CONF)
+        opt = None
+        if info.get("fo_eligible") and sig["confidence"] >= self.MIN_CONF:
+            opt = self._pick_option(name, info, sig, spot)
+
+        snapshot = {
+            "instrument": name, "type": info.get("type","STOCK"),
+            "fo_name": info.get("nse_fo",""), "signal": sig, "option": opt,
+            "updated_at": datetime.now(IST).strftime("%H:%M:%S"),
+            "updated_date": datetime.now(IST).strftime("%Y-%m-%d"),
+        }
+        self.signals[name] = snapshot
+
+        if sig["confidence"] >= self.ALERT_CONF:
+            log.info(f"[Swing] 🎯 {name} {sig['direction']} conf={sig['confidence']}% "
+                     f"price={sig['price']} rr={sig['risk_reward']}")
+            SlackAlert.send(self._format_slack(name, sig, opt))
+
+    def _pick_option(self, name, info, sig, spot):
+        """Select swing option (monthly expiry, ≥15 DTE, ATM strike)."""
+        fo = info.get("nse_fo", name)
+        direction = sig["direction"]
+        options = _master.find_swing_options(fo, spot, direction, min_dte=15)
+        if not options: return None
+        # Pick closest strike to ATM
+        options.sort(key=lambda o: abs(o["strike"] - spot))
+        chosen = options[0]
+        # Rough premium estimate: ~2.5% of spot for ATM monthly
+        est_prem = round(float(spot) * 0.025, 1)
+        lot = info.get("lot_size", 50)
+        capital = round(est_prem * lot, 0)
+        sl_prem  = round(est_prem * 0.4, 1)   # 60% premium SL (2 ATR index move)
+        t1_prem  = round(est_prem * 2.0, 1)   # 100% gain at T1
+        return {
+            "symbol":   chosen["symbol"],
+            "strike":   chosen["strike"],
+            "type":     chosen.get("type","CE") if direction=="LONG" else chosen.get("type","PE"),
+            "expiry":   chosen["expiry"],
+            "token":    chosen["token"],
+            "dte":      chosen.get("dte",20),
+            "lot_size": lot,
+            "entry":    est_prem,
+            "sl":       sl_prem,
+            "target1":  t1_prem,
+            "capital":  capital,
+        }
+
+    # ── AI Exit Analysis ─────────────────────────────────────────────
+    def _ai_exit_all_open(self):
+        """Run AI exit analysis on all open swing positions."""
+        opens = swing_pos_list(status="OPEN")
+        if not opens:
+            return
+        log.info(f"[Swing] AI exit check: {len(opens)} open positions")
+        for pos in opens:
+            try:
+                self._ai_exit_one(pos)
+                time.sleep(2)
+            except Exception as e:
+                log.warning(f"[Swing] AI exit err pos #{pos['id']}: {e}")
+
+    def _ai_exit_one(self, pos):
+        """Claude AI analyses one open position and returns EXIT/HOLD/PARTIAL_EXIT."""
+        api_key = CONFIG.get("anthropic_api_key","")
+        if not api_key: return None
+
+        name = pos["instrument"]
+        direction = pos["direction"]
+        info = SWING_STOCKS.get(name, {})
+        token, exch, sym = self._resolve_token(name, info)
+
+        # Get latest daily candles for technical freshness
+        candles = self.client.daily_candles(token, exch, days=30) if token else []
+        fresh_sig = SwingAnalysis.analyze(name, candles, info) if len(candles) >= 5 else {}
+        fresh_sig = fresh_sig or {}
+
+        # Current price
+        ltp_data = self.client.ltp(exch, sym, token) if token else None
+        cur_price = (ltp_data or {}).get("ltp") or pos.get("spot_entry") or 0
+
+        # P&L calc
+        entry = pos.get("option_entry") or pos.get("spot_entry") or 0
+        pnl_pct = round((cur_price - entry) / max(entry, 0.01) * 100, 1) if entry else 0
+
+        # Entry date → days held
+        today = datetime.now(IST).date()
+        try:
+            d0 = datetime.strptime(pos.get("entry_date",""), "%Y-%m-%d").date()
+            days_held = (today - d0).days
+        except: days_held = 0
+
+        dte = pos.get("option_dte") or 0
+        if dte > 0 and pos.get("entry_date"):
+            try:
+                dte = max(0, dte - days_held)
+            except: pass
+
+        reasons = []
+        try: reasons = json.loads(pos.get("reasons") or "[]")
+        except: pass
+
+        prompt = f"""You are a professional swing trader reviewing an open position.
+
+OPEN POSITION:
+Instrument: {name} ({direction})
+{'Option: ' + (pos.get('option_symbol') or 'equity trade')}
+Entry date: {pos.get('entry_date')} (held {days_held} days)
+Spot entry: ₹{pos.get('spot_entry') or 'N/A'} | SL: ₹{pos.get('spot_sl') or 'N/A'} | T1: ₹{pos.get('spot_target1') or 'N/A'} | T2: ₹{pos.get('spot_target2') or 'N/A'}
+Option entry: ₹{pos.get('option_entry') or 'N/A'} | Option SL: ₹{pos.get('option_sl') or 'N/A'}
+Days to expiry (approx): {dte}
+
+CURRENT STATUS:
+Current price: ₹{round(cur_price, 2)}
+P&L (approx): {pnl_pct:+.1f}%
+
+FRESH DAILY TECHNICALS:
+RSI: {fresh_sig.get('rsi', 'N/A')}
+EMA stack: {('BULLISH' if fresh_sig.get('direction')=='LONG' else 'BEARISH') if fresh_sig.get('direction') else 'NEUTRAL'}
+MACD hist: {fresh_sig.get('macd_hist', 'N/A')} ({'EXPANDING' if (fresh_sig.get('macd_hist',0) or 0) > 0 else 'CONTRACTING'})
+Signal direction: {fresh_sig.get('direction') or 'NEUTRAL'}
+Signal confidence: {fresh_sig.get('confidence') or 'N/A'}%
+
+ORIGINAL ENTRY REASONS:
+{'; '.join(reasons[:5]) or 'N/A'}
+
+DECISION RULES:
+- EXIT if: original thesis broken (EMA stack reversed), RSI hit extremes against position, price touched SL zone, <5 DTE with profit
+- PARTIAL_EXIT if: hit T1 and signals weakening — lock 50% profit
+- HOLD if: thesis still intact, price in middle of range, setup improving
+
+Respond in JSON only:
+{{"decision":"EXIT|HOLD|PARTIAL_EXIT","urgency":"IMMEDIATE|SOON|MONITORING","reasoning":"2-3 sentences","risk_note":"specific risk if any (or null)"}}"""
+
+        try:
+            resp = requests.post(
+                "https://api.anthropic.com/v1/messages",
+                headers={"x-api-key": api_key, "anthropic-version": "2023-06-01",
+                         "content-type": "application/json"},
+                json={"model": CONFIG.get("anthropic_model","claude-sonnet-4-5"),
+                      "max_tokens": 300, "temperature": 0,
+                      "messages": [{"role":"user","content": prompt}]},
+                timeout=20
+            )
+            if resp.status_code == 200:
+                raw = resp.json()
+                text = (raw.get("content") or [{}])[0].get("text","").strip()
+                if text.startswith("{"):
+                    ai = json.loads(text)
+                else:
+                    ai = json.loads(text[text.find("{"):text.rfind("}")+1])
+                decision = ai.get("decision","HOLD")
+                reasoning = ai.get("reasoning","")
+                now_str = datetime.now(IST).strftime("%Y-%m-%d %H:%M")
+                swing_pos_update(pos["id"],
+                    last_ai_decision=decision,
+                    last_ai_reasoning=reasoning,
+                    last_ai_ts=now_str)
+                log.info(f"[Swing] AI exit #{pos['id']} {name}: {decision} — {reasoning[:60]}")
+                # Auto-Slack on EXIT/PARTIAL
+                if decision in ("EXIT","PARTIAL_EXIT"):
+                    icon = "🚪" if decision=="EXIT" else "⚠"
+                    SlackAlert.send(f"{icon} *Swing Exit Signal: {name}*\n"
+                                    f"Decision: *{decision}* ({ai.get('urgency','')})\n"
+                                    f"{reasoning}\n"
+                                    f"{'⚠ ' + ai.get('risk_note','') if ai.get('risk_note') else ''}")
+                return ai
+        except Exception as e:
+            log.warning(f"[Swing] AI exit API error: {e}")
+        return None
+
+    def _format_slack(self, name, sig, opt):
+        arrow = "🟢" if sig["direction"]=="LONG" else "🔴"
+        msg = (f"{arrow} *Swing: {name} {sig['direction']}*  conf={sig['confidence']}%\n"
+               f"Spot: ₹{sig['price']} · SL: ₹{sig['sl']} · T1: ₹{sig['target1']} · T2: ₹{sig['target2']}\n"
+               f"R:R {sig['risk_reward']} · RSI {sig['rsi']} · Est hold {sig.get('hold_days_est','3-15 days')}")
+        if opt:
+            msg += (f"\n📋 *Option:* {opt['symbol']} {opt['dte']}DTE"
+                    f" | Entry ~₹{opt['entry']} · SL ₹{opt['sl']} · T1 ₹{opt['target1']}"
+                    f" | Capital ~₹{opt.get('capital','?')}")
+        reasons = sig.get("reasons",[])[:3]
+        if reasons:
+            msg += "\nReasons: " + " · ".join(reasons)
+        return msg
+
+    def get_state(self):
+        signals_list = sorted(self.signals.values(),
+                              key=lambda x: x["signal"]["confidence"], reverse=True)
+        return {
+            "signals": signals_list,
+            "positions": swing_pos_list(),
+            "performance": swing_perf(),
+            "instruments_count": len(SWING_STOCKS),
+            "last_scan_time": max((s["updated_at"] for s in self.signals.values()), default="—"),
+        }
+
+
+# ═══════════════════════════════════════════════════════════════════
 # FLASK API
 # ═══════════════════════════════════════════════════════════════════
 app = Flask(__name__)
@@ -3129,6 +3893,108 @@ def test_chain(name):
         "status":"OK" if chain else "FAILED - check server logs"})
 
 
+# ── Swing engine singleton ──────────────────────────────────────────
+swing_engine = SwingEngine(engine.client)
+
+# ═══════════════════════════════════════════════════════════════════
+# SWING FLASK ROUTES
+# ═══════════════════════════════════════════════════════════════════
+@app.route("/api/swing/status")
+def swing_status():
+    """Current swing signals + open positions + performance."""
+    return jsonify(swing_engine.get_state())
+
+@app.route("/api/swing/positions", methods=["GET"])
+def swing_positions_get():
+    status_filter = flask_request.args.get("status")
+    return jsonify({"positions": swing_pos_list(status=status_filter)})
+
+@app.route("/api/swing/positions", methods=["POST"])
+@require_auth
+def swing_positions_post():
+    """Manually add a swing position."""
+    data = flask_request.get_json(force=True) or {}
+    if not data.get("instrument") or not data.get("direction"):
+        return jsonify({"error":"instrument and direction required"}), 400
+    data["source"] = "MANUAL"
+    row_id = swing_pos_save(data)
+    return jsonify({"ok": True, "id": row_id})
+
+@app.route("/api/swing/positions/<int:pos_id>", methods=["POST"])
+@require_auth
+def swing_positions_update(pos_id):
+    """Update a position (partial update or close)."""
+    data = flask_request.get_json(force=True) or {}
+    action = data.pop("action", None)
+    if action == "close":
+        exit_price  = data.get("exit_price") or data.get("spot_exit")
+        option_exit = data.get("option_exit")
+        result = swing_pos_close(pos_id, exit_price, option_exit)
+        return jsonify({"ok": True, "result": result})
+    # Generic field update
+    allowed = {"status","lots","option_entry","spot_entry","spot_sl","spot_target1",
+               "spot_target2","option_sl","option_target1","last_ai_decision"}
+    filtered = {k:v for k,v in data.items() if k in allowed}
+    if filtered:
+        swing_pos_update(pos_id, **filtered)
+    return jsonify({"ok": True})
+
+@app.route("/api/swing/exit-analysis", methods=["POST"])
+@require_auth
+def swing_exit_analysis_all():
+    """Trigger AI exit analysis for all open positions immediately."""
+    try:
+        threading.Thread(target=swing_engine._ai_exit_all_open, daemon=True).start()
+        return jsonify({"ok": True, "msg": "AI exit analysis triggered for all open positions"})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/api/swing/exit-analysis/<int:pos_id>", methods=["POST"])
+@require_auth
+def swing_exit_analysis_one(pos_id):
+    """Trigger AI exit analysis for one position."""
+    pos = db_exec("SELECT * FROM swing_positions WHERE id=?", (pos_id,), fetchone=True)
+    if not pos:
+        return jsonify({"error":"position not found"}), 404
+    pos = dict(pos)
+    try:
+        result = swing_engine._ai_exit_one(pos)
+        return jsonify({"ok": True, "ai": result})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/api/swing/save-signal", methods=["POST"])
+@require_auth
+def swing_save_signal():
+    """Save a swing signal as a position (when user decides to take the trade)."""
+    data = flask_request.get_json(force=True) or {}
+    name = data.get("instrument")
+    snap = swing_engine.signals.get(name)
+    if not snap:
+        return jsonify({"error": f"No active swing signal for {name}"}), 404
+    sig = snap["signal"]; opt = snap.get("option")
+    pos_data = {
+        "instrument": name, "instrument_type": snap.get("type","STOCK"),
+        "direction": sig["direction"],
+        "spot_entry": sig["price"], "spot_sl": sig["sl"],
+        "spot_target1": sig["target1"], "spot_target2": sig["target2"],
+        "reasons": sig.get("reasons",[]),
+        "indicators": {k:sig.get(k) for k in ["rsi","atr","ema9","ema21","ema50","vol_ratio","macd_hist"]},
+    }
+    if opt:
+        pos_data.update({
+            "option_symbol": opt.get("symbol"), "option_strike": opt.get("strike"),
+            "option_type": opt.get("type"), "option_expiry": opt.get("expiry"),
+            "option_token": opt.get("token"), "option_dte": opt.get("dte"),
+            "option_entry": opt.get("entry"), "option_sl": opt.get("sl"),
+            "option_target1": opt.get("target1"),
+            "lot_size": opt.get("lot_size"), "lots": data.get("lots",1),
+            "capital": opt.get("capital"),
+        })
+    row_id = swing_pos_save(pos_data)
+    return jsonify({"ok": True, "id": row_id})
+
+
 def _startup():
     """Auto-login on server start — works with both Gunicorn (Railway) and direct run.
 
@@ -3155,8 +4021,16 @@ def _startup():
                 log.info("▶ Auto-startup: starting signal scan engine...")
                 engine.running = True
                 threading.Thread(target=engine._loop, daemon=True, name="ScanLoop").start()
-                SlackAlert.send("🚀 *Signal Engine Auto-Started*\nScanning NIFTY, BANKNIFTY, FINNIFTY\nAlerts will arrive here when confidence ≥ 60%")
                 log.info("▶ Auto-startup: scan engine running ✅")
+            # Start swing engine after intraday engine is up
+            if not swing_engine.running:
+                log.info("▶ Auto-startup: starting swing engine...")
+                swing_engine.start()
+                log.info("▶ Auto-startup: swing engine running ✅")
+            SlackAlert.send(f"🚀 *Signal Engines Auto-Started*\n"
+                            f"• Intraday: NIFTY, BANKNIFTY, FINNIFTY\n"
+                            f"• Swing: {len(SWING_STOCKS)} instruments (30-min cycle)\n"
+                            f"Alerts will arrive here when confidence ≥ threshold")
             return
         err = engine.client.last_login_error or "unknown"
         log.warning(f"▶ Auto-startup: login attempt {attempt}/3 failed — {err}")

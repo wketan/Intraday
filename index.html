@@ -8,7 +8,7 @@
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate"/>
   <meta http-equiv="Pragma" content="no-cache"/>
   <meta http-equiv="Expires" content="0"/>
-  <meta name="build-stamp" content="2026-04-27T14:00:00Z-oi-velocity-shift-detection"/>
+  <meta name="build-stamp" content="2026-04-27T18:00:00Z-swing-engine-positional-scanner"/>
   <title>Signal Engine · Intraday</title>
 
   <link rel="manifest" href="manifest.json"/>
@@ -1936,6 +1936,287 @@
         }).filter(Boolean);
       }
 
+// ═══════════════════════════════════════════════════════════════════
+// SWING TAB
+// ═══════════════════════════════════════════════════════════════════
+function SwingTab({ data, getServer, getAuthToken, showToast }) {
+  const { useState: useSt, useCallback } = React;
+  const [posFilter, setPosFilter] = useSt('ALL');  // ALL | OPEN | CLOSED
+  const [exitLoading, setExitLoading] = useSt(null);
+  const [saveLoading, setSaveLoading] = useSt(null);
+
+  const signals   = (data.signals   || []).filter(s => s.signal && s.signal.confidence >= 55);
+  const positions = (data.positions || []);
+  const perf      = data.performance || {};
+
+  const apiPost = async (path, body={}) => {
+    const base  = getServer();
+    const token = getAuthToken();
+    const r = await fetch(`${base}${path}`, {
+      method:'POST',
+      headers:{'Content-Type':'application/json','X-Auth-Token':token},
+      body: JSON.stringify(body),
+    });
+    return r.json();
+  };
+
+  const triggerExitAll = async () => {
+    setExitLoading('all');
+    try {
+      const r = await apiPost('/api/swing/exit-analysis');
+      showToast(r.msg || 'AI exit analysis triggered');
+    } catch(e) { showToast('Error: ' + e.message); }
+    finally { setExitLoading(null); }
+  };
+
+  const triggerExitOne = async (posId) => {
+    setExitLoading(posId);
+    try {
+      const r = await apiPost(`/api/swing/exit-analysis/${posId}`);
+      showToast(r.ai ? `AI: ${r.ai.decision} — ${(r.ai.reasoning||'').slice(0,60)}` : 'Done');
+    } catch(e) { showToast('Error: ' + e.message); }
+    finally { setExitLoading(null); }
+  };
+
+  const saveSignal = async (name) => {
+    setSaveLoading(name);
+    try {
+      const r = await apiPost('/api/swing/save-signal', { instrument: name });
+      showToast(r.ok ? `✅ Position saved for ${name} (#${r.id})` : (r.error || 'Error'));
+    } catch(e) { showToast('Error: ' + e.message); }
+    finally { setSaveLoading(null); }
+  };
+
+  const closePosition = async (pos) => {
+    const price = prompt(`Close position #${pos.id} (${pos.instrument}).\nEnter exit price (spot or option premium):`);
+    if (!price || isNaN(+price)) return;
+    try {
+      const r = await apiPost(`/api/swing/positions/${pos.id}`, { action:'close', exit_price: +price });
+      showToast(r.result ? `Closed: ${r.result.result} | P&L ₹${r.result.pnl_rupees}` : 'Closed');
+    } catch(e) { showToast('Error: ' + e.message); }
+  };
+
+  const confColor = c => c >= 75 ? 'var(--long)' : c >= 60 ? 'var(--warn)' : 'var(--ink-2)';
+  const dirBg    = d => d === 'LONG' ? 'var(--long-dim)' : 'var(--short-dim)';
+  const dirColor = d => d === 'LONG' ? 'var(--long)' : 'var(--short)';
+  const pnlColor = p => p > 0 ? 'var(--long)' : p < 0 ? 'var(--short)' : 'var(--ink-2)';
+
+  const filteredPos = positions.filter(p => posFilter === 'ALL' || p.status === posFilter);
+
+  return (
+    <div style={{flex:1, overflowY:'auto', padding:'0 0 80px'}}>
+
+      {/* ── Performance strip ──────────────────────────────────────── */}
+      {perf.total > 0 && (
+        <div style={{display:'flex', gap:8, padding:'10px 12px 0', flexWrap:'wrap'}}>
+          {[
+            ['Trades', perf.total],
+            ['Wins', perf.wins],
+            ['Win rate', (perf.win_rate||0)+'%'],
+            ['Total P&L', '₹'+(perf.total_pnl||0).toLocaleString('en-IN')],
+            ['Avg hold', (perf.avg_hold_days||0)+' days'],
+          ].map(([label,val]) => (
+            <div key={label} style={{background:'var(--bg-2)', borderRadius:6, padding:'5px 10px', fontSize:11}}>
+              <div style={{color:'var(--ink-3)', fontSize:8.5, textTransform:'uppercase', letterSpacing:'0.07em'}}>{label}</div>
+              <div style={{fontFamily:'var(--mono)', fontWeight:700, marginTop:1}}>{val}</div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* ── Scan header ───────────────────────────────────────────── */}
+      <div style={{display:'flex', alignItems:'center', justifyContent:'space-between', padding:'10px 12px 6px'}}>
+        <div>
+          <div style={{fontWeight:700, fontSize:13}}>Swing Signals</div>
+          <div style={{fontSize:10, color:'var(--ink-3)', marginTop:1}}>
+            {data.instruments_count || 70}+ stocks · daily timeframe · last scan {data.last_scan_time || '—'}
+          </div>
+        </div>
+        <button onClick={triggerExitAll} disabled={exitLoading==='all'}
+          style={{fontSize:10.5, padding:'5px 12px', borderRadius:5, border:'1px solid var(--line-1)',
+                  background:'var(--bg-2)', color:'var(--ink-1)', cursor:'pointer'}}>
+          {exitLoading==='all' ? '⏳ Checking...' : '🤖 AI Exit Check All'}
+        </button>
+      </div>
+
+      {/* ── Signal cards ──────────────────────────────────────────── */}
+      {signals.length === 0 && (
+        <div style={{padding:'24px 16px', textAlign:'center', color:'var(--ink-3)', fontSize:12}}>
+          No swing signals ≥55% confidence yet — scanner runs every 30 min during market hours.
+        </div>
+      )}
+      {signals.map(snap => {
+        const { instrument: name, type, signal: sig, option: opt, updated_at } = snap;
+        const isIdx = type === 'INDEX';
+        return (
+          <div key={name} style={{margin:'0 8px 10px', borderRadius:8,
+            border:'1px solid var(--line-1)', background:'var(--bg-1)',
+            borderLeft:`3px solid ${dirColor(sig.direction)}`}}>
+            {/* Header */}
+            <div style={{display:'flex', alignItems:'center', gap:8, padding:'8px 10px 6px', flexWrap:'wrap'}}>
+              <span style={{fontWeight:700, fontSize:13, fontFamily:'var(--mono)'}}>{name}</span>
+              <span style={{fontSize:9, padding:'2px 6px', borderRadius:3,
+                background: dirBg(sig.direction), color: dirColor(sig.direction), fontWeight:700}}>
+                {sig.direction}
+              </span>
+              <span style={{fontSize:9, padding:'2px 6px', borderRadius:3, background:'var(--bg-3)', color:'var(--ink-2)'}}>
+                {isIdx ? 'INDEX' : 'STOCK'} · DAILY
+              </span>
+              <span style={{fontSize:10.5, fontWeight:700, color: confColor(sig.confidence)}}>
+                {sig.confidence}% conf
+              </span>
+              <span style={{fontSize:9, color:'var(--ink-3)', marginLeft:'auto'}}>Updated {updated_at}</span>
+            </div>
+
+            {/* Levels */}
+            <div style={{display:'flex', gap:8, padding:'0 10px 6px', flexWrap:'wrap', fontSize:10.5, fontFamily:'var(--mono)'}}>
+              <span>Spot <strong>₹{sig.price}</strong></span>
+              <span style={{color:'var(--short)'}}>SL ₹{sig.sl}</span>
+              <span style={{color:'var(--long)'}}>T1 ₹{sig.target1}</span>
+              <span style={{color:'var(--long)'}}>T2 ₹{sig.target2}</span>
+              <span style={{color:'var(--ink-3)'}}>R:R {sig.risk_reward}</span>
+              <span style={{color:'var(--ink-3)'}}>RSI {sig.rsi}</span>
+            </div>
+
+            {/* Indicators row */}
+            <div style={{display:'flex', gap:6, padding:'0 10px 6px', flexWrap:'wrap', fontSize:9.5}}>
+              {sig.reasons && sig.reasons.slice(0,3).map((r,i) => (
+                <span key={i} style={{background:'var(--bg-3)', borderRadius:3, padding:'2px 6px', color:'var(--ink-2)'}}>
+                  {r}
+                </span>
+              ))}
+              {sig.hold_days_est && (
+                <span style={{background:'var(--warn-dim)', borderRadius:3, padding:'2px 6px', color:'var(--warn)', fontWeight:600}}>
+                  ⏱ {sig.hold_days_est}
+                </span>
+              )}
+            </div>
+
+            {/* Option pick */}
+            {opt && (
+              <div style={{margin:'0 10px 8px', background:'var(--bg-2)', borderRadius:5, padding:'6px 8px', fontSize:10}}>
+                <div style={{fontWeight:700, color: dirColor(sig.direction), marginBottom:3}}>
+                  📋 {opt.symbol}  <span style={{fontWeight:400, color:'var(--ink-3)'}}>({opt.dte} DTE · monthly expiry)</span>
+                </div>
+                <div style={{display:'flex', gap:10, fontFamily:'var(--mono)', color:'var(--ink-2)', flexWrap:'wrap'}}>
+                  <span>Strike ₹{opt.strike}</span>
+                  <span>Est entry ~₹{opt.entry}</span>
+                  <span style={{color:'var(--short)'}}>SL ~₹{opt.sl}</span>
+                  <span style={{color:'var(--long)'}}>T1 ~₹{opt.target1}</span>
+                  <span>Capital ~₹{(opt.capital||0).toLocaleString('en-IN')}</span>
+                </div>
+                <div style={{fontSize:9, color:'var(--ink-3)', marginTop:3}}>
+                  ⚠ Option premium estimated — verify live price before entering
+                </div>
+              </div>
+            )}
+
+            {/* Action button */}
+            <div style={{padding:'0 10px 8px'}}>
+              <button onClick={() => saveSignal(name)} disabled={saveLoading===name}
+                style={{fontSize:10.5, padding:'4px 12px', borderRadius:5,
+                        background: dirBg(sig.direction), color: dirColor(sig.direction),
+                        border:'none', cursor:'pointer', fontWeight:600}}>
+                {saveLoading===name ? '⏳ Saving...' : '+ Track this trade'}
+              </button>
+            </div>
+          </div>
+        );
+      })}
+
+      {/* ── Open Positions ────────────────────────────────────────── */}
+      <div style={{padding:'14px 12px 4px', display:'flex', alignItems:'center', justifyContent:'space-between'}}>
+        <div style={{fontWeight:700, fontSize:13}}>Position Tracker</div>
+        <div style={{display:'flex', gap:4}}>
+          {['ALL','OPEN','CLOSED'].map(f => (
+            <button key={f} onClick={() => setPosFilter(f)}
+              style={{fontSize:9.5, padding:'3px 8px', borderRadius:4,
+                background: posFilter===f ? 'var(--accent)' : 'var(--bg-2)',
+                color: posFilter===f ? '#000' : 'var(--ink-2)',
+                border:'none', cursor:'pointer', fontWeight: posFilter===f ? 700 : 400}}>
+              {f}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {filteredPos.length === 0 && (
+        <div style={{padding:'16px', textAlign:'center', color:'var(--ink-3)', fontSize:11.5}}>
+          No positions. Click "+ Track this trade" on a swing signal to start tracking.
+        </div>
+      )}
+
+      {filteredPos.map(pos => {
+        const dir = pos.direction;
+        const isOpen = pos.status === 'OPEN';
+        const aiDec  = pos.last_ai_decision;
+        const aiBg   = aiDec==='EXIT' ? 'var(--short-dim)' : aiDec==='PARTIAL_EXIT' ? 'var(--warn-dim)' : 'var(--bg-2)';
+        const aiCol  = aiDec==='EXIT' ? 'var(--short)' : aiDec==='PARTIAL_EXIT' ? 'var(--warn)' : 'var(--ink-3)';
+        return (
+          <div key={pos.id} style={{margin:'0 8px 8px', borderRadius:7,
+            border:`1px solid ${isOpen ? 'var(--accent)' : 'var(--line-1)'}`,
+            background:'var(--bg-1)', opacity: isOpen ? 1 : 0.7}}>
+            {/* Pos header */}
+            <div style={{display:'flex', alignItems:'center', gap:6, padding:'7px 10px 4px', flexWrap:'wrap'}}>
+              <span style={{fontWeight:700, fontSize:12, fontFamily:'var(--mono)'}}>{pos.instrument}</span>
+              <span style={{fontSize:9, padding:'2px 5px', borderRadius:3,
+                background: dirBg(dir), color: dirColor(dir), fontWeight:700}}>{dir}</span>
+              <span style={{fontSize:9, padding:'2px 5px', borderRadius:3,
+                background: isOpen ? 'var(--accent-dim)' : 'var(--bg-3)',
+                color: isOpen ? 'var(--accent)' : 'var(--ink-3)', fontWeight:600}}>
+                {pos.status}
+              </span>
+              {pos.result && (
+                <span style={{fontSize:9, fontWeight:700,
+                  color: pos.result==='WIN' ? 'var(--long)' : 'var(--short)'}}>
+                  {pos.result==='WIN' ? '✅' : '❌'} {pos.pnl_pct > 0 ? '+' : ''}{pos.pnl_pct}%
+                  {' '}₹{(pos.pnl_rupees||0).toLocaleString('en-IN')}
+                </span>
+              )}
+              <span style={{marginLeft:'auto', fontSize:9, color:'var(--ink-3)'}}>
+                #{pos.id} · {pos.entry_date}
+                {pos.hold_days != null && pos.hold_days > 0 ? ` · ${pos.hold_days}d held` : ''}
+              </span>
+            </div>
+            {/* Levels */}
+            <div style={{display:'flex', gap:8, padding:'0 10px 5px', fontSize:10, fontFamily:'var(--mono)', color:'var(--ink-2)', flexWrap:'wrap'}}>
+              <span>Spot ₹{pos.spot_entry}</span>
+              <span style={{color:'var(--short)'}}>SL ₹{pos.spot_sl}</span>
+              <span style={{color:'var(--long)'}}>T1 ₹{pos.spot_target1}</span>
+              {pos.option_symbol && <span>Opt: {pos.option_symbol} @₹{pos.option_entry}</span>}
+            </div>
+            {/* AI decision */}
+            {aiDec && (
+              <div style={{margin:'0 10px 6px', background:aiBg, borderRadius:4, padding:'5px 8px', fontSize:10}}>
+                <span style={{color:aiCol, fontWeight:700}}>🤖 AI: {aiDec}</span>
+                {pos.last_ai_reasoning && <span style={{color:'var(--ink-2)', marginLeft:6}}>{pos.last_ai_reasoning.slice(0,100)}…</span>}
+                {pos.last_ai_ts && <span style={{color:'var(--ink-3)', fontSize:8.5, marginLeft:6}}>{pos.last_ai_ts}</span>}
+              </div>
+            )}
+            {/* Actions */}
+            {isOpen && (
+              <div style={{display:'flex', gap:6, padding:'0 10px 8px'}}>
+                <button onClick={() => triggerExitOne(pos.id)} disabled={exitLoading===pos.id}
+                  style={{fontSize:9.5, padding:'3px 10px', borderRadius:4,
+                    background:'var(--bg-2)', border:'1px solid var(--line-1)',
+                    color:'var(--ink-1)', cursor:'pointer'}}>
+                  {exitLoading===pos.id ? '⏳' : '🤖 AI Exit?'}
+                </button>
+                <button onClick={() => closePosition(pos)}
+                  style={{fontSize:9.5, padding:'3px 10px', borderRadius:4,
+                    background:'var(--short-dim)', border:'none',
+                    color:'var(--short)', cursor:'pointer', fontWeight:600}}>
+                  Mark Closed
+                </button>
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function App() {
       const [tab, setTab] = useState(() => localStorage.getItem('se_tab') || 'signals');
       const [inst, setInst] = useState(0);
@@ -1958,6 +2239,7 @@ function App() {
       const [live, setLive] = useState({});          // { NIFTY:{ltp, chg, pct}, ... }
       const [replay, setReplay] = useState(null);    // { data, idx, total }
       const [toast, setToast] = useState(null);
+      const [swingData, setSwingData] = useState({signals:[], positions:[], performance:{}, last_scan_time:'—'});
       const lastSigId = useRef(null);
       const replayAnalyzedAt = React.useRef({});      // { [instName]: lastAnalyzedIdx }
 
@@ -2418,7 +2700,19 @@ function App() {
         // kick off history immediately, then refresh every 30s
         pullHistory();
         const slowId = setInterval(pullHistory, 30000);
-        return () => { alive = false; clearInterval(fastId); clearInterval(slowId); };
+
+        // ── Swing scan polling — every 60s (server rescans every 30 min, so 60s is plenty) ──
+        const fetchSwing = async () => {
+          if (!alive) return;
+          try {
+            const r = await apiJSON('/api/swing/status');
+            if (alive && r) setSwingData(r);
+          } catch(e) { /* silent */ }
+        };
+        fetchSwing();
+        const swingId = setInterval(fetchSwing, 60000);
+
+        return () => { alive = false; clearInterval(fastId); clearInterval(slowId); clearInterval(swingId); };
       }, [on, mode]);
 
       // Poll /api/ltp every 3 s while engine is on — keeps live cards populated.
@@ -2546,11 +2840,12 @@ function App() {
       const setDensity = (v) => { setDensityState(v); persist({ density:v }); };
 
       const tabs = [
-        { id:'signals', label:'Signals', icon:'◉' },
-        { id:'journal', label:'Journal', icon:'📊' },
-        { id:'stats', label:'Stats', icon:'📈' },
-        { id:'calc', label:'Calculator', icon:'🧮' },
-        { id:'log', label:'Engine Log', icon:'⚙' },
+        { id:'signals', label:'Intraday', icon:'◉' },
+        { id:'swing',   label:'Swing',    icon:'📈' },
+        { id:'journal', label:'Journal',  icon:'📊' },
+        { id:'stats',   label:'Stats',    icon:'📉' },
+        { id:'calc',    label:'Calculator', icon:'🧮' },
+        { id:'log',     label:'Engine Log', icon:'⚙' },
       ];
 
       // ── defensive coercions (never trust the server shape) ──
@@ -2567,7 +2862,7 @@ function App() {
               <div className="mark"/>
               <div className="name">
                 <span>Signal Engine</span>
-                <span className="sub">Intraday · NSE</span>
+                <span className="sub">Intraday + Swing · NSE</span>
               </div>
             </div>
 
@@ -2684,6 +2979,7 @@ function App() {
 
           <div key={tab} className="reveal-enter" style={{flex:1, overflowY:'auto'}}>
             {tab === 'signals' && <SignalsTab sel={inst} setSel={setInst} signals={safeSignals} candles={safeCandles} live={safeLive} on={on}/>}
+            {tab === 'swing'   && <SwingTab data={swingData} getServer={getServer} getAuthToken={getAuthToken} showToast={showToast}/>}
             {tab === 'journal' && <JournalTab trades={safeTrades}/>}
             {tab === 'stats' && <StatsTab trades={safeTrades} signals={safeSignals}/>}
             {tab === 'calc' && <CalcTab/>}
