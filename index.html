@@ -8,7 +8,7 @@
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate"/>
   <meta http-equiv="Pragma" content="no-cache"/>
   <meta http-equiv="Expires" content="0"/>
-  <meta name="build-stamp" content="2026-04-27T10:00:00Z-fix-alerts-regime-ai-staleness"/>
+  <meta name="build-stamp" content="2026-04-27T14:00:00Z-oi-velocity-shift-detection"/>
   <title>Signal Engine · Intraday</title>
 
   <link rel="manifest" href="manifest.json"/>
@@ -1225,7 +1225,7 @@
                           </div>
                         )}
 
-                        {/* Chain analytics — PCR, IV skew, ATM data from live chain */}
+                        {/* Chain analytics — PCR, IV skew, ATM data + OI velocity from live chain */}
                         {displaySig.chainAnalytics && (() => {
                           const ca = displaySig.chainAnalytics;
                           const pcr = ca.pcr;
@@ -1233,31 +1233,142 @@
                           const pcrLabel = pcr < 0.7 ? 'bullish' : pcr > 1.0 ? 'bearish' : 'neutral';
                           const ivSkew = ca.iv_skew;
                           const ivColor = ivSkew > 2 ? 'var(--short)' : ivSkew < -2 ? 'var(--long)' : 'var(--ink-2)';
+
+                          // OI velocity helpers
+                          const oiShift = ca.oi_shift_signal || 'NONE';
+                          const oiAvail = ca.oi_delta_available;
+                          const atmCeD = ca.atm_ce_oi_delta || {};
+                          const atmPeD = ca.atm_pe_oi_delta || {};
+                          const velIcon = v => v==='BUILDING' ? '↑↑' : v==='UNWINDING' ? '↓↓' : '–';
+                          const velColor = v => v==='BUILDING' ? 'var(--long)' : v==='UNWINDING' ? 'var(--short)' : 'var(--ink-3)';
+                          const fmtDelta = n => n >= 0 ? `+${(n||0).toLocaleString('en-IN')}` : (n||0).toLocaleString('en-IN');
+                          const shiftBg = {
+                            'CE_ROLL_BULLISH':'var(--long-dim)', 'CE_BUILD':'var(--long-dim)',
+                            'PE_ROLL_BEARISH':'var(--short-dim)', 'PE_BUILD':'var(--short-dim)',
+                          }[oiShift] || 'var(--bg-3)';
+                          const shiftColor = {
+                            'CE_ROLL_BULLISH':'var(--long)', 'CE_BUILD':'var(--long)',
+                            'PE_ROLL_BEARISH':'var(--short)', 'PE_BUILD':'var(--short)',
+                          }[oiShift] || 'var(--ink-3)';
+                          const shiftLabel = {
+                            'CE_ROLL_BULLISH':'🔄 CE Roll Bullish', 'CE_BUILD':'⬆ CE Build',
+                            'PE_ROLL_BEARISH':'🔄 PE Roll Bearish', 'PE_BUILD':'⬇ PE Build',
+                            'NONE': null,
+                          }[oiShift];
+
                           return (
                             <div style={{background:'var(--bg-2)', borderRadius:6, padding:'8px 10px', marginBottom:10}}>
-                              <div style={{fontSize:9, color:'var(--ink-3)', textTransform:'uppercase', letterSpacing:'0.08em', fontWeight:600, marginBottom:7}}>Option chain analysis</div>
+                              <div style={{display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:7}}>
+                                <div style={{fontSize:9, color:'var(--ink-3)', textTransform:'uppercase', letterSpacing:'0.08em', fontWeight:600}}>Option chain analysis</div>
+                                {oiAvail && shiftLabel && (
+                                  <div style={{fontSize:9, fontWeight:700, padding:'2px 7px', borderRadius:4,
+                                    background:shiftBg, color:shiftColor, letterSpacing:'0.04em'}}>
+                                    {shiftLabel}
+                                  </div>
+                                )}
+                                {oiAvail && !shiftLabel && (
+                                  <div style={{fontSize:9, color:'var(--ink-3)', padding:'2px 7px', borderRadius:4, background:'var(--bg-3)'}}>OI stable</div>
+                                )}
+                              </div>
+
+                              {/* PCR / IV skew row */}
                               <div style={{display:'flex', flexWrap:'wrap', gap:'4px 14px', fontFamily:'var(--mono)', fontSize:11, marginBottom:6}}>
                                 <span><span style={{color:'var(--ink-3)'}}>PCR</span> <span style={{color:pcrColor, fontWeight:700}}>{pcr}</span> <span style={{fontSize:9, color:pcrColor}}>({pcrLabel})</span></span>
                                 <span><span style={{color:'var(--ink-3)'}}>PCR vol</span> {ca.pcr_vol}</span>
                                 {ivSkew !== 0 && <span><span style={{color:'var(--ink-3)'}}>IV skew</span> <span style={{color:ivColor}}>{ivSkew > 0 ? '+' : ''}{ivSkew}</span></span>}
                                 {ca.max_pain && <span><span style={{color:'var(--ink-3)'}}>Max pain</span> {ca.max_pain}</span>}
                               </div>
-                              <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:5, fontSize:10}}>
-                                {ca.atm_ce && <div style={{background:'var(--long-dim)', borderRadius:4, padding:'4px 8px'}}>
-                                  <div style={{color:'var(--long)', fontWeight:700, marginBottom:2}}>ATM {ca.atm_ce.strike} CE ₹{ca.atm_ce.ltp}</div>
-                                  <div style={{color:'var(--ink-2)', fontFamily:'var(--mono)'}}>
-                                    δ {ca.atm_ce.delta} · OI {(ca.atm_ce.oi||0).toLocaleString('en-IN')} · Vol {(ca.atm_ce.volume||0).toLocaleString('en-IN')}
+
+                              {/* ATM CE / PE cards with OI velocity */}
+                              <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:5, fontSize:10, marginBottom:6}}>
+                                {ca.atm_ce && (
+                                  <div style={{background:'var(--long-dim)', borderRadius:4, padding:'4px 8px'}}>
+                                    <div style={{color:'var(--long)', fontWeight:700, marginBottom:2}}>ATM {ca.atm_ce.strike} CE ₹{ca.atm_ce.ltp}</div>
+                                    <div style={{color:'var(--ink-2)', fontFamily:'var(--mono)'}}>
+                                      δ {ca.atm_ce.delta} · OI {(ca.atm_ce.oi||0).toLocaleString('en-IN')} · Vol {(ca.atm_ce.volume||0).toLocaleString('en-IN')}
+                                    </div>
+                                    {oiAvail && atmCeD.velocity && (
+                                      <div style={{marginTop:3, fontFamily:'var(--mono)', fontSize:9.5}}>
+                                        <span style={{color:velColor(atmCeD.velocity), fontWeight:700}}>{velIcon(atmCeD.velocity)} {atmCeD.velocity}</span>
+                                        {' '}<span style={{color:'var(--ink-3)'}}>OI {fmtDelta(atmCeD.oi_delta)} · Vol {fmtDelta(atmCeD.vol_delta)}</span>
+                                        {atmCeD.dt_min > 0 && <span style={{color:'var(--ink-3)'}}> / {atmCeD.dt_min}m</span>}
+                                      </div>
+                                    )}
                                   </div>
-                                </div>}
-                                {ca.atm_pe && <div style={{background:'var(--short-dim)', borderRadius:4, padding:'4px 8px'}}>
-                                  <div style={{color:'var(--short)', fontWeight:700, marginBottom:2}}>ATM {ca.atm_pe.strike} PE ₹{ca.atm_pe.ltp}</div>
-                                  <div style={{color:'var(--ink-2)', fontFamily:'var(--mono)'}}>
-                                    δ {ca.atm_pe.delta} · OI {(ca.atm_pe.oi||0).toLocaleString('en-IN')} · Vol {(ca.atm_pe.volume||0).toLocaleString('en-IN')}
+                                )}
+                                {ca.atm_pe && (
+                                  <div style={{background:'var(--short-dim)', borderRadius:4, padding:'4px 8px'}}>
+                                    <div style={{color:'var(--short)', fontWeight:700, marginBottom:2}}>ATM {ca.atm_pe.strike} PE ₹{ca.atm_pe.ltp}</div>
+                                    <div style={{color:'var(--ink-2)', fontFamily:'var(--mono)'}}>
+                                      δ {ca.atm_pe.delta} · OI {(ca.atm_pe.oi||0).toLocaleString('en-IN')} · Vol {(ca.atm_pe.volume||0).toLocaleString('en-IN')}
+                                    </div>
+                                    {oiAvail && atmPeD.velocity && (
+                                      <div style={{marginTop:3, fontFamily:'var(--mono)', fontSize:9.5}}>
+                                        <span style={{color:velColor(atmPeD.velocity), fontWeight:700}}>{velIcon(atmPeD.velocity)} {atmPeD.velocity}</span>
+                                        {' '}<span style={{color:'var(--ink-3)'}}>OI {fmtDelta(atmPeD.oi_delta)} · Vol {fmtDelta(atmPeD.vol_delta)}</span>
+                                        {atmPeD.dt_min > 0 && <span style={{color:'var(--ink-3)'}}> / {atmPeD.dt_min}m</span>}
+                                      </div>
+                                    )}
                                   </div>
-                                </div>}
+                                )}
                               </div>
+
+                              {/* OI velocity — building/unwinding strikes */}
+                              {oiAvail && (() => {
+                                const bldCe = ca.building_ce || [];
+                                const bldPe = ca.building_pe || [];
+                                const unwCe = ca.unwinding_ce || [];
+                                const unwPe = ca.unwinding_pe || [];
+                                const volCe = ca.vol_accel_ce || [];
+                                const volPe = ca.vol_accel_pe || [];
+                                const hasOiRows = bldCe.length || bldPe.length || unwCe.length || unwPe.length || volCe.length || volPe.length;
+                                if (!hasOiRows) return null;
+                                const Strike = ({s, d, color}) => (
+                                  <span style={{display:'inline-flex', alignItems:'center', gap:2, background:'var(--bg-3)',
+                                    borderRadius:3, padding:'1px 5px', margin:'1px 2px', fontFamily:'var(--mono)', fontSize:9.5}}>
+                                    <span style={{color:color, fontWeight:700}}>{s}</span>
+                                    <span style={{color:'var(--ink-3)'}}>{d > 0 ? '+' : ''}{(d||0).toLocaleString('en-IN')}</span>
+                                  </span>
+                                );
+                                return (
+                                  <div style={{fontSize:9.5, marginBottom:4}}>
+                                    <div style={{fontSize:8.5, color:'var(--ink-3)', textTransform:'uppercase', letterSpacing:'0.07em', fontWeight:600, marginBottom:3}}>
+                                      OI Velocity — strike activity
+                                    </div>
+                                    {(bldCe.length > 0 || bldPe.length > 0) && (
+                                      <div style={{display:'flex', flexWrap:'wrap', alignItems:'center', gap:2, marginBottom:2}}>
+                                        <span style={{color:'var(--long)', fontSize:8.5, fontWeight:700, minWidth:68}}>↑↑ Building CE:</span>
+                                        {bldCe.map(x => <Strike key={x.strike+'CE'} s={x.strike} d={x.vol_delta} color='var(--long)'/>)}
+                                        {bldCe.length === 0 && <span style={{color:'var(--ink-3)', fontFamily:'var(--mono)'}}>—</span>}
+                                      </div>
+                                    )}
+                                    {bldPe.length > 0 && (
+                                      <div style={{display:'flex', flexWrap:'wrap', alignItems:'center', gap:2, marginBottom:2}}>
+                                        <span style={{color:'var(--short)', fontSize:8.5, fontWeight:700, minWidth:68}}>↑↑ Building PE:</span>
+                                        {bldPe.map(x => <Strike key={x.strike+'PE'} s={x.strike} d={x.vol_delta} color='var(--short)'/>)}
+                                      </div>
+                                    )}
+                                    {(unwCe.length > 0 || unwPe.length > 0) && (
+                                      <div style={{display:'flex', flexWrap:'wrap', alignItems:'center', gap:2, marginBottom:2}}>
+                                        <span style={{color:'var(--ink-3)', fontSize:8.5, fontWeight:700, minWidth:68}}>↓↓ Unwinding:</span>
+                                        {unwCe.map(x => <Strike key={x.strike+'CE_u'} s={`${x.strike}CE`} d={x.oi_delta} color='var(--ink-3)'/>)}
+                                        {unwPe.map(x => <Strike key={x.strike+'PE_u'} s={`${x.strike}PE`} d={x.oi_delta} color='var(--ink-3)'/>)}
+                                      </div>
+                                    )}
+                                    {(volCe.length > 0 || volPe.length > 0) && (
+                                      <div style={{display:'flex', flexWrap:'wrap', alignItems:'center', gap:2}}>
+                                        <span style={{color:'var(--warn)', fontSize:8.5, fontWeight:700, minWidth:68}}>⚡ Vol surge:</span>
+                                        {volCe.map(x => <Strike key={x.strike+'VC'} s={`${x.strike}CE`} d={x.vol_delta} color='var(--warn)'/>)}
+                                        {volPe.map(x => <Strike key={x.strike+'VP'} s={`${x.strike}PE`} d={x.vol_delta} color='var(--warn)'/>)}
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              })()}
+
+                              {/* CE/PE walls */}
                               {(ca.max_oi_ce_strike || ca.max_oi_pe_strike) && (
-                                <div style={{marginTop:5, fontSize:10, color:'var(--ink-3)', fontFamily:'var(--mono)'}}>
+                                <div style={{marginTop:4, fontSize:10, color:'var(--ink-3)', fontFamily:'var(--mono)'}}>
                                   {ca.max_oi_ce_strike && <span>CE wall: <span style={{color:'var(--long)'}}>{ca.max_oi_ce_strike}</span> ({(ca.max_oi_ce_oi||0).toLocaleString('en-IN')} OI) </span>}
                                   {ca.max_oi_pe_strike && <span>PE wall: <span style={{color:'var(--short)'}}>{ca.max_oi_pe_strike}</span> ({(ca.max_oi_pe_oi||0).toLocaleString('en-IN')} OI)</span>}
                                 </div>

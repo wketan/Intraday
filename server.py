@@ -1310,6 +1310,30 @@ class SignalValidation:
             atm_pe = ca.get("atm_pe") or {}
             top_ce = ca.get("top_vol_ce") or []
             top_pe = ca.get("top_vol_pe") or []
+            # OI velocity / shift data
+            atm_ce_d = ca.get("atm_ce_oi_delta") or {}
+            atm_pe_d = ca.get("atm_pe_oi_delta") or {}
+            bld_ce = ca.get("building_ce") or []
+            bld_pe = ca.get("building_pe") or []
+            unw_ce = ca.get("unwinding_ce") or []
+            unw_pe = ca.get("unwinding_pe") or []
+            oi_shift = ca.get("oi_shift_signal", "NONE")
+            has_delta = ca.get("oi_delta_available", False)
+            def _vel(d):
+                v = d.get("velocity","?")
+                return f"{v} Δ{d.get('oi_delta',0):+,} vol_Δ{d.get('vol_delta',0):+,} ({d.get('dt_min','?')}min)"
+            vel_txt = ""
+            if has_delta:
+                vel_txt = f"""
+OI & VOLUME VELOCITY (last {atm_ce_d.get('dt_min','?')} min — real-time shift detection):
+  OI Shift Signal = {oi_shift}
+  ATM CE OI: {_vel(atm_ce_d)} | ATM PE OI: {_vel(atm_pe_d)}
+  Building CE strikes (fresh resistance): {', '.join(str(b['strike'])+' +'+str(b['oi_delta']) for b in bld_ce) or 'none'}
+  Building PE strikes (fresh support):    {', '.join(str(b['strike'])+' +'+str(b['oi_delta']) for b in bld_pe) or 'none'}
+  Unwinding CE strikes (resistance fading): {', '.join(str(u['strike'])+' '+str(u['oi_delta']) for u in unw_ce) or 'none'}
+  Unwinding PE strikes (support fading):    {', '.join(str(u['strike'])+' '+str(u['oi_delta']) for u in unw_pe) or 'none'}
+  NOTE: OI from Angel One API can be 0 (API limitation). When oi_delta=0, vol_delta is the primary signal.
+        Volume delta IS always real-time. Use it as the primary momentum indicator."""
             chain_anal_txt = f"""
 OPTION CHAIN MARKET SNAPSHOT (scan from live chain — use this as primary signal):
   ATM = {ca.get('atm')} | PCR (OI) = {ca.get('pcr')} | PCR (Vol) = {ca.get('pcr_vol')}
@@ -1323,7 +1347,7 @@ OPTION CHAIN MARKET SNAPSHOT (scan from live chain — use this as primary signa
   ATM CE ({atm_ce.get('strike')}): ₹{atm_ce.get('ltp')} δ={atm_ce.get('delta')} γ={atm_ce.get('gamma')} IV={atm_ce.get('iv')}% OI={atm_ce.get('oi',0):,} Vol={atm_ce.get('volume',0):,}
   ATM PE ({atm_pe.get('strike')}): ₹{atm_pe.get('ltp')} δ={atm_pe.get('delta')} γ={atm_pe.get('gamma')} IV={atm_pe.get('iv')}% OI={atm_pe.get('oi',0):,} Vol={atm_pe.get('volume',0):,}
   Volume leaders CE: {' | '.join(f"{o.get('strike')} ₹{o.get('ltp')} vol={o.get('volume',0):,}" for o in top_ce)}
-  Volume leaders PE: {' | '.join(f"{o.get('strike')} ₹{o.get('ltp')} vol={o.get('volume',0):,}" for o in top_pe)}"""
+  Volume leaders PE: {' | '.join(f"{o.get('strike')} ₹{o.get('ltp')} vol={o.get('volume',0):,}" for o in top_pe)}{vel_txt}"""
 
         regime_txt = ""
         if regime:
@@ -1359,6 +1383,17 @@ HOW TO READ THE CHAIN DATA
 - High volume on ATM CE = call buying = bullish momentum
 - High volume on ATM PE = put buying = bearish momentum
 - Only SKIP if direction conflicts with PCR AND IV skew AND volume — ALL THREE aligned against you
+
+OI VELOCITY SIGNALS (real-time shift detection — highest quality signal):
+- OI BUILDING at ATM CE = call writers entering = fresh RESISTANCE forming = bearish for LONG trades
+- OI BUILDING at ATM PE = put writers entering = fresh SUPPORT forming = bearish for SHORT trades
+- OI UNWINDING at ATM CE = resistance dissolving = BULLISH for LONG trades (ceiling lifting)
+- OI UNWINDING at ATM PE = support dissolving = BEARISH for SHORT trades (floor falling)
+- CE_ROLL_BULLISH = institutions rolling CE positions to ATM = strong bullish conviction — favor LONG
+- PE_ROLL_BEARISH = institutions rolling PE positions to ATM = strong bearish conviction — favor SHORT
+- Vol_delta (volume acceleration) is ALWAYS real-time even when oi=0. Use vol_Δ as primary signal.
+- PE_BUILD + vol acceleration at ATM = most reliable SHORT signal
+- CE_BUILD + vol acceleration at ATM = most reliable LONG signal (call writers = insurance sellers)
 
 OPTION RULES
 - IMPORTANT: Angel One's FULL API frequently returns oi=0 and volume=0 even for liquid options.
@@ -1866,11 +1901,14 @@ class OptPicker:
         }
 
     @staticmethod
-    def chain_analytics(chain, atm):
+    def chain_analytics(chain, atm, oi_delta=None):
         """Compute option-chain-level analytics from the raw chain list.
 
         Returns a dict with PCR, OI concentration, volume leaders, IV skew,
-        max pain strike, and ATM CE/PE snapshot — used by the AI prompt.
+        max pain strike, ATM CE/PE snapshot, AND OI/volume velocity (shift detection).
+
+        oi_delta — dict from Engine._compute_oi_delta(): {(strike, type): {oi_delta, vol_delta,
+                   velocity ("BUILDING"/"UNWINDING"/"STABLE"), vol_trend, dt_min}}
         """
         if not chain: return {}
         try:
@@ -1882,7 +1920,7 @@ class OptPicker:
             total_pe_oi = sum(o.get("oi", 0) or 0 for o in pe_list)
             pcr = round(total_pe_oi / max(total_ce_oi, 1), 3)
 
-            # ── PCR by volume ──
+            # ── PCR by volume (more reliable than OI for intraday) ──
             total_ce_vol = sum(o.get("volume", 0) or 0 for o in ce_list)
             total_pe_vol = sum(o.get("volume", 0) or 0 for o in pe_list)
             pcr_vol = round(total_pe_vol / max(total_ce_vol, 1), 3)
@@ -1892,8 +1930,8 @@ class OptPicker:
             max_oi_pe = max(pe_list, key=lambda x: x.get("oi", 0) or 0, default=None)
 
             # ── Volume leaders (active strikes being traded right now) ──
-            top_vol_ce = sorted(ce_list, key=lambda x: x.get("volume", 0) or 0, reverse=True)[:2]
-            top_vol_pe = sorted(pe_list, key=lambda x: x.get("volume", 0) or 0, reverse=True)[:2]
+            top_vol_ce = sorted(ce_list, key=lambda x: x.get("volume", 0) or 0, reverse=True)[:3]
+            top_vol_pe = sorted(pe_list, key=lambda x: x.get("volume", 0) or 0, reverse=True)[:3]
 
             # ── ATM CE and PE snapshot ──
             def atm_option(lst):
@@ -1908,12 +1946,57 @@ class OptPicker:
             pe_iv = float(atm_pe.get("iv_raw", 0) or atm_pe.get("iv", 0) or 0) if atm_pe else 0
             iv_skew = round(pe_iv - ce_iv, 2)  # positive = put skew (bearish insurance premium)
 
-            # ── Max pain: strike where total OI (CE+PE) is highest = resistance ──
+            # ── Max pain: strike where total OI (CE+PE) is highest ──
             oi_by_strike = {}
             for o in chain:
                 k = float(o.get("strike", 0))
                 oi_by_strike[k] = oi_by_strike.get(k, 0) + (o.get("oi", 0) or 0)
             max_pain_strike = max(oi_by_strike, key=oi_by_strike.get) if oi_by_strike else atm
+
+            # ── OI VELOCITY & SHIFT DETECTION (the real intelligence) ──
+            # Classify which strikes are seeing fresh OI buildup vs unwinding.
+            # OI BUILDING at a CE strike = new call writers = RESISTANCE forming there
+            # OI BUILDING at a PE strike = new put writers = SUPPORT forming there
+            # OI UNWIND at a strike = positions closing = that level is losing significance
+            # OI SHIFT (build at A, unwind at B same type) = roll = directional conviction
+            oi_delta = oi_delta or {}
+            building_ce = sorted(
+                [(k[0], v) for k, v in oi_delta.items() if k[1]=="CE" and v["velocity"]=="BUILDING"],
+                key=lambda x: -abs(x[1]["oi_delta"]))[:3]
+            building_pe = sorted(
+                [(k[0], v) for k, v in oi_delta.items() if k[1]=="PE" and v["velocity"]=="BUILDING"],
+                key=lambda x: -abs(x[1]["oi_delta"]))[:3]
+            unwinding_ce = sorted(
+                [(k[0], v) for k, v in oi_delta.items() if k[1]=="CE" and v["velocity"]=="UNWINDING"],
+                key=lambda x: -abs(x[1]["oi_delta"]))[:3]
+            unwinding_pe = sorted(
+                [(k[0], v) for k, v in oi_delta.items() if k[1]=="PE" and v["velocity"]=="UNWINDING"],
+                key=lambda x: -abs(x[1]["oi_delta"]))[:3]
+
+            # ATM-specific delta (most important for signal direction)
+            atm_ce_delta = oi_delta.get((int(atm), "CE"), {})
+            atm_pe_delta = oi_delta.get((int(atm), "PE"), {})
+
+            # Volume velocity: which strikes had the biggest volume jump since last scan
+            # Volume IS truly real-time (cumulative intraday volume updates with every trade)
+            vol_accel_ce = sorted(
+                [(k[0], v) for k, v in oi_delta.items() if k[1]=="CE" and v.get("vol_delta",0)>500],
+                key=lambda x: -x[1]["vol_delta"])[:3]
+            vol_accel_pe = sorted(
+                [(k[0], v) for k, v in oi_delta.items() if k[1]=="PE" and v.get("vol_delta",0)>500],
+                key=lambda x: -x[1]["vol_delta"])[:3]
+
+            # Cross-strike OI shift signal: build at ATM while unwinding at OTM (or vice versa)
+            # This suggests a roll — position moving from distant strike to ATM = conviction
+            oi_shift_signal = "NONE"
+            if building_pe and unwinding_pe:
+                oi_shift_signal = "PE_ROLL_BEARISH"  # putting on new puts closer to ATM
+            elif building_ce and unwinding_ce:
+                oi_shift_signal = "CE_ROLL_BULLISH"  # putting on new calls closer to ATM
+            elif building_pe and not building_ce:
+                oi_shift_signal = "PE_BUILD"  # fresh put writing = strong support
+            elif building_ce and not building_pe:
+                oi_shift_signal = "CE_BUILD"  # fresh call writing = strong resistance
 
             return {
                 "pcr": pcr,
@@ -1941,8 +2024,19 @@ class OptPicker:
                     "theta": atm_pe.get("theta"), "iv": pe_iv,
                     "oi": atm_pe.get("oi"), "volume": atm_pe.get("volume"),
                 } if atm_pe else None,
-                "iv_skew": iv_skew,  # positive = put skew (bearish), negative = call skew (bullish)
+                "iv_skew": iv_skew,
                 "atm": atm,
+                # ── OI & VOLUME VELOCITY DATA ──
+                "oi_delta_available": bool(oi_delta),
+                "oi_shift_signal": oi_shift_signal,
+                "atm_ce_oi_delta": atm_ce_delta,  # {velocity, oi_delta, vol_delta, dt_min}
+                "atm_pe_oi_delta": atm_pe_delta,
+                "building_ce": [{"strike": s, "oi_delta": v["oi_delta"], "vol_delta": v["vol_delta"], "dt_min": v["dt_min"]} for s, v in building_ce],
+                "building_pe": [{"strike": s, "oi_delta": v["oi_delta"], "vol_delta": v["vol_delta"], "dt_min": v["dt_min"]} for s, v in building_pe],
+                "unwinding_ce": [{"strike": s, "oi_delta": v["oi_delta"], "vol_delta": v["vol_delta"], "dt_min": v["dt_min"]} for s, v in unwinding_ce],
+                "unwinding_pe": [{"strike": s, "oi_delta": v["oi_delta"], "vol_delta": v["vol_delta"], "dt_min": v["dt_min"]} for s, v in unwinding_pe],
+                "vol_accel_ce": [{"strike": s, "vol_delta": v["vol_delta"]} for s, v in vol_accel_ce],
+                "vol_accel_pe": [{"strike": s, "vol_delta": v["vol_delta"]} for s, v in vol_accel_pe],
             }
         except Exception as e:
             log.warning(f"  chain_analytics error: {e}")
@@ -2103,10 +2197,17 @@ class PLTracker:
 # ═══════════════════════════════════════════════════════════════════
 class Engine:
     def __init__(self):
+        from collections import deque as _deque
+        self._deque = _deque
         self.client=AngelClient();self.sgen=SignalGen();self.opick=OptPicker()
         self.tracker=PLTracker(self.client);self.latest={};self.alerts=[]
         self.running=False;self._prev={};self._last_signal={}
-        self._chain_cache={}   # { name: {ts, opt, analytics, atm} } — 30s TTL per instrument
+        # Chain cache: 30s TTL per instrument. Now stores raw chain for delta recomputes.
+        # { name: {ts, ts_str, chain, opt, atm} }
+        self._chain_cache={}
+        # OI + Volume history: rolling 12 snapshots (~6 min at 30s per fetch) per strike.
+        # { name: { (strike, type): deque([{oi, volume, ltp, ts}, ...], maxlen=12) } }
+        self._oi_history = {}
         self._regime=None
         self._last_regime_run=None
         self._last_eod_run=None
@@ -2137,6 +2238,68 @@ class Engine:
                 self._last_regime_run = today
             except Exception as e:
                 log.warning(f"  regime brief failed: {e}")
+
+    def _update_oi_history(self, name, chain, now_ts):
+        """Record OI + volume snapshot for each (strike, type) pair.
+        Called after each fresh chain fetch — builds a rolling buffer used
+        by _compute_oi_delta() to detect OI shifts between scans.
+        """
+        if name not in self._oi_history:
+            self._oi_history[name] = {}
+        for o in chain:
+            key = (int(o.get("strike", 0)), str(o.get("type", "")))
+            if key not in self._oi_history[name]:
+                self._oi_history[name][key] = self._deque(maxlen=12)  # ~6 min at 30s/fetch
+            self._oi_history[name][key].append({
+                "oi":     int(o.get("oi", 0) or 0),
+                "volume": int(o.get("volume", 0) or 0),
+                "ltp":    float(o.get("ltp", 0) or 0),
+                "ts":     now_ts,
+            })
+
+    def _compute_oi_delta(self, name):
+        """Compare current OI/volume vs oldest snapshot to find velocity.
+        Returns dict { (strike, type): {velocity, oi_delta, vol_delta, dt_min, ...} }
+        Velocity: BUILDING (+) / UNWINDING (-) / STABLE.
+        NOTE: OI from Angel One FULL mode is often 0 — in that case, volume delta
+        (which IS real-time) is used as the primary momentum signal.
+        """
+        hist = self._oi_history.get(name, {})
+        result = {}
+        for key, snapshots in hist.items():
+            if len(snapshots) < 2:
+                continue
+            cur = snapshots[-1]
+            old = snapshots[0]
+            dt_sec = max(1, cur["ts"] - old["ts"])
+            dt_min = round(dt_sec / 60.0, 1)
+            oi_chg  = cur["oi"]     - old["oi"]
+            vol_chg = cur["volume"] - old["volume"]
+            # OI-based classification (when OI data is non-zero)
+            if cur["oi"] > 0 or old["oi"] > 0:
+                oi_pct = round(oi_chg / max(old["oi"], 1) * 100, 1)
+                if oi_chg > 10000:   velocity = "BUILDING"
+                elif oi_chg < -10000: velocity = "UNWINDING"
+                else:                velocity = "STABLE"
+            else:
+                # OI data unavailable — fall back to volume momentum
+                oi_pct = 0
+                if vol_chg > 2000:   velocity = "BUILDING"    # heavy volume = fresh positions
+                elif vol_chg < -500:  velocity = "UNWINDING"   # volume drying up = positions closing
+                else:                velocity = "STABLE"
+            # Volume trend (always meaningful — real-time)
+            if vol_chg > 1000:   vol_trend = "ACCELERATING"
+            elif vol_chg > 200:   vol_trend = "STEADY"
+            else:                vol_trend = "SLOWING"
+            result[key] = {
+                "oi_delta":  oi_chg,
+                "vol_delta": vol_chg,
+                "oi_pct":    oi_pct,
+                "velocity":  velocity,
+                "vol_trend": vol_trend,
+                "dt_min":    dt_min,
+            }
+        return result
 
     def _maybe_eod(self, now):
         """Layer C: at ~15:45 run EOD learning once."""
@@ -2257,31 +2420,46 @@ class Engine:
                     # Use cached chain if fetched in the last 30 s
                     _cc = self._chain_cache.get(name, {})
                     _cc_age = now_ts - _cc.get("ts", 0)
+
+                    # Compute OI delta BEFORE chain_analytics (uses rolling history)
+                    # This is always recomputed from history regardless of cache state
+                    oi_delta = self._compute_oi_delta(name)
+
                     if _cc_age < 30 and _cc.get("opt") is not None:
-                        opt         = _cc["opt"]
-                        chain_anal  = _cc["analytics"]
-                        atm_val     = _cc["atm"]
-                        log.info(f"  {name}: using cached chain (age {_cc_age:.0f}s)")
+                        opt     = _cc["opt"]
+                        atm_val = _cc["atm"]
+                        # Recompute analytics with FRESH oi_delta even on cache hit —
+                        # volume velocity changes every few seconds even when chain prices don't
+                        cached_chain = _cc.get("chain") or []
+                        chain_anal = OptPicker.chain_analytics(cached_chain, atm_val, oi_delta=oi_delta)
+                        log.info(f"  {name}: using cached chain (age {_cc_age:.0f}s) | "
+                                 f"OI shift={chain_anal.get('oi_shift_signal','?')}")
                     elif sig.get("direction") in ("LONG", "SHORT"):
                         try:
                             chain, atm_val = self.client.option_chain(inst, sig["price"])
                             if chain:
+                                # Update OI history with fresh data BEFORE computing analytics
+                                self._update_oi_history(name, chain, now_ts)
+                                oi_delta = self._compute_oi_delta(name)  # recompute with new snapshot
+
                                 expiry = chain[0].get("expiry", "") if chain else ""
                                 greeks = self.client.option_greeks(
                                     inst.get("expiry_prefix", name), expiry) if expiry else None
                                 opt = self.opick.pick(sig, inst, chain, atm_val,
                                                       CONFIG.get("budget", 20000), greeks=greeks)
-                                chain_anal = OptPicker.chain_analytics(chain, atm_val)
-                                # Cache for 30 s to avoid hitting rate limits every 5-s scan
+                                chain_anal = OptPicker.chain_analytics(chain, atm_val, oi_delta=oi_delta)
+                                # Cache raw chain + opt for 30s (so analytics can be recomputed fresh)
                                 self._chain_cache[name] = {
                                     "ts": now_ts,
                                     "ts_str": datetime.now(IST).strftime("%H:%M:%S"),
+                                    "chain": chain,   # raw chain for delta recompute on cache hit
                                     "opt": opt,
-                                    "analytics": chain_anal, "atm": atm_val
+                                    "atm": atm_val
                                 }
-                                log.info(f"  {name}: chain fetched — {opt.get('strike')} "
-                                         f"{opt.get('type')} ₹{opt.get('ltp')} | "
-                                         f"PCR={chain_anal.get('pcr')} skew={chain_anal.get('iv_skew')}")
+                                log.info(f"  {name}: chain fetched — {opt.get('strike') if opt else '?'} "
+                                         f"{opt.get('type','?') if opt else ''} ₹{opt.get('ltp','?') if opt else '?'} | "
+                                         f"PCR={chain_anal.get('pcr')} skew={chain_anal.get('iv_skew')} "
+                                         f"OI_shift={chain_anal.get('oi_shift_signal','?')}")
                         except Exception as ce:
                             log.warning(f"  Chain fetch failed for {name}: {ce}")
 
@@ -2320,18 +2498,58 @@ class Engine:
                         elif dir_ == "LONG" and iv_sk < -2:
                             ca_boost += 7; ca_notes.append(f"IV skew {iv_sk:.1f} call premium (bullish)")
 
-                        # Volume leadership confirms momentum
+                        # Volume leadership confirms momentum (truly real-time from NSE)
                         if dir_ == "SHORT" and pe_vol > ce_vol * 1.3:
                             ca_boost += 8; ca_notes.append(f"PE vol {pe_vol:,} > CE {ce_vol:,} (bearish flow)")
                         elif dir_ == "LONG" and ce_vol > pe_vol * 1.3:
                             ca_boost += 8; ca_notes.append(f"CE vol {ce_vol:,} > PE {pe_vol:,} (bullish flow)")
 
-                        # Apply boost (cap at 25 pts from chain, min 0 after deductions)
-                        ca_boost = max(-15, min(25, ca_boost))
+                        # ── OI VELOCITY BOOST (shift detection — highest signal quality) ──
+                        # OI building = fresh positions = institutional conviction at that strike
+                        # OI unwinding = positions closing = level losing significance
+                        # OI roll = shift from far strike to near strike = directional conviction
+                        oi_shift   = chain_anal.get("oi_shift_signal", "NONE")
+                        atm_ce_d   = chain_anal.get("atm_ce_oi_delta", {})
+                        atm_pe_d   = chain_anal.get("atm_pe_oi_delta", {})
+                        vol_accel_ce = chain_anal.get("vol_accel_ce", [])
+                        vol_accel_pe = chain_anal.get("vol_accel_pe", [])
+
+                        if dir_ == "LONG":
+                            if atm_pe_d.get("velocity") == "BUILDING":
+                                ca_boost += 10
+                                ca_notes.append(f"🔥 ATM PE OI building (+{atm_pe_d.get('oi_delta',0):,} in {atm_pe_d.get('dt_min','?')}min) — fresh support")
+                            if atm_ce_d.get("velocity") == "UNWINDING":
+                                ca_boost += 7
+                                ca_notes.append("📉 ATM CE OI unwinding — resistance dissolving")
+                            if oi_shift == "CE_ROLL_BULLISH":
+                                ca_boost += 8; ca_notes.append("🔄 CE OI roll — bullish conviction")
+                            if atm_ce_d.get("velocity") == "BUILDING":
+                                ca_boost -= 6; ca_notes.append(f"⚠️ ATM CE OI building — fresh resistance above")
+                            if vol_accel_ce:
+                                ca_boost += 5
+                                ca_notes.append(f"⚡ CE vol surge +{vol_accel_ce[0]['vol_delta']:,} at {vol_accel_ce[0]['strike']}")
+                        elif dir_ == "SHORT":
+                            if atm_ce_d.get("velocity") == "BUILDING":
+                                ca_boost += 10
+                                ca_notes.append(f"🔥 ATM CE OI building (+{atm_ce_d.get('oi_delta',0):,} in {atm_ce_d.get('dt_min','?')}min) — fresh resistance")
+                            if atm_pe_d.get("velocity") == "UNWINDING":
+                                ca_boost += 7
+                                ca_notes.append("📉 ATM PE OI unwinding — support dissolving")
+                            if oi_shift == "PE_ROLL_BEARISH":
+                                ca_boost += 8; ca_notes.append("🔄 PE OI roll — bearish conviction")
+                            if atm_pe_d.get("velocity") == "BUILDING":
+                                ca_boost -= 6; ca_notes.append(f"⚠️ ATM PE OI building — fresh support below")
+                            if vol_accel_pe:
+                                ca_boost += 5
+                                ca_notes.append(f"⚡ PE vol surge +{vol_accel_pe[0]['vol_delta']:,} at {vol_accel_pe[0]['strike']}")
+
+                        # Apply boost (raised cap to 35 — OI shift is a high-quality signal)
+                        ca_boost = max(-20, min(35, ca_boost))
                         if ca_boost != 0:
                             sig["confidence"] = min(95, max(10, sig["confidence"] + ca_boost))
                             sig.setdefault("reasons", []).extend(ca_notes)
-                            log.info(f"  {name}: chain boost {ca_boost:+d}pts → conf={sig['confidence']}%")
+                            log.info(f"  {name}: chain boost {ca_boost:+d}pts → conf={sig['confidence']}% "
+                                     f"[OI_shift={oi_shift} atm_ce={atm_ce_d.get('velocity','?')} atm_pe={atm_pe_d.get('velocity','?')}]")
 
                     # ════════════════════════════════════════════════════════
                     # STEP 2: Always update self.latest with real option data
