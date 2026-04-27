@@ -562,7 +562,11 @@ class AngelClient:
 
     def ensure(self):
         if not self.connected: return self.login()
-        if self.last_login and (datetime.now(IST)-self.last_login).seconds > 18000: return self.login()
+        # Angel One sessions expire after ~24h. Re-login proactively after 4h to avoid
+        # silent data failures mid-session. Also re-login immediately if disconnected.
+        if self.last_login and (datetime.now(IST)-self.last_login).total_seconds() > 14400:
+            log.info("🔄 Session 4h+ old — proactive re-login")
+            return self.login()
         return True
 
     def diag(self):
@@ -1354,25 +1358,27 @@ HOW TO READ THE CHAIN DATA
 - Max pain is where market makers want price to go — trade WITH it near expiry
 - High volume on ATM CE = call buying = bullish momentum
 - High volume on ATM PE = put buying = bearish momentum
-- SKIP if direction conflicts with PCR AND IV skew AND volume leader (all three aligned against you)
+- Only SKIP if direction conflicts with PCR AND IV skew AND volume — ALL THREE aligned against you
 
 OPTION RULES
-- SKIP if OI < 50,000 (illiquid — huge slippage risk)
-- SKIP if volume < 500 (no participation)
-- PREFER high OI + high volume — real participation
-- PREFER delta 0.35-0.55 for directional trades
-- SKIP if IV > 50% (IV crush risk)
-- If another strike has clearly better OI/volume, note it
+- IMPORTANT: Angel One's FULL API frequently returns oi=0 and volume=0 even for liquid options.
+  Do NOT skip solely because OI=0 or volume=0 — the spread and LTP are more reliable liquidity signals.
+- PREFER delta 0.35-0.55 for directional trades (0.25-0.65 is acceptable)
+- SKIP if IV > 60% (IV crush risk on event days only)
+- SKIP if spread > 10% of LTP (genuinely illiquid — slippage is too high)
+- If price is affordable and spread is tight, it's likely tradeable regardless of OI value
 
 SIGNAL RULES
-- SKIP if RSI>75 for LONG or RSI<25 for SHORT
-- SKIP after 14:30 unless premium has clear runway
-- SKIP if ATR tiny
-- SKIP if SuperTrend disagrees
-- SKIP if spread > 5% of LTP
-- Scale POSITION_PCT down when setup not clean
+- SKIP if RSI>80 for LONG or RSI<20 for SHORT (extreme, not just elevated)
+- Default to TAKE unless there is a strong specific reason to SKIP
+- WAIT (not SKIP) if setup is good but one minor concern exists — allow retry
+- SKIP after 14:40 IST (insufficient time for trade to run)
+- SKIP if SuperTrend strongly disagrees AND RSI also contradicts
+- Scale POSITION_PCT down (50%) when setup not perfectly clean — do NOT SKIP unless truly broken
 - SL_TIGHTENING = "trailing_atr" on trending, "breakeven_at_half_t1" on ranging
-- BANKNIFTY monthly slips harder
+- BANKNIFTY monthly slips harder — use 75% position_pct for BANKNIFTY if in doubt
+- BIAS TOWARD TAKING: a missed trade costs 0, but a blocked good trade also costs 0. The engine's
+  confidence gates already protect capital. Your job is to confirm clear edge, not find reasons to SKIP.
 
 Respond in EXACTLY this JSON (no markdown, no prose):
 {{"verdict": "TAKE" | "SKIP" | "WAIT",
@@ -2210,9 +2216,13 @@ class Engine:
                 # Regime-level overrides (Layer A)
                 regime = self._regime or RegimeBrief.today()
                 avoid = set((regime or {}).get("avoid_instruments") or [])
-                conf_floor = max(CONFIG["min_confidence"],
-                                 int((regime or {}).get("confidence_floor") or CONFIG["min_confidence"]))
-                min_rr_floor = max(1.5, float((regime or {}).get("min_rr") or 1.5))
+                # BUG FIX #6: Do NOT use regime.confidence_floor to override MIN_CONFIDENCE.
+                # RegimeBrief asks Claude for a floor in [55,80] every morning, which would
+                # immediately undo our lowered 45% threshold and block ALL signals.
+                # Regime can control avoid_instruments, bias, and min_rr — but confidence
+                # gating is the engine's job.
+                conf_floor = CONFIG["min_confidence"]  # always 45% (env MIN_CONFIDENCE)
+                min_rr_floor = max(1.2, float((regime or {}).get("min_rr") or 1.2))
 
                 # Event blackout (Layer E) — short-circuit the whole scan
                 blackout, ev = EventCalendar.in_blackout()
@@ -2264,7 +2274,9 @@ class Engine:
                                 chain_anal = OptPicker.chain_analytics(chain, atm_val)
                                 # Cache for 30 s to avoid hitting rate limits every 5-s scan
                                 self._chain_cache[name] = {
-                                    "ts": now_ts, "opt": opt,
+                                    "ts": now_ts,
+                                    "ts_str": datetime.now(IST).strftime("%H:%M:%S"),
+                                    "opt": opt,
                                     "analytics": chain_anal, "atm": atm_val
                                 }
                                 log.info(f"  {name}: chain fetched — {opt.get('strike')} "
@@ -2326,12 +2338,19 @@ class Engine:
                     # (dashboard polls this; must reflect current scan state)
                     # ════════════════════════════════════════════════════════
                     timing, _ = estimate_exit_time(sig)
+                    now_ist_str = datetime.now(IST).strftime("%H:%M:%S")
                     self.latest[name] = {
                         "instrument": name, "lot_size": inst["lot_size"],
                         "signal": sig, "option": opt,
                         "timing": timing, "chain_analytics": chain_anal,
-                        "updated_at": datetime.now(IST).strftime("%H:%M:%S")
+                        "updated_at": now_ist_str,
+                        # Separate timestamp for when the option chain was last fetched
+                        # (option prices in 'opt' correspond to this time, not now)
+                        "chain_fetched_at": _cc.get("ts_str") or now_ist_str,
                     }
+                    # Also store human-readable chain fetch time in cache
+                    if name in self._chain_cache:
+                        self._chain_cache[name]["ts_str"] = now_ist_str
 
                     # ════════════════════════════════════════════════════════
                     # STEP 3: 15-min cooldown gates ALERT ONLY — not chain fetch
@@ -2425,7 +2444,15 @@ class Engine:
                         # 📱 SLACK ALERT
                         SlackAlert.send(SlackAlert.format_signal(name, sig, opt, timing, ai_result))
 
-                    self._prev[name]=result;self.latest[name]=result;self._last_signal[name]=datetime.now(IST)
+                        # BUG FIX #7: Only start the 15-min cooldown AFTER an alert fires.
+                        # Previously this was set unconditionally at the bottom of the loop,
+                        # wasting a cooldown window on every sub-threshold scan.
+                        self._last_signal[name] = datetime.now(IST)
+
+                    self._prev[name]=result;self.latest[name]=result
+                    # _last_signal is now ONLY set when an alert fires (TAKE) or when
+                    # AI SKIPs (line above in the SKIP/WAIT branch). Sub-threshold signals
+                    # (conf < conf_floor) no longer consume a cooldown window.
 
                 time.sleep(CONFIG["scan_interval_sec"])
             except Exception as e:
