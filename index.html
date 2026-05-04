@@ -1805,6 +1805,115 @@
     // TICKER TAPE
     // ===========================================
 
+    /**
+     * RiskBanner — shows the kill-switch state, daily-loss progress vs limit,
+     * trade-count progress vs cap, AND cache-cost telemetry (Anthropic cache hit
+     * rate + candle cache hit rate). Renders nothing until /api/metrics responds.
+     *
+     * Wireframe:
+     *   ┌─────────────────────────────────────────────────────────────────────────┐
+     *   │ 🛡 SAFE   ₹—312 / ₹2000 loss limit   3/8 trades   AI cache 84% · candles 92% │
+     *   └─────────────────────────────────────────────────────────────────────────┘
+     * On kill-switch trip the row turns red and shows "🛑 KILL-SWITCH TRIPPED".
+     */
+    function RiskBanner({ metrics, onTrip, onReset }) {
+      if (!metrics) return null;
+      const risk = metrics.risk || {};
+      const perf = metrics.perf_today || {};
+      const eng  = metrics.engine || {};
+      const ant  = (metrics.cache && metrics.cache.anthropic) || {};
+      const candles = (metrics.cache && metrics.cache.candles) || {};
+      const tripped = !!eng.killswitch_tripped;
+      const lossLimit = Number(risk.daily_loss_limit || 2000);
+      const tradeCap  = Number(risk.max_trades_per_day || 8);
+      const netPnl    = Number(perf.total_pnl_net || 0);
+      const trades    = Number(metrics.trades_today || 0);
+      // Loss progress: 0 when in profit, capped at 100% when at-or-past limit
+      const lossPct = lossLimit > 0 ? Math.max(0, Math.min(100, (-netPnl / lossLimit) * 100)) : 0;
+      const tradePct = tradeCap > 0 ? Math.max(0, Math.min(100, (trades / tradeCap) * 100)) : 0;
+      const antTotal = Number(ant.cache_read_tokens || 0) + Number(ant.input_tokens || 0);
+      const antHitPct = antTotal > 0 ? Math.round((Number(ant.cache_read_tokens || 0) / antTotal) * 100) : 0;
+      const candleHitPct = candles.hit_rate_pct != null ? candles.hit_rate_pct : 0;
+      // Choose colour: tripped = red, near limit = amber, else green
+      const tone = tripped || lossPct >= 100 || tradePct >= 100 ? 'short'
+                  : lossPct >= 70 || tradePct >= 70 ? 'warn' : 'long';
+      const toneVar = tone === 'short' ? 'var(--short)' : tone === 'warn' ? 'var(--warn)' : 'var(--long)';
+      const toneDim = tone === 'short' ? 'var(--short-dim)' : tone === 'warn' ? 'var(--warn-dim)' : 'var(--long-dim)';
+      const label = tripped ? '🛑 KILL-SWITCH TRIPPED' : (tone === 'long' ? '🛡 SAFE' : tone === 'warn' ? '⚠ NEAR LIMIT' : '⛔ AT LIMIT');
+      return (
+        <div style={{
+          padding: '10px var(--pad-x)',
+          background: tripped ? 'oklch(from var(--short) l c h / 0.18)' : toneDim,
+          borderBottom: '1px solid ' + toneVar,
+          display: 'flex', alignItems: 'center', gap: 18, fontSize: 12, flexWrap: 'wrap',
+        }}>
+          <span style={{
+            fontFamily: 'var(--mono)', fontWeight: 600, fontSize: 11,
+            letterSpacing: '0.08em', color: toneVar, whiteSpace: 'nowrap',
+          }}>{label}</span>
+
+          {/* Loss progress */}
+          <div style={{display:'flex', alignItems:'center', gap:8, minWidth:200}}>
+            <span style={{fontSize:10.5, color:'var(--ink-2)', fontFamily:'var(--mono)'}}>LOSS</span>
+            <div style={{flex:1, height:6, background:'var(--bg-2)', borderRadius:3, position:'relative', overflow:'hidden'}}>
+              <div style={{
+                position:'absolute', left:0, top:0, bottom:0,
+                width: lossPct + '%', background: toneVar, borderRadius: 3,
+                transition: 'width 400ms ease',
+              }}/>
+            </div>
+            <span className="mono" style={{fontSize:11, color: netPnl >= 0 ? 'var(--long)' : 'var(--short)', minWidth:90, textAlign:'right'}}>
+              {netPnl >= 0 ? '+₹' : '−₹'}{Math.abs(Math.round(netPnl)).toLocaleString('en-IN')} / ₹{lossLimit.toLocaleString('en-IN')}
+            </span>
+          </div>
+
+          {/* Trade progress */}
+          <div style={{display:'flex', alignItems:'center', gap:8, minWidth:160}}>
+            <span style={{fontSize:10.5, color:'var(--ink-2)', fontFamily:'var(--mono)'}}>TRADES</span>
+            <div style={{flex:1, height:6, background:'var(--bg-2)', borderRadius:3, position:'relative', overflow:'hidden'}}>
+              <div style={{
+                position:'absolute', left:0, top:0, bottom:0,
+                width: tradePct + '%', background: toneVar, borderRadius: 3,
+                transition: 'width 400ms ease',
+              }}/>
+            </div>
+            <span className="mono" style={{fontSize:11, color:'var(--ink-1)', minWidth:48, textAlign:'right'}}>
+              {trades} / {tradeCap}
+            </span>
+          </div>
+
+          <span style={{flex:1}}/>
+
+          {/* Cache telemetry */}
+          <div className="muted" style={{display:'flex', gap:12, fontSize:11, fontFamily:'var(--mono)'}}>
+            <span title="Anthropic cache hit rate (cached tokens vs total input)">
+              AI cache <span style={{color:'var(--ink-1)'}}>{antHitPct}%</span>
+              <span style={{color:'var(--ink-3)', marginLeft:4}}>· {Number(ant.calls||0)} calls</span>
+            </span>
+            <span title="Candle cache hit rate — higher = fewer Angel One API calls">
+              Candles <span style={{color:'var(--ink-1)'}}>{candleHitPct}%</span>
+            </span>
+            <span title="Auto-close cutoff for the session">
+              Close <span style={{color:'var(--ink-1)'}}>{eng.auto_close || '15:15'}</span>
+            </span>
+          </div>
+
+          {/* Manual override controls */}
+          {tripped ? (
+            <button type="button" className="btn ghost" style={{height:26, fontSize:11}}
+              onClick={onReset} title="Clear kill-switch latch — only do this if you understand why it tripped">
+              Reset
+            </button>
+          ) : (
+            <button type="button" className="btn danger" style={{height:26, fontSize:11}}
+              onClick={onTrip} title="Manually stop new alerts for the rest of the day">
+              Stop alerts
+            </button>
+          )}
+        </div>
+      );
+    }
+
     function TickerTape({ live = {} }) {
       // Build live rows from state; show dashes when we don't have data yet
       const items = INST.map(i => {
@@ -2240,6 +2349,9 @@ function App() {
       const [replay, setReplay] = useState(null);    // { data, idx, total }
       const [toast, setToast] = useState(null);
       const [swingData, setSwingData] = useState({signals:[], positions:[], performance:{}, last_scan_time:'—'});
+      // /api/metrics snapshot — kill-switch state, daily P&L, trade cap, cache hit rate.
+      // Polled every 8s while engine is on (cheap endpoint, all in-memory on the server).
+      const [metrics, setMetrics] = useState(null);
       const lastSigId = useRef(null);
       const replayAnalyzedAt = React.useRef({});      // { [instName]: lastAnalyzedIdx }
 
@@ -2497,6 +2609,22 @@ function App() {
         addLog('INFO', 'State reset');
       };
 
+      // Manual kill-switch controls — surfaced in the RiskBanner.
+      const doKillswitch = async (action) => {
+        try {
+          const r = await apiJSON('/api/killswitch', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action }),
+          });
+          showToast(action === 'trip' ? 'Kill-switch tripped — no new alerts today' : 'Kill-switch reset — engine can fire alerts again');
+          addLog('INFO', `kill-switch ${action} → ${JSON.stringify(r)}`);
+        } catch(e) {
+          showToast('Kill-switch toggle failed — auth header set?');
+          addLog('ERR', `kill-switch ${action} failed: ${e.message || e}`);
+        }
+      };
+
       useEffect(() => { localStorage.setItem('se_tab', tab); }, [tab]);
       useEffect(() => { localStorage.setItem('se_mode', mode); }, [mode]);
 
@@ -2712,7 +2840,18 @@ function App() {
         fetchSwing();
         const swingId = setInterval(fetchSwing, 60000);
 
-        return () => { alive = false; clearInterval(fastId); clearInterval(slowId); clearInterval(swingId); };
+        // ── Metrics + risk polling — every 8s. Powers the RiskBanner kill-switch + cost panel ──
+        const fetchMetrics = async () => {
+          if (!alive) return;
+          try {
+            const r = await apiJSON('/api/metrics');
+            if (alive && r) setMetrics(r);
+          } catch(e) { /* silent — endpoint may be unreachable on cold deploy */ }
+        };
+        fetchMetrics();
+        const metricsId = setInterval(fetchMetrics, 8000);
+
+        return () => { alive = false; clearInterval(fastId); clearInterval(slowId); clearInterval(swingId); clearInterval(metricsId); };
       }, [on, mode]);
 
       // Poll /api/ltp every 3 s while engine is on — keeps live cards populated.
@@ -2908,6 +3047,15 @@ function App() {
           </div>
 
           <TickerTape live={live}/>
+
+          {/* Risk + cost banner — visible when engine is on and metrics endpoint responds */}
+          {on && metrics && (
+            <RiskBanner
+              metrics={metrics}
+              onTrip={() => doKillswitch('trip')}
+              onReset={() => doKillswitch('reset')}
+            />
+          )}
 
           {/* engine status bar — always visible when engine is on */}
           {on && (
