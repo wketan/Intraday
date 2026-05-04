@@ -1,11 +1,14 @@
 # Dockerfile used by Railway (and Fly.io). Forces explicit control over the
 # start command, bypassing Railway's UI Custom Start Command + Procfile chain
 # that was failing to expand $PORT.
-FROM python:3.11.6-slim
+FROM python:3.11-slim
 
-# System deps — needed for pandas/numpy wheels on slim base.
+# System deps — needed for pandas/numpy and SmartAPI SSL on slim base.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
+    libssl-dev \
+    libffi-dev \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
