@@ -33,25 +33,56 @@ CONFIG = {
     "password":     os.environ.get("ANGEL_PASSWORD", ""),
     "totp_secret":  os.environ.get("ANGEL_TOTP_SECRET", ""),
 
-    "scan_interval_sec": int(os.environ.get("SCAN_INTERVAL", "5")),
+    # Scan loop cadence. Default raised 5s → 30s — 5-minute candles don't update inside
+    # a 5s window, and the option-chain cache is 30s anyway. Cuts API calls ~6x with no
+    # signal-freshness loss.
+    "scan_interval_sec": int(os.environ.get("SCAN_INTERVAL", "30")),
     "candle_interval":   "FIVE_MINUTE",
     "lookback_days":     3,
+    # Cache 5-min candles for 90s — they only update every 5 min, so 90s is fresh and
+    # cuts getCandleData calls dramatically.
+    "candle_cache_ttl":  int(os.environ.get("CANDLE_CACHE_TTL", "90")),
     "target_points_min": int(os.environ.get("TARGET_MIN", "10")),
     "target_points_max": int(os.environ.get("TARGET_MAX", "15")),
     "min_confidence":    int(os.environ.get("MIN_CONFIDENCE", "45")),
     "budget":            int(os.environ.get("BUDGET", "20000")),
 
+    # ── Risk guards (kill-switch) ──
+    # Stop firing new alerts after either threshold is hit for the day.
+    # Defaults: stop after ₹2000 cumulative loss OR 8 trades (open + closed).
+    "daily_loss_limit":  int(os.environ.get("DAILY_LOSS_LIMIT", "2000")),
+    "max_trades_per_day":int(os.environ.get("MAX_TRADES_PER_DAY", "8")),
+
+    # ── Cost model (subtracted from displayed P&L for realism) ──
+    # Round-trip brokerage estimate per lot (Zerodha/Angel: ~₹40 entry + ~₹40 exit + STT + GST).
+    # Adjust if your broker's structure differs.
+    "brokerage_per_lot_roundtrip": float(os.environ.get("BROKERAGE_PER_LOT", "100")),
+    # Slippage in basis points (1bp = 0.01%) of premium, applied each side. 50bp = 0.5%
+    # per side ≈ realistic for ATM weekly options with spreads in the 0.5-1.5% range.
+    "slippage_bps_per_side": float(os.environ.get("SLIPPAGE_BPS_PER_SIDE", "50")),
+
+    # Auto-close cutoff (HH:MM IST). Brought forward 15:25 → 15:15 — last 15 min has 2-3x
+    # spreads. Override with env if you want to ride later.
+    "auto_close_hour":   int(os.environ.get("AUTO_CLOSE_HOUR", "15")),
+    "auto_close_minute": int(os.environ.get("AUTO_CLOSE_MINUTE", "15")),
+
     # ── Slack Alert Config ──
     # Create webhook: Slack → Apps → Incoming Webhooks → Add to Slack → Select your DM
     "slack_webhook":    os.environ.get("SLACK_WEBHOOK", ""),
     "slack_enabled":    os.environ.get("SLACK_ENABLED", "true").lower() == "true",
-    
+
     # ── AI Analysis (Claude) ──
     "anthropic_api_key": os.environ.get("ANTHROPIC_API_KEY", ""),
-    # Model for Claude layers A, B, C. Layer D (in-flight) can be downgraded to Haiku via env.
+    # Model for Claude layers A, B, C. Layer D (in-flight) defaults to Haiku 4.5 — its
+    # decisions are tiny structured outputs (HOLD/CLOSE/TRAIL) and Haiku is ~1/12 the
+    # cost of Sonnet for nearly identical quality on this task.
     "anthropic_model":   os.environ.get("ANTHROPIC_MODEL", "claude-sonnet-4-5"),
-    "anthropic_model_inflight": os.environ.get("ANTHROPIC_MODEL_INFLIGHT",
-                                               os.environ.get("ANTHROPIC_MODEL", "claude-sonnet-4-5")),
+    "anthropic_model_inflight": os.environ.get(
+        "ANTHROPIC_MODEL_INFLIGHT", "claude-haiku-4-5-20251001"),
+    # Master toggle for prompt caching (cache_control: ephemeral). Saves ~80% input tokens
+    # on Layer B's repeated rules block. Sonnet 4.5 minimum is 1024 cached tokens — below
+    # that the request silently runs uncached, no error. Set to "false" to disable.
+    "anthropic_cache_enabled": os.environ.get("ANTHROPIC_CACHE_ENABLED", "true").lower() == "true",
 
     # ── Security ──
     # Shared secret required on write endpoints (X-Auth-Token header). If empty, writes are rejected.
@@ -357,6 +388,12 @@ def init_db():
         ("option_token", "TEXT"), ("option_lots", "INTEGER"),
         ("position_pct", "INTEGER"), ("sl_tightening", "TEXT"),
         ("option_exit", "REAL"), ("ai_json", "TEXT"),
+        # Cost-aware P&L: gross is the displayed pnl_rupees; these track the
+        # estimated brokerage + slippage and the resulting net.
+        ("brokerage_rs", "REAL"),
+        ("slippage_rs", "REAL"),
+        ("pnl_rupees_net", "REAL"),
+        ("option_exit_realistic", "REAL"),
     ]:
         col, typ = col_decl
         if col not in cols:
@@ -461,11 +498,54 @@ def save_signal(instrument, signal, option, ai=None):
     conn.commit(); conn.close()
     return row_id
 
-def update_result(sig_id, exit_price, result, pnl_pts, pnl_rs, option_exit=None):
+def estimate_costs(option_entry, option_exit, qty, lots):
+    """Estimate brokerage + slippage in rupees for a closed option round-trip.
+
+    Brokerage: flat rupees per lot from CONFIG (Zerodha/Angel typical: ₹100/lot RT).
+    Slippage:  bps (basis points) of premium applied each side. 50bp = 0.5% per side.
+               Realistic for ATM weekly options where spreads are 0.5-1.5%.
+    Returns (brokerage_rs, slippage_rs, realistic_exit_price)."""
+    try:
+        lots = max(1, int(lots or 1))
+        qty = max(1, int(qty or 0))
+        bps_side = float(CONFIG.get("slippage_bps_per_side", 50)) / 10000.0  # 50 → 0.005
+        per_lot = float(CONFIG.get("brokerage_per_lot_roundtrip", 100))
+        brokerage = round(per_lot * lots, 2)
+        # Slippage costs you on entry (paying nearer ask) and on exit (receiving nearer bid)
+        # Direction-agnostic in absolute rupees: one side of premium each leg.
+        entry_slip = float(option_entry or 0) * bps_side * qty
+        exit_slip  = float(option_exit  or 0) * bps_side * qty
+        slippage = round(entry_slip + exit_slip, 2)
+        # Realistic exit price = exit minus one side of slippage (you got hit harder than mid)
+        realistic_exit = round(float(option_exit or 0) * (1 - bps_side), 2) if option_exit else None
+        return brokerage, slippage, realistic_exit
+    except Exception:
+        return 0.0, 0.0, option_exit
+
+
+def update_result(sig_id, exit_price, result, pnl_pts, pnl_rs, option_exit=None,
+                  option_entry=None, qty=None, lots=None):
+    """Close a signal row.
+
+    If option_entry/qty/lots are supplied, also compute and persist:
+      - brokerage_rs / slippage_rs (estimated costs)
+      - pnl_rupees_net (gross P&L minus those costs)
+      - option_exit_realistic (slippage-adjusted exit premium)
+    """
+    brokerage_rs = slippage_rs = 0.0
+    realistic_exit = option_exit
+    pnl_net = pnl_rs
+    if option_entry is not None and option_exit is not None and qty:
+        brokerage_rs, slippage_rs, realistic_exit = estimate_costs(
+            option_entry, option_exit, qty, lots)
+        pnl_net = round((pnl_rs or 0) - brokerage_rs - slippage_rs, 0)
     db_exec("""UPDATE signals SET status='CLOSED',exit_price=?,exit_time=?,
-               option_exit=?,pnl_points=?,pnl_rupees=?,result=? WHERE id=?""",
+               option_exit=?,pnl_points=?,pnl_rupees=?,result=?,
+               brokerage_rs=?,slippage_rs=?,pnl_rupees_net=?,option_exit_realistic=?
+               WHERE id=?""",
             (exit_price, datetime.now(IST).strftime("%H:%M:%S"),
-             option_exit, pnl_pts, pnl_rs, result, sig_id))
+             option_exit, pnl_pts, pnl_rs, result,
+             brokerage_rs, slippage_rs, pnl_net, realistic_exit, sig_id))
 
 def get_history(limit=100, date=None):
     if date:
@@ -474,17 +554,39 @@ def get_history(limit=100, date=None):
         rows = db_exec("SELECT * FROM signals ORDER BY id DESC LIMIT ?", (limit,), fetch=True)
     return [dict(r) for r in rows] if rows else []
 
-def get_perf():
-    rows = db_exec("SELECT * FROM signals WHERE status='CLOSED'", fetch=True)
-    if not rows: return {"total":0,"wins":0,"losses":0,"win_rate":0,"total_pnl":0,"avg_win":0,"avg_loss":0,"best_trade":0,"worst_trade":0}
+def get_perf(date=None):
+    """Aggregate performance over closed rows.
+
+    Returns BOTH gross (`total_pnl`, displayed) and net (`total_pnl_net`, after
+    estimated brokerage + slippage). The net figure is what your account
+    actually grows by.
+
+    `date` — optional 'YYYY-MM-DD' to restrict to a single day (used by
+              kill-switch + dashboard daily-risk panel).
+    """
+    if date:
+        rows = db_exec("SELECT * FROM signals WHERE status='CLOSED' AND date=?", (date,), fetch=True)
+    else:
+        rows = db_exec("SELECT * FROM signals WHERE status='CLOSED'", fetch=True)
+    if not rows:
+        return {"total":0,"wins":0,"losses":0,"win_rate":0,
+                "total_pnl":0,"total_pnl_net":0,
+                "total_brokerage":0,"total_slippage":0,
+                "avg_win":0,"avg_loss":0,"best_trade":0,"worst_trade":0}
     rows = [dict(r) for r in rows]
     wins = [r for r in rows if r["result"]=="WIN"]
     losses = [r for r in rows if r["result"]=="LOSS"]
-    pnls = [r["pnl_rupees"] or 0 for r in rows]
+    pnls     = [r["pnl_rupees"]     or 0 for r in rows]
+    pnls_net = [r.get("pnl_rupees_net") if r.get("pnl_rupees_net") is not None else (r["pnl_rupees"] or 0) for r in rows]
+    brk      = [r.get("brokerage_rs") or 0 for r in rows]
+    slp      = [r.get("slippage_rs")  or 0 for r in rows]
     return {
         "total":len(rows),"wins":len(wins),"losses":len(losses),
         "win_rate":round(len(wins)/len(rows)*100,1) if rows else 0,
         "total_pnl":round(sum(pnls),0),
+        "total_pnl_net":round(sum(pnls_net),0),
+        "total_brokerage":round(sum(brk),0),
+        "total_slippage":round(sum(slp),0),
         "avg_win":round(sum(r["pnl_rupees"] or 0 for r in wins)/len(wins),0) if wins else 0,
         "avg_loss":round(sum(r["pnl_rupees"] or 0 for r in losses)/len(losses),0) if losses else 0,
         "best_trade":round(max(pnls),0) if pnls else 0,
@@ -559,6 +661,12 @@ class AngelClient:
         # Greeks cache: (name, expiry_DDMMMYYYY) -> {"ts": epoch, "data": [greeks...]}
         self._greeks_cache = {}
         self._greeks_ttl = 60  # seconds
+        # Candle cache: (token, exchange, interval, days) -> {"ts": epoch, "df": DataFrame}
+        # 5-min candles only refresh every 5 min, so default 90s TTL is safe and cuts
+        # getCandleData calls dramatically. TTL set via CONFIG["candle_cache_ttl"].
+        self._candle_cache = {}
+        self._candle_cache_hits = 0
+        self._candle_cache_misses = 0
 
     def option_greeks(self, name, expiry_ddmmmyyyy):
         """Fetch option greeks for an (underlying, expiry) pair, cached 60s.
@@ -703,7 +811,22 @@ class AngelClient:
             "client_id_hint": (CONFIG.get("client_id") or "")[:4] + "***" if CONFIG.get("client_id") else None,
         }
     
-    def candles(self, token, exchange, interval="FIVE_MINUTE", days=3):
+    def candles(self, token, exchange, interval="FIVE_MINUTE", days=3, force_refresh=False):
+        """Fetch OHLCV candles. Cached for `CONFIG['candle_cache_ttl']` seconds (default 90s).
+
+        5-min candles only update every 5 minutes, so 90s caching is safe and prevents
+        the engine from hammering Angel One at every scan tick. Pass force_refresh=True
+        to bypass the cache (used by /api/historical and replay paths)."""
+        cache_key = (str(token), exchange, interval, int(days))
+        ttl = int(CONFIG.get("candle_cache_ttl", 90) or 0)
+        now = time.time()
+        if not force_refresh and ttl > 0:
+            cached = self._candle_cache.get(cache_key)
+            if cached and (now - cached["ts"] < ttl):
+                self._candle_cache_hits += 1
+                # Return a copy so downstream mutations don't poison the cache
+                return cached["df"].copy()
+        self._candle_cache_misses += 1
         try:
             if not self.ensure(): return pd.DataFrame()
             _params = {"exchange":exchange,"symboltoken":token,"interval":interval,
@@ -718,10 +841,24 @@ class AngelClient:
                     return pd.DataFrame()
             if resp and resp.get("status") and resp.get("data"):
                 df = pd.DataFrame(resp["data"], columns=["timestamp","open","high","low","close","volume"])
-                df["timestamp"] = pd.to_datetime(df["timestamp"]); return df
+                df["timestamp"] = pd.to_datetime(df["timestamp"])
+                if ttl > 0:
+                    # Cap cache size: drop oldest entries if it grows beyond ~50 keys
+                    if len(self._candle_cache) > 50:
+                        oldest = sorted(self._candle_cache.items(), key=lambda kv: kv[1]["ts"])[:10]
+                        for k, _ in oldest: self._candle_cache.pop(k, None)
+                    self._candle_cache[cache_key] = {"ts": now, "df": df.copy()}
+                return df
             return pd.DataFrame()
         except Exception as e:
             log.error(f"Candle err: {e}"); return pd.DataFrame()
+
+    def candle_cache_stats(self):
+        """Cache hit/miss telemetry — surfaced via /api/metrics."""
+        total = self._candle_cache_hits + self._candle_cache_misses
+        rate = round(self._candle_cache_hits / total * 100, 1) if total else 0
+        return {"hits": self._candle_cache_hits, "misses": self._candle_cache_misses,
+                "hit_rate_pct": rate, "size": len(self._candle_cache)}
     
     def daily_candles(self, token, exchange="NSE", days=90):
         """Fetch daily OHLCV candles — used for swing analysis.
@@ -1245,46 +1382,71 @@ class TA:
 class SignalGen:
     def __init__(self):
         self.tmin=CONFIG["target_points_min"];self.tmax=CONFIG["target_points_max"]
-    
-    def analyze(self, df):
+
+    def analyze(self, df, weight_adj=None, blocked_windows=None):
+        """Score candle data into a directional signal.
+
+        weight_adj      — dict with -5..+5 deltas applied to the base contribution
+                          for each indicator family. Keys: rsi, macd, supertrend,
+                          vwap, ema, volume. Loaded from prior-day Claude EOD.
+        blocked_windows — list of "HH:MM-HH:MM" strings. If current IST falls in
+                          any window, return None. Loaded from prior-day Claude EOD.
+        """
         if len(df)<30: return None
+        # Time-window block (Layer C): "skip 11:30-12:30 today" type guidance
+        if blocked_windows:
+            now_hm = datetime.now(IST).strftime("%H:%M")
+            for win in blocked_windows:
+                try:
+                    a, b = win.split("-")
+                    if a.strip() <= now_hm <= b.strip():
+                        return None
+                except Exception:
+                    continue
+        wa = weight_adj or {}
+        w_rsi  = int(wa.get("rsi", 0) or 0)
+        w_macd = int(wa.get("macd", 0) or 0)
+        w_st   = int(wa.get("supertrend", 0) or 0)
+        w_vwap = int(wa.get("vwap", 0) or 0)
+        w_ema  = int(wa.get("ema", 0) or 0)
+        w_vol  = int(wa.get("volume", 0) or 0)
         c=df["close"];n=len(df)-1;price=c.iloc[n]
         e9=TA.ema(c,9);e21=TA.ema(c,21);e50=TA.ema(c,min(50,len(c)))
         rsi=TA.rsi(c);ml,sl,mh=TA.macd(c);bbu,bbm,bbl=TA.bb(c)
         vwap=TA.vwap(df);atr=TA.atr(df);st=TA.supertrend(df)
         sk=TA.stoch(df);adx,pdi,mdi=TA.adx(df)
         vra=df["volume"].tail(20).mean();vr=df["volume"].iloc[n]/vra if vra>0 else 1
-        
+
         bs,be=0,0;br,ber=[],[]
-        if e9.iloc[n]>e21.iloc[n] and e9.iloc[n-1]<=e21.iloc[n-1]:bs+=15;br.append("🔥 EMA 9/21 Bullish Crossover")
-        elif e9.iloc[n]<e21.iloc[n] and e9.iloc[n-1]>=e21.iloc[n-1]:be+=15;ber.append("🔥 EMA 9/21 Bearish Crossover")
-        elif e9.iloc[n]>e21.iloc[n]:bs+=8;br.append("EMA 9>21 bullish")
-        else:be+=8;ber.append("EMA 9<21 bearish")
+        if e9.iloc[n]>e21.iloc[n] and e9.iloc[n-1]<=e21.iloc[n-1]:bs+=15+w_ema;br.append("🔥 EMA 9/21 Bullish Crossover")
+        elif e9.iloc[n]<e21.iloc[n] and e9.iloc[n-1]>=e21.iloc[n-1]:be+=15+w_ema;ber.append("🔥 EMA 9/21 Bearish Crossover")
+        elif e9.iloc[n]>e21.iloc[n]:bs+=8+max(0,w_ema);br.append("EMA 9>21 bullish")
+        else:be+=8+max(0,w_ema);ber.append("EMA 9<21 bearish")
         if price>e50.iloc[n]:bs+=5;br.append("Above EMA 50")
         else:be+=5;ber.append("Below EMA 50")
         rv=rsi.iloc[-1]
-        if rv<30:bs+=12;br.append(f"RSI Oversold ({rv:.1f})")
-        elif rv>70:be+=12;ber.append(f"RSI Overbought ({rv:.1f})")
-        elif 50<rv<65:bs+=6;br.append(f"RSI Bullish ({rv:.1f})")
-        elif 35<rv<50:be+=6;ber.append(f"RSI Bearish ({rv:.1f})")
-        if mh.iloc[n]>0 and mh.iloc[n-1]<=0:bs+=15;br.append("🔥 MACD Bull Cross")
-        elif mh.iloc[n]<0 and mh.iloc[n-1]>=0:be+=15;ber.append("🔥 MACD Bear Cross")
-        elif mh.iloc[n]>mh.iloc[n-1] and mh.iloc[n]>0:bs+=8;br.append("MACD rising")
-        elif mh.iloc[n]<mh.iloc[n-1] and mh.iloc[n]<0:be+=8;ber.append("MACD falling")
+        if rv<30:bs+=12+w_rsi;br.append(f"RSI Oversold ({rv:.1f})")
+        elif rv>70:be+=12+w_rsi;ber.append(f"RSI Overbought ({rv:.1f})")
+        elif 50<rv<65:bs+=6+max(0,w_rsi);br.append(f"RSI Bullish ({rv:.1f})")
+        elif 35<rv<50:be+=6+max(0,w_rsi);ber.append(f"RSI Bearish ({rv:.1f})")
+        if mh.iloc[n]>0 and mh.iloc[n-1]<=0:bs+=15+w_macd;br.append("🔥 MACD Bull Cross")
+        elif mh.iloc[n]<0 and mh.iloc[n-1]>=0:be+=15+w_macd;ber.append("🔥 MACD Bear Cross")
+        elif mh.iloc[n]>mh.iloc[n-1] and mh.iloc[n]>0:bs+=8+max(0,w_macd);br.append("MACD rising")
+        elif mh.iloc[n]<mh.iloc[n-1] and mh.iloc[n]<0:be+=8+max(0,w_macd);ber.append("MACD falling")
         if price<=bbl.iloc[n]*1.002:bs+=10;br.append("At Lower BB")
         elif price>=bbu.iloc[n]*0.998:be+=10;ber.append("At Upper BB")
-        if price>vwap.iloc[n] and c.iloc[n-1]<=vwap.iloc[n-1]:bs+=10;br.append("🔥 Crossed above VWAP")
-        elif price<vwap.iloc[n] and c.iloc[n-1]>=vwap.iloc[n-1]:be+=10;ber.append("🔥 Crossed below VWAP")
-        elif price>vwap.iloc[n]:bs+=5;br.append("Above VWAP")
-        else:be+=5;ber.append("Below VWAP")
-        if st.iloc[n]==1 and st.iloc[n-1]==-1:bs+=13;br.append("🔥 Supertrend BULL")
-        elif st.iloc[n]==-1 and st.iloc[n-1]==1:be+=13;ber.append("🔥 Supertrend BEAR")
-        elif st.iloc[n]==1:bs+=7;br.append("Supertrend Bull")
-        else:be+=7;ber.append("Supertrend Bear")
+        if price>vwap.iloc[n] and c.iloc[n-1]<=vwap.iloc[n-1]:bs+=10+w_vwap;br.append("🔥 Crossed above VWAP")
+        elif price<vwap.iloc[n] and c.iloc[n-1]>=vwap.iloc[n-1]:be+=10+w_vwap;ber.append("🔥 Crossed below VWAP")
+        elif price>vwap.iloc[n]:bs+=5+max(0,w_vwap);br.append("Above VWAP")
+        else:be+=5+max(0,w_vwap);ber.append("Below VWAP")
+        if st.iloc[n]==1 and st.iloc[n-1]==-1:bs+=13+w_st;br.append("🔥 Supertrend BULL")
+        elif st.iloc[n]==-1 and st.iloc[n-1]==1:be+=13+w_st;ber.append("🔥 Supertrend BEAR")
+        elif st.iloc[n]==1:bs+=7+max(0,w_st);br.append("Supertrend Bull")
+        else:be+=7+max(0,w_st);ber.append("Supertrend Bear")
         if vr>1.5:
             t=f"Volume {vr:.1f}x"
-            if c.iloc[n]>c.iloc[n-1]:bs+=8;br.append(t)
-            else:be+=8;ber.append(t)
+            if c.iloc[n]>c.iloc[n-1]:bs+=8+w_vol;br.append(t)
+            else:be+=8+w_vol;ber.append(t)
         skv=sk.iloc[-1] if not pd.isna(sk.iloc[-1]) else 50
         if skv<20:bs+=7;br.append(f"Stoch Oversold ({skv:.0f})")
         elif skv>80:be+=7;ber.append(f"Stoch Overbought ({skv:.0f})")
@@ -1371,38 +1533,99 @@ class SignalGen:
 # ═══════════════════════════════════════════════════════════════════
 _ANTHROPIC_URL = "https://api.anthropic.com/v1/messages"
 
+# In-process aggregate cache telemetry — surfaced via /api/metrics so the dashboard
+# can show hit/miss/cost. Updated on every _anthropic_call response.
+_ANTHROPIC_USAGE = {
+    "calls": 0, "errors": 0,
+    "input_tokens": 0, "output_tokens": 0,
+    "cache_read_tokens": 0, "cache_creation_tokens": 0,
+    "by_layer": {},   # layer_name -> dict (same shape, plus calls)
+}
 
-def _anthropic_call(prompt, model=None, max_tokens=800, temperature=0.2, timeout=20):
+
+def _anthropic_call(prompt, model=None, max_tokens=800, temperature=0.2, timeout=20,
+                    system=None, layer=None):
     """Low-level wrapper around Anthropic messages API. Returns parsed JSON dict
     (from Claude's response content) or None if anything failed. Callers decide
-    how to handle None — the safe default for validation is SKIP."""
+    how to handle None — the safe default for validation is SKIP.
+
+    `system`  — optional list of {"type":"text","text":...} blocks. The LAST block
+                gets cache_control: ephemeral when CONFIG['anthropic_cache_enabled']
+                is True. Sonnet 4.5 minimum for caching is 1024 tokens; below that
+                Anthropic silently runs the request uncached (no error).
+    `layer`   — short string label ("regime", "validation", "inflight", "eod",
+                "swing_exit") used for per-layer telemetry attribution.
+    """
     api_key = CONFIG.get("anthropic_api_key", "")
     if not api_key:
         return None
+    body = {
+        "model": model or CONFIG.get("anthropic_model", "claude-sonnet-4-5"),
+        "max_tokens": max_tokens,
+        "temperature": temperature,
+        "messages": [{"role": "user", "content": prompt}],
+    }
+    if system:
+        # Normalise to the multi-block format and tag the last block for caching.
+        blocks = []
+        if isinstance(system, str):
+            blocks = [{"type": "text", "text": system}]
+        elif isinstance(system, list):
+            for b in system:
+                if isinstance(b, str):
+                    blocks.append({"type": "text", "text": b})
+                elif isinstance(b, dict):
+                    # Preserve any caller-set cache_control; we'll add to the last block below
+                    blocks.append({k: v for k, v in b.items() if k in ("type", "text", "cache_control")})
+        if blocks and CONFIG.get("anthropic_cache_enabled", True):
+            # Cache breakpoint goes on the last system block — everything before it (incl. tools
+            # and earlier system blocks) is cached as one prefix.
+            last = blocks[-1]
+            if "cache_control" not in last:
+                last["cache_control"] = {"type": "ephemeral"}
+        if blocks:
+            body["system"] = blocks
+    text = ""
     try:
         resp = requests.post(
             _ANTHROPIC_URL,
             headers={"Content-Type": "application/json",
                      "x-api-key": api_key,
                      "anthropic-version": "2023-06-01"},
-            json={"model": model or CONFIG.get("anthropic_model", "claude-sonnet-4-5"),
-                  "max_tokens": max_tokens,
-                  "temperature": temperature,
-                  "messages": [{"role": "user", "content": prompt}]},
+            json=body,
             timeout=timeout,
         )
         if resp.status_code != 200:
+            _ANTHROPIC_USAGE["errors"] += 1
             log.warning(f"  Claude API error {resp.status_code}: {resp.text[:200]}")
             return None
         data = resp.json()
+        # Aggregate usage telemetry
+        _ANTHROPIC_USAGE["calls"] += 1
+        u = data.get("usage") or {}
+        _ANTHROPIC_USAGE["input_tokens"]          += int(u.get("input_tokens") or 0)
+        _ANTHROPIC_USAGE["output_tokens"]         += int(u.get("output_tokens") or 0)
+        _ANTHROPIC_USAGE["cache_read_tokens"]     += int(u.get("cache_read_input_tokens") or 0)
+        _ANTHROPIC_USAGE["cache_creation_tokens"] += int(u.get("cache_creation_input_tokens") or 0)
+        if layer:
+            slot = _ANTHROPIC_USAGE["by_layer"].setdefault(layer, {
+                "calls": 0, "input_tokens": 0, "output_tokens": 0,
+                "cache_read_tokens": 0, "cache_creation_tokens": 0,
+            })
+            slot["calls"]                 += 1
+            slot["input_tokens"]          += int(u.get("input_tokens") or 0)
+            slot["output_tokens"]         += int(u.get("output_tokens") or 0)
+            slot["cache_read_tokens"]     += int(u.get("cache_read_input_tokens") or 0)
+            slot["cache_creation_tokens"] += int(u.get("cache_creation_input_tokens") or 0)
         text = (data.get("content", [{}])[0] or {}).get("text", "").strip()
         import re as _re
         text = _re.sub(r'^```(?:json)?\s*|\s*```$', '', text, flags=_re.M).strip()
         return json.loads(text)
     except json.JSONDecodeError as e:
-        log.warning(f"  Claude JSON parse failed: {e} // raw={text[:200] if 'text' in dir() else ''}")
+        log.warning(f"  Claude JSON parse failed: {e} // raw={text[:200]}")
         return None
     except Exception as e:
+        _ANTHROPIC_USAGE["errors"] += 1
         log.warning(f"  Claude call failed: {e}")
         return None
 
@@ -1412,6 +1635,28 @@ class RegimeBrief:
     """One call per trading morning. Asks Claude to characterise the day's
     expected regime and return overrides for the scanner (confidence floor,
     R:R floor, instruments to avoid). Persisted to the `regime` table."""
+
+    _SYSTEM_PROMPT = """You are a senior Indian intraday options strategist preparing a ₹20,000 desk for the trading session. Pick a regime, set a directional bias, and define guardrails (confidence floor, R:R floor, instruments to avoid). Be concrete and conservative — these settings gate ALL trades for the day, so getting it wrong costs money.
+
+Regime taxonomy:
+- TRENDING_UP / TRENDING_DOWN: clear directional move underway (overnight gap + global cues + macro alignment)
+- RANGING: index oscillating in a tight band — favor mean-reversion, smaller targets, lower confidence
+- VOLATILE: large moves both directions — widen stops, smaller size, prefer NIFTY (cheapest premium)
+- EVENT_RISK: scheduled high-impact event (FOMC, RBI, budget) — avoid the index in the blackout window
+
+Bias & overrides:
+- bias = LONG / SHORT / NEUTRAL (suggested directional skew, NOT mandatory)
+- confidence_floor — minimum scanner confidence to alert. Higher in volatile/event days
+- min_rr — risk:reward floor on the index trigger. 1.5 baseline; 2.0+ on event days
+- avoid_instruments — list any of NIFTY/BANKNIFTY/FINNIFTY to skip entirely today
+
+Respond in EXACTLY this JSON (no markdown, no prose):
+{"regime": "TRENDING_UP" | "TRENDING_DOWN" | "RANGING" | "VOLATILE" | "EVENT_RISK",
+  "bias": "LONG" | "SHORT" | "NEUTRAL",
+  "confidence_floor": integer 55..80,
+  "min_rr": number 1.2..2.5,
+  "avoid_instruments": [list of NIFTY/BANKNIFTY/FINNIFTY] or [],
+  "notes": "1-2 sentence rationale traders can act on"}"""
 
     @staticmethod
     def run():
@@ -1432,22 +1677,14 @@ class RegimeBrief:
         events = EventCalendar.today_events()
         event_txt = "; ".join(f"{e.get('time','')} {e.get('name','')}" for e in events) or "none"
 
-        prompt = f"""You are preparing a ₹20,000 Indian intraday options desk for today's session.
-Date: {today}   Current IST: {datetime.now(IST).strftime('%H:%M')}
+        prompt = f"""Date: {today}   Current IST: {datetime.now(IST).strftime('%H:%M')}
 Recent closed trades (most recent first): {recent_txt}
 Known events today: {event_txt}
 
-Pick a market regime and set scanner overrides for the day.
+Set today's regime and scanner overrides."""
 
-Respond in EXACTLY this JSON (no markdown):
-{{"regime": "TRENDING_UP" | "TRENDING_DOWN" | "RANGING" | "VOLATILE" | "EVENT_RISK",
-  "bias": "LONG" | "SHORT" | "NEUTRAL",
-  "confidence_floor": integer 55..80,
-  "min_rr": number 1.2..2.5,
-  "avoid_instruments": ["BANKNIFTY" and/or "FINNIFTY" and/or "NIFTY"] or [],
-  "notes": "1-2 sentence rationale traders can act on"}}"""
-
-        raw = _anthropic_call(prompt, max_tokens=300, timeout=20)
+        raw = _anthropic_call(prompt, max_tokens=300, timeout=20,
+                              system=RegimeBrief._SYSTEM_PROMPT, layer="regime")
         if not raw:
             # Safe defaults if Claude is down — don't block trading, just no overrides
             raw = {"regime": "UNKNOWN", "bias": "NEUTRAL",
@@ -1494,6 +1731,62 @@ class SignalValidation:
     """Per-signal verdict with position sizing + SL tightening strategy.
     Default on any failure/parse error is SKIP — we never silently let a signal
     through when Claude errored out."""
+
+    # Static rules block — cached via cache_control:ephemeral. Must be ≥1024 tokens for
+    # Sonnet 4.5 caching to engage. This is the MOST FREQUENTLY-CALLED layer, so the
+    # caching savings are highest here (~80% of input tokens on hits).
+    _SYSTEM_PROMPT = """You are a ruthlessly disciplined Indian intraday options trader on a ₹20,000 account.
+Protect capital first, profit second. Only TAKE with clear edge.
+You have full option chain data — use Greeks, OI, PCR, IV skew, volume as PRIMARY signals.
+The index signal is a trigger; the option chain confirms or denies it.
+
+HOW TO READ THE CHAIN DATA
+- PCR < 0.7 = bullish (more CEs, less put protection needed)
+- PCR > 1.0 = bearish (heavy put buying = hedging against fall)
+- IV skew > +2 = market pricing fear (PE premium = bears are nervous)
+- Max pain is where market makers want price to go — trade WITH it near expiry
+- High volume on ATM CE = call buying = bullish momentum
+- High volume on ATM PE = put buying = bearish momentum
+- Only SKIP if direction conflicts with PCR AND IV skew AND volume — ALL THREE aligned against you
+
+OI VELOCITY SIGNALS (real-time shift detection — highest quality signal):
+- OI BUILDING at ATM CE = call writers entering = fresh RESISTANCE forming = bearish for LONG trades
+- OI BUILDING at ATM PE = put writers entering = fresh SUPPORT forming = bearish for SHORT trades
+- OI UNWINDING at ATM CE = resistance dissolving = BULLISH for LONG trades (ceiling lifting)
+- OI UNWINDING at ATM PE = support dissolving = BEARISH for SHORT trades (floor falling)
+- CE_ROLL_BULLISH = institutions rolling CE positions to ATM = strong bullish conviction — favor LONG
+- PE_ROLL_BEARISH = institutions rolling PE positions to ATM = strong bearish conviction — favor SHORT
+- Vol_delta (volume acceleration) is ALWAYS real-time even when oi=0. Use vol_Δ as primary signal.
+- PE_BUILD + vol acceleration at ATM = most reliable SHORT signal
+- CE_BUILD + vol acceleration at ATM = most reliable LONG signal (call writers = insurance sellers)
+
+OPTION RULES
+- IMPORTANT: Angel One's FULL API frequently returns oi=0 and volume=0 even for liquid options.
+  Do NOT skip solely because OI=0 or volume=0 — the spread and LTP are more reliable liquidity signals.
+- PREFER delta 0.35-0.55 for directional trades (0.25-0.65 is acceptable)
+- SKIP if IV > 60% (IV crush risk on event days only)
+- SKIP if spread > 10% of LTP (genuinely illiquid — slippage is too high)
+- If price is affordable and spread is tight, it's likely tradeable regardless of OI value
+
+SIGNAL RULES
+- SKIP if RSI>80 for LONG or RSI<20 for SHORT (extreme, not just elevated)
+- Default to TAKE unless there is a strong specific reason to SKIP
+- WAIT (not SKIP) if setup is good but one minor concern exists — allow retry
+- SKIP after 14:40 IST (insufficient time for trade to run)
+- SKIP if SuperTrend strongly disagrees AND RSI also contradicts
+- Scale POSITION_PCT down (50%) when setup not perfectly clean — do NOT SKIP unless truly broken
+- SL_TIGHTENING = "trailing_atr" on trending, "breakeven_at_half_t1" on ranging
+- BANKNIFTY monthly slips harder — use 75% position_pct for BANKNIFTY if in doubt
+- BIAS TOWARD TAKING: a missed trade costs 0, but a blocked good trade also costs 0. The engine's
+  confidence gates already protect capital. Your job is to confirm clear edge, not find reasons to SKIP.
+
+Respond in EXACTLY this JSON (no markdown, no prose):
+{"verdict": "TAKE" | "SKIP" | "WAIT",
+  "position_pct": 25 | 50 | 75 | 100,
+  "sl_tightening": "none" | "breakeven_at_half_t1" | "trailing_atr",
+  "confidence_adj": integer -20..10,
+  "reasoning": "one short line mentioning key chain signal that confirmed/denied",
+  "risk_note": "one specific risk including PCR/IV/OI concern if any"}"""
 
     @staticmethod
     def analyze(instrument, signal, option, regime=None, chain_analytics=None):
@@ -1579,12 +1872,13 @@ OPTION CHAIN MARKET SNAPSHOT (scan from live chain — use this as primary signa
                           f"/ floor {regime.get('confidence_floor')}%  min RR {regime.get('min_rr')}  "
                           f"avoid {regime.get('avoid_instruments')}  notes: {regime.get('notes','')}")
 
-        prompt = f"""You are a ruthlessly disciplined Indian intraday options trader on a ₹20,000 account.
-Protect capital first, profit second. Only TAKE with clear edge.
-You have full option chain data — use Greeks, OI, PCR, IV skew, volume as PRIMARY signals.
-The index signal is a trigger; the option chain confirms or denies it.
-
-INDEX SIGNAL (trigger)
+        # ── Static system prefix (cached) ────────────────────────────────
+        # Everything that does NOT change per-signal goes here. Cached as one
+        # prefix → 0.1x cost on cache hit. Sonnet 4.5 needs ≥1024 tokens cached;
+        # this block + JSON schema is comfortably above that.
+        system_prefix = SignalValidation._SYSTEM_PROMPT
+        # ── Per-signal user prompt (NOT cached) ──────────────────────────
+        prompt = f"""INDEX SIGNAL (trigger)
 Instrument: {instrument}   Direction: {signal['direction']}   Engine confidence: {signal['confidence']}%
 Index entry {signal['entry']}  SL {signal['sl']}  T1 {signal['target1']}  T2 {signal['target2']}  R:R {signal.get('risk_reward',0)}
 {chain_anal_txt}
@@ -1599,55 +1893,10 @@ ATR {ind.get('atr','?')}  Stoch {ind.get('stoch','?')}  ADX {ind.get('adx','?')}
 Reasons: {', '.join(signal.get('reasons',[])[:6])}
 Time: {datetime.now(IST).strftime('%H:%M')} IST{regime_txt}
 
-HOW TO READ THE CHAIN DATA
-- PCR < 0.7 = bullish (more CEs, less put protection needed)
-- PCR > 1.0 = bearish (heavy put buying = hedging against fall)
-- IV skew > +2 = market pricing fear (PE premium = bears are nervous)
-- Max pain is where market makers want price to go — trade WITH it near expiry
-- High volume on ATM CE = call buying = bullish momentum
-- High volume on ATM PE = put buying = bearish momentum
-- Only SKIP if direction conflicts with PCR AND IV skew AND volume — ALL THREE aligned against you
+Respond NOW with the JSON verdict."""
 
-OI VELOCITY SIGNALS (real-time shift detection — highest quality signal):
-- OI BUILDING at ATM CE = call writers entering = fresh RESISTANCE forming = bearish for LONG trades
-- OI BUILDING at ATM PE = put writers entering = fresh SUPPORT forming = bearish for SHORT trades
-- OI UNWINDING at ATM CE = resistance dissolving = BULLISH for LONG trades (ceiling lifting)
-- OI UNWINDING at ATM PE = support dissolving = BEARISH for SHORT trades (floor falling)
-- CE_ROLL_BULLISH = institutions rolling CE positions to ATM = strong bullish conviction — favor LONG
-- PE_ROLL_BEARISH = institutions rolling PE positions to ATM = strong bearish conviction — favor SHORT
-- Vol_delta (volume acceleration) is ALWAYS real-time even when oi=0. Use vol_Δ as primary signal.
-- PE_BUILD + vol acceleration at ATM = most reliable SHORT signal
-- CE_BUILD + vol acceleration at ATM = most reliable LONG signal (call writers = insurance sellers)
-
-OPTION RULES
-- IMPORTANT: Angel One's FULL API frequently returns oi=0 and volume=0 even for liquid options.
-  Do NOT skip solely because OI=0 or volume=0 — the spread and LTP are more reliable liquidity signals.
-- PREFER delta 0.35-0.55 for directional trades (0.25-0.65 is acceptable)
-- SKIP if IV > 60% (IV crush risk on event days only)
-- SKIP if spread > 10% of LTP (genuinely illiquid — slippage is too high)
-- If price is affordable and spread is tight, it's likely tradeable regardless of OI value
-
-SIGNAL RULES
-- SKIP if RSI>80 for LONG or RSI<20 for SHORT (extreme, not just elevated)
-- Default to TAKE unless there is a strong specific reason to SKIP
-- WAIT (not SKIP) if setup is good but one minor concern exists — allow retry
-- SKIP after 14:40 IST (insufficient time for trade to run)
-- SKIP if SuperTrend strongly disagrees AND RSI also contradicts
-- Scale POSITION_PCT down (50%) when setup not perfectly clean — do NOT SKIP unless truly broken
-- SL_TIGHTENING = "trailing_atr" on trending, "breakeven_at_half_t1" on ranging
-- BANKNIFTY monthly slips harder — use 75% position_pct for BANKNIFTY if in doubt
-- BIAS TOWARD TAKING: a missed trade costs 0, but a blocked good trade also costs 0. The engine's
-  confidence gates already protect capital. Your job is to confirm clear edge, not find reasons to SKIP.
-
-Respond in EXACTLY this JSON (no markdown, no prose):
-{{"verdict": "TAKE" | "SKIP" | "WAIT",
-  "position_pct": 25 | 50 | 75 | 100,
-  "sl_tightening": "none" | "breakeven_at_half_t1" | "trailing_atr",
-  "confidence_adj": integer -20..10,
-  "reasoning": "one short line mentioning key chain signal that confirmed/denied",
-  "risk_note": "one specific risk including PCR/IV/OI concern if any"}}"""
-
-        result = _anthropic_call(prompt, max_tokens=300, timeout=15)
+        result = _anthropic_call(prompt, max_tokens=300, timeout=15,
+                                 system=system_prefix, layer="validation")
         if result is None:
             # BUG FIX #2: Changed from fail-closed (SKIP) to fail-open (TAKE).
             # Fail-closed silently blocks ALL signals whenever the Anthropic API
@@ -1681,6 +1930,27 @@ Respond in EXACTLY this JSON (no markdown, no prose):
 
 # ─── Layer C: End-of-day learning loop (run ~15:45 IST) ───────────────
 class LearningLoop:
+    _SYSTEM_PROMPT = """You are a quantitative reviewer for an Indian intraday options desk. Each evening you analyse the day's closed trades and propose SMALL, SPECIFIC tweaks for the scanner to apply tomorrow. Do not propose redesigns — only weight nudges (-5..+5 per indicator) and time-window blocks.
+
+INDICATOR WEIGHTS available to nudge (additive deltas, applied to base contribution):
+- rsi: tweak how much RSI extreme contributes to score
+- macd: tweak MACD cross/expansion contribution
+- supertrend: tweak SuperTrend flip contribution
+- vwap: tweak VWAP-cross contribution
+- ema: tweak EMA9/21 cross contribution
+- volume: tweak volume-surge contribution
+
+EXTRA_FILTERS examples:
+- "skip NIFTY signals when ATR < 80"
+- "require PCR confirmation on BANKNIFTY SHORTs"
+- "block any signal with RSI>78"
+
+Respond in EXACTLY this JSON (no markdown):
+{"indicator_weight_adjustments": {"rsi": -5..+5, "macd": -5..+5, "supertrend": -5..+5, "vwap": -5..+5, "ema": -5..+5, "volume": -5..+5},
+  "time_windows_to_avoid": ["HH:MM-HH:MM", ...],
+  "extra_filters": ["short plain-English filters the scanner should apply tomorrow"],
+  "summary": "one line recap of today"}"""
+
     @staticmethod
     def run():
         today = datetime.now(IST).strftime("%Y-%m-%d")
@@ -1701,18 +1971,14 @@ class LearningLoop:
                 f"→ {r['result']} ₹{r.get('pnl_rupees')}"
             )
 
-        prompt = f"""End-of-day review for Indian intraday options desk. Date: {today}.
+        prompt = f"""Date: {today}.
 Trades closed today (oldest first):
 {chr(10).join(summary)}
 
-Identify concrete tweaks for tomorrow's scanner. Be specific and small-surface.
-Respond in EXACTLY this JSON (no markdown):
-{{"indicator_weight_adjustments": {{"rsi": -5..+5, "macd": -5..+5, "supertrend": -5..+5, "vwap": -5..+5}},
-  "time_windows_to_avoid": ["HH:MM-HH:MM", ...],
-  "extra_filters": ["short plain-English filters the scanner should apply tomorrow"],
-  "summary": "one line recap of today"}}"""
+Propose tweaks for tomorrow's scanner."""
 
-        raw = _anthropic_call(prompt, max_tokens=500, timeout=25)
+        raw = _anthropic_call(prompt, max_tokens=500, timeout=25,
+                              system=LearningLoop._SYSTEM_PROMPT, layer="eod")
         if not raw: return None
         try:
             db_exec("""INSERT OR REPLACE INTO daily_adjustments
@@ -1743,6 +2009,24 @@ Respond in EXACTLY this JSON (no markdown):
 
 # ─── Layer D: In-flight trade management (every ~2 min for OPEN rows) ──
 class TradeManager:
+    _SYSTEM_PROMPT = """You are a disciplined intraday options position manager. For each OPEN position you receive, decide ONE action and respond in JSON only.
+
+DECISION RULES:
+- HOLD: trade is in normal range, thesis intact, time still on side
+- TRAIL_SL: position in profit > 1% beyond SL, trail SL toward breakeven or higher (provide new_sl)
+- PARTIAL_EXIT_50: hit T1 or close to it, lock 50% profit (provide reasoning)
+- CLOSE: thesis broken (price approaching SL with momentum, late session, or move > T2)
+
+CONSTRAINTS:
+- new_sl can ONLY tighten (move toward entry from a stop perspective). Never loosen.
+- Be biased toward HOLD on normal moves — trades need room to breathe.
+- After 14:50 IST, lean toward CLOSE on losing positions to avoid overnight risk.
+
+Respond in EXACTLY this JSON:
+{"action": "HOLD" | "PARTIAL_EXIT_50" | "TRAIL_SL" | "CLOSE",
+  "new_sl": number or null,
+  "reasoning": "one short line"}"""
+
     @staticmethod
     def _option_snapshot(client, token):
         if not token: return None
@@ -1778,23 +2062,17 @@ class TradeManager:
             except Exception:
                 pass
 
-            prompt = f"""You are managing an OPEN intraday options position. Decide ONE action.
-
-Trade: {s['instrument']} {s['direction']}  {s.get('option_symbol','')}
+            prompt = f"""Trade: {s['instrument']} {s['direction']}  {s.get('option_symbol','')}
 Entry ₹{entry}  Current ₹{ltp}  Move {move_pct}%  Held {held_min}min
 SL ₹{s.get('option_sl')}  T1 ₹{s.get('option_target1')}  T2 ₹{s.get('option_target2')}
 SL tightening rule in effect: {s.get('sl_tightening','none')}
-Time: {datetime.now(IST).strftime('%H:%M')} IST
-
-Respond in EXACTLY this JSON:
-{{"action": "HOLD" | "PARTIAL_EXIT_50" | "TRAIL_SL" | "CLOSE",
-  "new_sl": number or null,
-  "reasoning": "one short line"}}"""
+Time: {datetime.now(IST).strftime('%H:%M')} IST"""
 
             raw = _anthropic_call(
                 prompt,
                 model=CONFIG.get("anthropic_model_inflight") or CONFIG.get("anthropic_model"),
                 max_tokens=200, timeout=12,
+                system=TradeManager._SYSTEM_PROMPT, layer="inflight",
             )
             if not raw: continue
             act = str(raw.get("action", "HOLD")).upper()
@@ -1819,11 +2097,13 @@ Respond in EXACTLY this JSON:
             elif act == "CLOSE":
                 # Force-close at current option price
                 pnl_per = ltp - entry
-                qty = int(s.get("option_lots") or 1) * int(s.get("option_lot_size") or 0 or 1)
+                lots_n = int(s.get("option_lots") or 1)
+                qty = lots_n * int(s.get("option_lot_size") or 0 or 1)
                 update_result(s["id"], s.get("index_price") or 0,
                               "WIN" if pnl_per > 0 else "LOSS",
                               round(pnl_per, 2), round(pnl_per * qty, 0),
-                              option_exit=ltp)
+                              option_exit=ltp, option_entry=entry,
+                              qty=qty, lots=lots_n)
                 log.info(f"🤖 TradeManager CLOSE {s['instrument']} at ₹{ltp} → ₹{round(pnl_per*qty,0)}")
                 SlackAlert.send(f"🤖 *AI CLOSE* {s['instrument']} {s['direction']} "
                                 f"₹{ltp} ({'+' if pnl_per>0 else ''}{round(pnl_per,2)})\n_{raw.get('reasoning','')}_")
@@ -2383,7 +2663,9 @@ class PLTracker:
                     pnl_per_share = (cur_opt - opt_entry)
                     pnl_rs = round(pnl_per_share * qty, 0)
                     pnl_pts = round(pnl_per_share, 2)  # points here = rupees per share of premium
-                    update_result(s["id"], idx_px or 0, result, pnl_pts, pnl_rs, option_exit=cur_opt)
+                    update_result(s["id"], idx_px or 0, result, pnl_pts, pnl_rs,
+                                  option_exit=cur_opt, option_entry=opt_entry,
+                                  qty=qty, lots=opt_lots)
                 else:
                     # fallback: index points × lot_size (old behaviour, flagged inaccurate)
                     d = s["direction"]
@@ -2409,7 +2691,9 @@ class PLTracker:
             if cur_opt is not None and opt_entry > 0 and qty > 0:
                 pnl_rs = round((cur_opt - opt_entry) * qty, 0)
                 update_result(s["id"], s["index_price"], "EXPIRED",
-                              round(cur_opt - opt_entry, 2), pnl_rs, option_exit=cur_opt)
+                              round(cur_opt - opt_entry, 2), pnl_rs,
+                              option_exit=cur_opt, option_entry=opt_entry,
+                              qty=qty, lots=lots)
             else:
                 update_result(s["id"], s["index_price"], "EXPIRED", 0, 0)
         perf = get_perf()
@@ -2436,6 +2720,31 @@ class Engine:
         self._last_regime_run=None
         self._last_eod_run=None
         self._last_inflight_run=0.0
+        # Layer C feedback applied to today's scanner.  Refreshed at boot and at
+        # ~09:10 IST each morning; populated from yesterday's `daily_adjustments`
+        # row (Claude's EOD review).
+        self._weight_adj = {}
+        self._blocked_windows = []
+        self._adj_loaded_for = None
+        # Per-day metrics — surfaced via /api/metrics for the dashboard.
+        self.metrics = {
+            "date":               datetime.now(IST).strftime("%Y-%m-%d"),
+            "scans_total":        0,
+            "signals_generated":  0,
+            "signals_alerted":    0,
+            "ai_skipped":         0,
+            "ai_waited":          0,
+            "rr_blocked":         0,
+            "time_blocked":       0,
+            "spread_rejected":    0,   # populated lazily from logs (best-effort)
+            "chain_failures":     0,
+            "ai_api_failures":    0,
+            "kill_switch_hits":   0,
+            "regime_blocked":     0,
+            "blocked_window_hits":0,
+        }
+        # Daily kill-switch latch — once tripped today, stops new alerts until 00:00 next day.
+        self._killswitch_tripped = False
 
     def start(self):
         if not self.client.login(): return{"status":"error","message":"Login failed"}
@@ -2462,6 +2771,89 @@ class Engine:
                 self._last_regime_run = today
             except Exception as e:
                 log.warning(f"  regime brief failed: {e}")
+
+    def _maybe_load_adjustments(self, now):
+        """Layer C feedback wiring: load yesterday's daily_adjustments and apply to
+        today's scanner. Refreshed once per day. Also resets per-day metrics +
+        kill-switch latch on date change."""
+        today = now.strftime("%Y-%m-%d")
+        if self._adj_loaded_for == today: return
+        # Find the most recent daily_adjustments row strictly before today
+        try:
+            row = db_exec(
+                "SELECT * FROM daily_adjustments WHERE date < ? ORDER BY date DESC LIMIT 1",
+                (today,), fetchone=True)
+            if row:
+                row = dict(row)
+                try:
+                    self._weight_adj = json.loads(row.get("indicator_weight_adjustments") or "{}") or {}
+                except Exception: self._weight_adj = {}
+                try:
+                    self._blocked_windows = json.loads(row.get("time_windows_to_avoid") or "[]") or []
+                except Exception: self._blocked_windows = []
+                log.info(f"🧠 Layer C feedback loaded from {row.get('date')}: "
+                         f"weights={self._weight_adj}  blocked={self._blocked_windows}")
+            else:
+                self._weight_adj = {}
+                self._blocked_windows = []
+        except Exception as e:
+            log.warning(f"  Layer C adjustments load failed: {e}")
+            self._weight_adj = {}
+            self._blocked_windows = []
+        # Reset per-day state on date change
+        if self.metrics.get("date") != today:
+            self.metrics = {k: (today if k == "date" else 0) for k in self.metrics}
+            self._killswitch_tripped = False
+        self._adj_loaded_for = today
+
+    def _check_killswitch(self):
+        """Return True if engine should stop firing new alerts for the rest of the day.
+
+        Trips when EITHER:
+          - cumulative net P&L (after brokerage + slippage) for today <= -DAILY_LOSS_LIMIT
+          - count of trades today (open + closed) >= MAX_TRADES_PER_DAY
+        Once tripped, stays latched until next day's metrics reset.
+        """
+        if self._killswitch_tripped: return True
+        try:
+            today = datetime.now(IST).strftime("%Y-%m-%d")
+            row = db_exec(
+                "SELECT COUNT(*) as cnt, COALESCE(SUM(pnl_rupees),0) as pnl "
+                "FROM signals WHERE date=?", (today,), fetchone=True)
+            row = dict(row) if row else {"cnt": 0, "pnl": 0}
+            cnt = int(row.get("cnt") or 0)
+            pnl = float(row.get("pnl") or 0)
+            # Apply brokerage + slippage estimate to the displayed gross P&L for closed rows
+            closed = db_exec(
+                "SELECT option_lots, option_lot_size FROM signals "
+                "WHERE date=? AND status='CLOSED'", (today,), fetch=True) or []
+            adj_pnl = pnl
+            for r in closed:
+                r = dict(r)
+                lots = int(r.get("option_lots") or 1)
+                adj_pnl -= float(CONFIG.get("brokerage_per_lot_roundtrip", 100)) * lots
+            limit = float(CONFIG.get("daily_loss_limit", 2000) or 0)
+            cap   = int(CONFIG.get("max_trades_per_day", 8) or 0)
+            tripped = False
+            if limit > 0 and adj_pnl <= -limit:
+                tripped = True
+                log.warning(f"🛑 KILL-SWITCH: daily loss ₹{adj_pnl:.0f} ≤ -₹{limit:.0f}")
+                SlackAlert.send(f"🛑 *Kill-switch tripped — daily loss limit*\n"
+                                f"Net P&L (after costs): *₹{adj_pnl:.0f}* ≤ -₹{limit:.0f}\n"
+                                f"No new alerts for the rest of today.")
+            elif cap > 0 and cnt >= cap:
+                tripped = True
+                log.warning(f"🛑 KILL-SWITCH: trades today {cnt} ≥ {cap}")
+                SlackAlert.send(f"🛑 *Kill-switch tripped — daily trade cap*\n"
+                                f"Trades today: *{cnt}* ≥ {cap}\n"
+                                f"No new alerts for the rest of today.")
+            if tripped:
+                self._killswitch_tripped = True
+                self.metrics["kill_switch_hits"] += 1
+            return tripped
+        except Exception as e:
+            log.warning(f"  killswitch check err: {e}")
+            return False
 
     def _update_oi_history(self, name, chain, now_ts):
         """Record OI + volume snapshot for each (strike, type) pair.
@@ -2582,16 +2974,28 @@ class Engine:
                 now=datetime.now(IST)
                 # Pre-market: run regime brief early so overrides are ready at 09:15
                 self._maybe_regime(now)
+                # Layer C feedback (yesterday's EOD adjustments) + per-day metrics reset.
+                self._maybe_load_adjustments(now)
 
-                # BUG FIX #4: The original code had `now.hour>=15` fire a `continue`
-                # BEFORE the close_all check at hour==15,min>=25 could be reached —
-                # making close_all() completely unreachable and positions never auto-closed.
-                # Fixed by checking the 15:25 close condition FIRST.
-                if now.hour==15 and now.minute>=25:
-                    self.tracker.close_all();self.running=False
-                    log.info("🔔 Market close");break
-                if now.hour<9 or(now.hour==9 and now.minute<20)or now.hour>15 or(now.hour==15 and now.minute>=25):
+                # Auto-close cutoff is configurable (default 15:15 IST). Check FIRST so
+                # close_all() reliably runs before the early-exit branch below.
+                close_h = int(CONFIG.get("auto_close_hour", 15))
+                close_m = int(CONFIG.get("auto_close_minute", 15))
+                if now.hour == close_h and now.minute >= close_m:
+                    self.tracker.close_all()
+                    # Run Layer C EOD learning RIGHT BEFORE we stop — the previous
+                    # 15:45 trigger never fired because the loop exited at 15:25.
+                    try:
+                        LearningLoop.run()
+                        self._last_eod_run = now.strftime("%Y-%m-%d")
+                    except Exception as e:
+                        log.warning(f"  EOD learning at close failed: {e}")
+                    self.running=False
+                    log.info(f"🔔 Auto-close at {close_h:02d}:{close_m:02d}");break
+                if now.hour<9 or(now.hour==9 and now.minute<20) or \
+                   now.hour>close_h or(now.hour==close_h and now.minute>=close_m):
                     time.sleep(30);continue
+                self.metrics["scans_total"] += 1
 
                 # Mid/late-session learning + in-flight management
                 self._maybe_eod(now)
@@ -2619,13 +3023,28 @@ class Engine:
 
                 for name,inst in INSTRUMENTS.items():
                     if name in avoid:
+                        self.metrics["regime_blocked"] += 1
                         log.info(f"  {name} skipped — regime avoid list")
                         continue
 
                     df=self.client.candles(inst["token"],inst["exchange"])
                     if df.empty or len(df)<30: continue
-                    sig=self.sgen.analyze(df)
-                    if not sig: continue
+                    sig=self.sgen.analyze(df, weight_adj=self._weight_adj,
+                                          blocked_windows=self._blocked_windows)
+                    if not sig:
+                        # Either too few bars OR analyzer returned None due to a blocked
+                        # time window or hard time-gate (post-14:50). Track the window hits.
+                        if self._blocked_windows:
+                            now_hm = datetime.now(IST).strftime("%H:%M")
+                            for win in self._blocked_windows:
+                                try:
+                                    a, b = win.split("-")
+                                    if a.strip() <= now_hm <= b.strip():
+                                        self.metrics["blocked_window_hits"] += 1
+                                        break
+                                except Exception: continue
+                        continue
+                    self.metrics["signals_generated"] += 1
 
                     # ════════════════════════════════════════════════════════
                     # STEP 1: Fetch option chain + analytics ALWAYS
@@ -2685,6 +3104,7 @@ class Engine:
                                          f"PCR={chain_anal.get('pcr')} skew={chain_anal.get('iv_skew')} "
                                          f"OI_shift={chain_anal.get('oi_shift_signal','?')}")
                         except Exception as ce:
+                            self.metrics["chain_failures"] += 1
                             log.warning(f"  Chain fetch failed for {name}: {ce}")
 
                     # ════════════════════════════════════════════════════════
@@ -2808,8 +3228,13 @@ class Engine:
                     prev = self._prev.get(name, {}).get("signal", {})
                     # Hard R:R gate — honour regime min_rr override (≥1.5)
                     if sig.get("risk_reward", 0) < min_rr_floor:
+                        self.metrics["rr_blocked"] += 1
                         log.info(f"⛔ R:R gate blocked {name} {sig['direction']} "
                                  f"RR={sig.get('risk_reward',0)} (need ≥{min_rr_floor})")
+                        self._prev[name] = result
+                        continue
+                    # Daily kill-switch — stops new alerts after loss limit or trade cap.
+                    if self._check_killswitch():
                         self._prev[name] = result
                         continue
 
@@ -2830,8 +3255,13 @@ class Engine:
                         if fresh_price and fresh_price > 0:
                             self._recompute_levels(sig, fresh_price)
 
-                        # ── Re-pick option on fresh spot if we already had a chain ──
-                        if chain and opt is not None:
+                        # ── Re-pick option on fresh spot ONLY if cached chain is stale ──
+                        # Previously this always re-fetched, doubling API calls per alert.
+                        # Skip the re-fetch when our cached chain is < 30s old; the price
+                        # delta on cached chain prices vs fresh-LTP is negligible inside
+                        # that window. (The premium-mid was already captured in `chain`.)
+                        cc_age_now = time.time() - (self._chain_cache.get(name, {}).get("ts", 0) or 0)
+                        if chain and opt is not None and cc_age_now > 30:
                             try:
                                 chain2, atm2 = self.client.option_chain(inst, sig["price"])
                                 if chain2:
@@ -2848,9 +3278,14 @@ class Engine:
                         # ── Layer B: validation + sizing + SL rule ──
                         ai_result = SignalValidation.analyze(name, sig, opt, regime=regime,
                                                                chain_analytics=chain_anal)
+                        if ai_result is None:
+                            self.metrics["ai_api_failures"] += 1
 
                         if ai_result and ai_result.get("verdict") in ("SKIP", "WAIT"):
-                            log.info(f"🤖 AI {ai_result.get('verdict')} {name} {sig['direction']} — "
+                            v = ai_result.get("verdict")
+                            if v == "SKIP": self.metrics["ai_skipped"] += 1
+                            else: self.metrics["ai_waited"] += 1
+                            log.info(f"🤖 AI {v} {name} {sig['direction']} — "
                                      f"{ai_result.get('reasoning','')[:80]}")
                             self._prev[name] = result
                             # BUG FIX #5: Always update _last_signal so the 15-min cooldown
@@ -2879,6 +3314,7 @@ class Engine:
                             "instrument":name,"signal":sig,"option":opt,"timing":timing,"ai":ai_result})
                         self.alerts=self.alerts[:100]
                         save_signal(name,sig,opt,ai=ai_result)
+                        self.metrics["signals_alerted"] += 1
                         log.info(f"🚨 {name} {sig['direction']} Conf:{sig['confidence']}% "
                                  f"pos={(ai_result or {}).get('position_pct',100)}% "
                                  f"tighten={(ai_result or {}).get('sl_tightening','none')}")
@@ -3314,6 +3750,21 @@ class SwingEngine:
             except Exception as e:
                 log.warning(f"[Swing] AI exit err pos #{pos['id']}: {e}")
 
+    _EXIT_SYSTEM_PROMPT = """You are a professional swing trader reviewing OPEN equity-or-options positions on a multi-day timeframe. Decide ONE of EXIT / HOLD / PARTIAL_EXIT and return JSON only.
+
+DECISION RULES:
+- EXIT if: original thesis broken (EMA stack reversed), RSI hit extremes against position, price touched SL zone, < 5 DTE on a profitable option (theta will erode quickly)
+- PARTIAL_EXIT if: hit T1 and signals weakening — lock 50% profit
+- HOLD if: thesis still intact, price in middle of range, setup improving
+
+URGENCY:
+- IMMEDIATE = act today
+- SOON = act within 1-2 sessions
+- MONITORING = no action needed, recheck next cycle
+
+Respond in JSON only:
+{"decision":"EXIT|HOLD|PARTIAL_EXIT","urgency":"IMMEDIATE|SOON|MONITORING","reasoning":"2-3 sentences","risk_note":"specific risk if any (or null)"}"""
+
     def _ai_exit_one(self, pos):
         """Claude AI analyses one open position and returns EXIT/HOLD/PARTIAL_EXIT."""
         api_key = CONFIG.get("anthropic_api_key","")
@@ -3354,9 +3805,7 @@ class SwingEngine:
         try: reasons = json.loads(pos.get("reasons") or "[]")
         except: pass
 
-        prompt = f"""You are a professional swing trader reviewing an open position.
-
-OPEN POSITION:
+        prompt = f"""OPEN POSITION:
 Instrument: {name} ({direction})
 {'Option: ' + (pos.get('option_symbol') or 'equity trade')}
 Entry date: {pos.get('entry_date')} (held {days_held} days)
@@ -3376,52 +3825,36 @@ Signal direction: {fresh_sig.get('direction') or 'NEUTRAL'}
 Signal confidence: {fresh_sig.get('confidence') or 'N/A'}%
 
 ORIGINAL ENTRY REASONS:
-{'; '.join(reasons[:5]) or 'N/A'}
+{'; '.join(reasons[:5]) or 'N/A'}"""
 
-DECISION RULES:
-- EXIT if: original thesis broken (EMA stack reversed), RSI hit extremes against position, price touched SL zone, <5 DTE with profit
-- PARTIAL_EXIT if: hit T1 and signals weakening — lock 50% profit
-- HOLD if: thesis still intact, price in middle of range, setup improving
-
-Respond in JSON only:
-{{"decision":"EXIT|HOLD|PARTIAL_EXIT","urgency":"IMMEDIATE|SOON|MONITORING","reasoning":"2-3 sentences","risk_note":"specific risk if any (or null)"}}"""
-
+        ai = _anthropic_call(
+            prompt,
+            model=CONFIG.get("anthropic_model","claude-sonnet-4-5"),
+            max_tokens=300, temperature=0, timeout=20,
+            system=SwingEngine._EXIT_SYSTEM_PROMPT, layer="swing_exit",
+        )
+        if ai is None:
+            return None
         try:
-            resp = requests.post(
-                "https://api.anthropic.com/v1/messages",
-                headers={"x-api-key": api_key, "anthropic-version": "2023-06-01",
-                         "content-type": "application/json"},
-                json={"model": CONFIG.get("anthropic_model","claude-sonnet-4-5"),
-                      "max_tokens": 300, "temperature": 0,
-                      "messages": [{"role":"user","content": prompt}]},
-                timeout=20
-            )
-            if resp.status_code == 200:
-                raw = resp.json()
-                text = (raw.get("content") or [{}])[0].get("text","").strip()
-                if text.startswith("{"):
-                    ai = json.loads(text)
-                else:
-                    ai = json.loads(text[text.find("{"):text.rfind("}")+1])
-                decision = ai.get("decision","HOLD")
-                reasoning = ai.get("reasoning","")
-                now_str = datetime.now(IST).strftime("%Y-%m-%d %H:%M")
-                swing_pos_update(pos["id"],
-                    last_ai_decision=decision,
-                    last_ai_reasoning=reasoning,
-                    last_ai_ts=now_str)
-                log.info(f"[Swing] AI exit #{pos['id']} {name}: {decision} — {reasoning[:60]}")
-                # Auto-Slack on EXIT/PARTIAL
-                if decision in ("EXIT","PARTIAL_EXIT"):
-                    icon = "🚪" if decision=="EXIT" else "⚠"
-                    SlackAlert.send(f"{icon} *Swing Exit Signal: {name}*\n"
-                                    f"Decision: *{decision}* ({ai.get('urgency','')})\n"
-                                    f"{reasoning}\n"
-                                    f"{'⚠ ' + ai.get('risk_note','') if ai.get('risk_note') else ''}")
-                return ai
+            decision = ai.get("decision","HOLD")
+            reasoning = ai.get("reasoning","")
+            now_str = datetime.now(IST).strftime("%Y-%m-%d %H:%M")
+            swing_pos_update(pos["id"],
+                last_ai_decision=decision,
+                last_ai_reasoning=reasoning,
+                last_ai_ts=now_str)
+            log.info(f"[Swing] AI exit #{pos['id']} {name}: {decision} — {reasoning[:60]}")
+            # Auto-Slack on EXIT/PARTIAL
+            if decision in ("EXIT","PARTIAL_EXIT"):
+                icon = "🚪" if decision=="EXIT" else "⚠"
+                SlackAlert.send(f"{icon} *Swing Exit Signal: {name}*\n"
+                                f"Decision: *{decision}* ({ai.get('urgency','')})\n"
+                                f"{reasoning}\n"
+                                f"{'⚠ ' + ai.get('risk_note','') if ai.get('risk_note') else ''}")
+            return ai
         except Exception as e:
-            log.warning(f"[Swing] AI exit API error: {e}")
-        return None
+            log.warning(f"[Swing] AI exit post-processing error: {e}")
+            return None
 
     def _format_slack(self, name, sig, opt):
         arrow = "🟢" if sig["direction"]=="LONG" else "🔴"
@@ -3891,6 +4324,77 @@ def test_chain(name):
         "greeks_count": len(greeks) if greeks else 0,
         "sample": sample,
         "status":"OK" if chain else "FAILED - check server logs"})
+
+
+@app.route("/api/metrics")
+def api_metrics():
+    """Per-day engine telemetry — for the dashboard's risk + cost panels.
+
+    Combines:
+    - engine.metrics counters (scans, generated, alerted, AI skipped, blocks)
+    - today's get_perf() snapshot (gross P&L, net after costs, totals)
+    - candle-cache hit rate
+    - Anthropic API usage (calls + tokens + cache hit/creation)
+    - kill-switch + risk thresholds so the UI can show "₹X of Y limit"
+    Public read endpoint — no secrets, no auth required.
+    """
+    today = datetime.now(IST).strftime("%Y-%m-%d")
+    perf  = get_perf(date=today)
+    cache_stats = engine.client.candle_cache_stats()
+    # Trades today (open + closed) — used for trade-cap progress bar
+    cnt_row = db_exec("SELECT COUNT(*) as cnt FROM signals WHERE date=?",
+                      (today,), fetchone=True)
+    trades_today = int(dict(cnt_row).get("cnt", 0)) if cnt_row else 0
+    # Anthropic usage snapshot
+    ant = dict(_ANTHROPIC_USAGE)
+    ant["by_layer"] = dict(_ANTHROPIC_USAGE.get("by_layer") or {})
+    return jsonify({
+        "date": today,
+        "engine": {
+            "running":  bool(engine.running),
+            "killswitch_tripped": bool(engine._killswitch_tripped),
+            "scan_interval_sec": int(CONFIG.get("scan_interval_sec", 30)),
+            "weight_adjustments": engine._weight_adj,
+            "blocked_windows":    engine._blocked_windows,
+            "auto_close": f"{int(CONFIG.get('auto_close_hour',15)):02d}:{int(CONFIG.get('auto_close_minute',15)):02d}",
+        },
+        "metrics_today": engine.metrics,
+        "perf_today":    perf,
+        "trades_today":  trades_today,
+        "risk": {
+            "daily_loss_limit":    int(CONFIG.get("daily_loss_limit", 2000)),
+            "max_trades_per_day":  int(CONFIG.get("max_trades_per_day", 8)),
+            "brokerage_per_lot_roundtrip": float(CONFIG.get("brokerage_per_lot_roundtrip", 100)),
+            "slippage_bps_per_side":       float(CONFIG.get("slippage_bps_per_side", 50)),
+        },
+        "cache": {
+            "candles":   cache_stats,
+            "anthropic": ant,
+            "anthropic_caching_enabled": bool(CONFIG.get("anthropic_cache_enabled", True)),
+        },
+        "time": datetime.now(IST).strftime("%H:%M:%S"),
+    })
+
+
+@app.route("/api/killswitch", methods=["POST"])
+@require_auth
+def api_killswitch():
+    """Manual kill-switch toggle. Body: {"action": "trip" | "reset"}.
+
+    'trip'  — immediately stop new alerts (latches until next day)
+    'reset' — clear the latch (use with caution — only if you know why it tripped)
+    """
+    d = flask_request.json or {}
+    action = (d.get("action") or "").lower()
+    if action == "trip":
+        engine._killswitch_tripped = True
+        engine.metrics["kill_switch_hits"] += 1
+        SlackAlert.send("🛑 *Kill-switch tripped manually* — no new alerts today.")
+        return jsonify({"ok": True, "tripped": True})
+    elif action == "reset":
+        engine._killswitch_tripped = False
+        return jsonify({"ok": True, "tripped": False})
+    return jsonify({"error": "action must be 'trip' or 'reset'"}), 400
 
 
 # ── Swing engine singleton ──────────────────────────────────────────

@@ -1,0 +1,57 @@
+# Fly.io deployment for the Intraday Signal Engine.
+#
+# Why Fly.io vs Render free tier:
+#   - Render free spins down after 15 min idle → 30s cold start = miss opening-range window.
+#   - Fly.io's free allowance keeps a small VM warm 24/7 (within 3 free shared-cpu-1x VMs)
+#     so the engine is responsive at 09:15 IST without warmup pings.
+#
+# One-time setup:
+#   1. brew install flyctl (or curl -L https://fly.io/install.sh | sh)
+#   2. fly auth signup
+#   3. fly launch --no-deploy --copy-config            # generates app name + region
+#   4. fly secrets set ANGEL_API_KEY=... ANGEL_CLIENT_ID=... ANGEL_PASSWORD=... \
+#                       ANGEL_TOTP_SECRET=... ANTHROPIC_API_KEY=... \
+#                       SLACK_WEBHOOK=... AUTH_TOKEN=...
+#   5. fly deploy
+#
+# After deploy: your engine runs at https://<app-name>.fly.dev — point the dashboard
+# (gear icon → Server URL) at that.
+
+app = "intraday-signal-engine"        # change to a unique name on first `fly launch`
+primary_region = "bom"                # Mumbai — closest to NSE feed for low API latency
+kill_signal = "SIGTERM"
+kill_timeout = 30
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  PORT = "8080"
+  PYTHON_VERSION = "3.11.6"
+  # Trading defaults — override via `fly secrets set` if you want different values.
+  SCAN_INTERVAL = "30"
+  AUTO_CLOSE_HOUR = "15"
+  AUTO_CLOSE_MINUTE = "15"
+  DAILY_LOSS_LIMIT = "2000"
+  MAX_TRADES_PER_DAY = "8"
+  ANTHROPIC_CACHE_ENABLED = "true"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  # Don't auto-stop — we need the engine running through market hours.
+  auto_stop_machines = false
+  auto_start_machines = true
+  min_machines_running = 1
+
+  [[http_service.checks]]
+    grace_period = "30s"
+    interval = "60s"
+    method = "GET"
+    timeout = "10s"
+    path = "/api/ping"
+
+[[vm]]
+  cpu_kind = "shared"
+  cpus = 1
+  memory_mb = 512
