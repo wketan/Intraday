@@ -45,7 +45,7 @@ CONFIG = {
     "target_points_min": int(os.environ.get("TARGET_MIN", "10")),
     "target_points_max": int(os.environ.get("TARGET_MAX", "15")),
     "min_confidence":    int(os.environ.get("MIN_CONFIDENCE", "45")),
-    "budget":            int(os.environ.get("BUDGET", "20000")),
+    "budget":            int(os.environ.get("BUDGET", "50000")),
 
     # ── Risk guards (kill-switch) ──
     # Stop firing new alerts after either threshold is hit for the day.
@@ -1509,11 +1509,11 @@ class SignalGen:
         if direction=="LONG":
             entry=round(price+av*0.1,2);stop=round(price-av*1.2,2)
             risk_dist=round(abs(entry-stop),2)
-            t1,t2=round(entry+risk_dist*1.5,2),round(entry+risk_dist*2.5,2)
+            t1,t2=round(entry+risk_dist*2.0,2),round(entry+risk_dist*3.0,2)
         else:
             entry=round(price-av*0.1,2);stop=round(price+av*1.2,2)
             risk_dist=round(abs(entry-stop),2)
-            t1,t2=round(entry-risk_dist*1.5,2),round(entry-risk_dist*2.5,2)
+            t1,t2=round(entry-risk_dist*2.0,2),round(entry-risk_dist*3.0,2)
         risk=round(abs(entry-stop),2);reward=round(abs(t1-entry),2)
         
         return {"direction":direction,"confidence":conf,"price":round(price,2),
@@ -3013,7 +3013,10 @@ class Engine:
                 # Regime can control avoid_instruments, bias, and min_rr — but confidence
                 # gating is the engine's job.
                 conf_floor = CONFIG["min_confidence"]  # always 45% (env MIN_CONFIDENCE)
-                min_rr_floor = max(1.2, float((regime or {}).get("min_rr") or 1.2))
+                # Cap regime min_rr at 1.9 — Claude sometimes returns 2.0-2.5 on normal
+                # days which blocks every signal since T1 is set at 2.0× risk.
+                # The hard floor is 1.2; the hard ceiling is 1.9 to always leave headroom.
+                min_rr_floor = min(max(1.2, float((regime or {}).get("min_rr") or 1.2)), 1.9)
 
                 # Event blackout (Layer E) — short-circuit the whole scan
                 blackout, ev = EventCalendar.in_blackout()
