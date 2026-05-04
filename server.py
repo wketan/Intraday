@@ -3938,17 +3938,18 @@ def require_auth(fn):
 engine = Engine()
 
 @app.route("/")
-def home():
-    return jsonify({"name":"Intraday Signal Engine","status":"running" if engine.running else "stopped"})
-
 @app.route("/dashboard")
-def dashboard():
-    """Serve the trading dashboard UI"""
-    import os
-    html_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "dashboard.html")
+def home():
+    """Serve the trading dashboard UI (index.html).
+    Both / and /dashboard work so Railway's health check + any bookmarked
+    /dashboard URL both load the React app correctly."""
+    html_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "index.html")
     if os.path.exists(html_path):
         return send_file(html_path)
-    return "<h1>dashboard.html not found</h1><p>Place dashboard.html in the same folder as server.py</p>", 404
+    # Fallback status JSON so the server at least responds meaningfully
+    return jsonify({"name": "Intraday Signal Engine",
+                    "status": "running" if engine.running else "stopped",
+                    "error": "index.html not found — place it in the same folder as server.py"})
 
 @app.route("/api/login", methods=["POST"])
 @require_auth
