@@ -20,11 +20,15 @@ RUN pip install --no-cache-dir -r requirements.txt
 # App code — only the files the server needs at runtime.
 COPY server.py .
 COPY backtest.py .
+COPY data_layer.py .
+COPY verify_data_layer.py .
 COPY events.json .
 COPY index.html .
 COPY manifest.json .
 COPY start.sh .
 RUN chmod +x start.sh
+# Persistent data cache directory — gitignored locally but writable in container.
+RUN mkdir -p /app/data /app/reports
 
 ENV PYTHONUNBUFFERED=1
 

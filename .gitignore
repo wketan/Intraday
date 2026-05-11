@@ -5,3 +5,8 @@ __pycache__/
 .env
 venv/
 .DS_Store
+# Phase 1+ data layer — cached chain dumps, bhavcopy ZIPs, backtest outputs
+data/
+reports/
+data_layer_verify.csv
+*.log

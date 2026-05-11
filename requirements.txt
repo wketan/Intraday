@@ -9,3 +9,7 @@ gunicorn>=21.2.0
 python-dotenv>=1.0.0
 websocket-client>=1.6.0
 six>=1.16.0
+# Data layer (Phase 1) — NSE historical option chain + bhavcopy
+jugaad-data>=0.30
+# Backtest reporting (Phase 3) — HTML equity curve charts
+matplotlib>=3.7.0
