@@ -66,6 +66,25 @@ CONFIG = {
     "auto_close_hour":   int(os.environ.get("AUTO_CLOSE_HOUR", "15")),
     "auto_close_minute": int(os.environ.get("AUTO_CLOSE_MINUTE", "15")),
 
+    # ── Option exit-level mode (step 14) ─────────────────────────────────────
+    # "premium_pct"  — SL/T1/T2 are exact percentages of live entry premium.
+    #                  Dashboard SL=₹40 means "option exits at ₹40 when hit",
+    #                  no extrapolation, no delta model. (DEFAULT — recommended)
+    # "delta_scaled" — legacy behaviour: SL/T1/T2 = entry ± (index_distance × delta).
+    #                  Estimated and ignores gamma/theta/vega. Kept for backward compat.
+    "opt_exit_mode":     os.environ.get("OPT_EXIT_MODE", "premium_pct"),
+    "opt_sl_pct":        float(os.environ.get("OPT_SL_PCT", "0.35")),   # 35% premium loss = stop
+    "opt_t1_pct":        float(os.environ.get("OPT_T1_PCT", "0.50")),   # 50% premium gain = T1
+    "opt_t2_pct":        float(os.environ.get("OPT_T2_PCT", "1.00")),   # 100% premium gain = T2
+
+    # ── Strict greeks (step 15) ──────────────────────────────────────────────
+    # When true: signals are REJECTED if Angel's getOptionGreek API does not
+    # return a live delta in [0.01, 0.99]. No fallback ladder, no estimation —
+    # every signal that fires has real, live, exchange-priced delta.
+    # Tradeoff: fewer signals when Angel's greek endpoint misbehaves. Worth it
+    # if you've been seeing "off" prices and want to eliminate ALL estimation.
+    "strict_greeks":     os.environ.get("STRICT_GREEKS", "false").lower() == "true",
+
     # ── Slack Alert Config ──
     # Create webhook: Slack → Apps → Incoming Webhooks → Add to Slack → Select your DM
     "slack_webhook":    os.environ.get("SLACK_WEBHOOK", ""),
@@ -2270,6 +2289,15 @@ class OptPicker:
                 except Exception:
                     delta = None
             if delta is None:
+                # STRICT GREEKS (step 15): if env var is set, REJECT this candidate
+                # entirely rather than substituting an estimated delta. Means every
+                # signal that fires has real exchange-priced delta — eliminates
+                # all estimation, at the cost of fewer signals when Angel's
+                # greek endpoint is down.
+                if CONFIG.get("strict_greeks", False):
+                    log.warning(f"  STRICT_GREEKS: rejecting {o.get('symbol','?')} "
+                                f"strike {strike} {ot} — no live delta from Angel")
+                    continue
                 # DTE from expiry string if we have it, else assume 5
                 dte = 5
                 try:
@@ -2361,9 +2389,28 @@ class OptPicker:
         idx_to_t1 = abs(sig["target1"] - sig["entry"])
         idx_to_t2 = abs(sig["target2"] - sig["entry"])
 
-        sl = round(max(e - idx_to_sl * d, e * 0.65), 2)
-        t1 = round(e + idx_to_t1 * d, 2)
-        t2 = round(e + idx_to_t2 * d, 2)
+        # ── STEP 14: Premium-percentage exits (no more delta-scaled estimates) ──
+        # When OPT_EXIT_MODE=premium_pct (default), SL/T1/T2 are exact percentages of
+        # the live entry premium. Dashboard SL=₹40 means "option exits at exactly ₹40
+        # when the live mid hits ₹40" — no model, no extrapolation. The legacy
+        # delta-scaled mode is still available via env if anyone needs it.
+        # Also compute the legacy modelled values for diagnostic visibility.
+        exit_mode = str(CONFIG.get("opt_exit_mode", "premium_pct")).lower()
+        sl_pct = float(CONFIG.get("opt_sl_pct", 0.35))
+        t1_pct = float(CONFIG.get("opt_t1_pct", 0.50))
+        t2_pct = float(CONFIG.get("opt_t2_pct", 1.00))
+
+        sl_modelled = round(max(e - idx_to_sl * d, e * 0.65), 2)
+        t1_modelled = round(e + idx_to_t1 * d, 2)
+        t2_modelled = round(e + idx_to_t2 * d, 2)
+        sl_premium  = round(e * (1.0 - sl_pct), 2)
+        t1_premium  = round(e * (1.0 + t1_pct), 2)
+        t2_premium  = round(e * (1.0 + t2_pct), 2)
+
+        if exit_mode == "premium_pct":
+            sl, t1, t2 = sl_premium, t1_premium, t2_premium
+        else:
+            sl, t1, t2 = sl_modelled, t1_modelled, t2_modelled
 
         cost_1lot = e * lot
         if cost_1lot <= max_capital:
@@ -2391,6 +2438,9 @@ class OptPicker:
             "ltp": round(e, 2), "entry": round(e, 2),
             "bid": b.get("bid"), "ask": b.get("ask"), "spread": b.get("spread"),
             "sl": sl, "target1": t1, "target2": t2,
+            "exit_mode": exit_mode,
+            "sl_premium": sl_premium, "t1_premium": t1_premium, "t2_premium": t2_premium,
+            "sl_modelled": sl_modelled, "t1_modelled": t1_modelled, "t2_modelled": t2_modelled,
             "delta": d, "delta_source": b.get("delta_source", "fallback"),
             "iv": b.get("iv"), "theta": b.get("theta"),
             "gamma": b.get("gamma"), "vega": b.get("vega"),
@@ -4200,6 +4250,10 @@ def option_ltp():
             except Exception:
                 pass
         if delta is None:
+            # STRICT GREEKS (step 15): reject if no live delta — mirrors OptPicker.pick
+            if CONFIG.get("strict_greeks", False):
+                log.warning(f"  STRICT_GREEKS (option_ltp): rejecting {o.get('symbol','?')} — no live delta")
+                continue
             dte = 5
             try:
                 if expiry:

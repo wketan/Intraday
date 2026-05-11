@@ -131,20 +131,13 @@ def run_backtest(instrument: str, days: int, *, verbose: bool = False):
     sgen = SignalGen()
     picker = OptPicker()
     trades = []
-    last_signal_ts = None  # 15-min cooldown
-    skipped_cooldown = 0
-    skipped_no_signal = 0
-    skipped_low_conf = 0
+    last_taken_ts = None  # cooldown applies ONLY to TAKEN trades, not filtered ones
 
     # Walk forward bar by bar (need 30+ history bars, leave 24 future bars for trade simulation)
     for i in range(30, len(df) - 24):
         slice_df = df.iloc[: i + 1].copy()
         ts = slice_df["timestamp"].iloc[-1]
-        # Cooldown gate
-        if last_signal_ts is not None and (ts - last_signal_ts).total_seconds() < 900:
-            skipped_cooldown += 1
-            continue
-        # Time gates: only between 09:20 and 14:50
+        # Time gates apply to BOTH paths
         try:
             ts_py = pd.Timestamp(ts).to_pydatetime()
             if ts_py.tzinfo is not None:
@@ -153,48 +146,67 @@ def run_backtest(instrument: str, days: int, *, verbose: bool = False):
         except Exception:
             continue
         if hr < 9 or (hr == 9 and mn < 20): continue
-        if hr >= 15 or (hr == 14 and mn >= 50): continue
 
         sig = sgen.analyze(slice_df)
         if sig is None:
-            skipped_no_signal += 1
-            continue
-        if sig["confidence"] < CONFIG.get("min_confidence", 45):
-            skipped_low_conf += 1
-            continue
-        if sig.get("risk_reward", 0) < 1.5:
+            # The analyzer returns None for late-day, low-data, or blocked-window bars.
+            # No signal = no missed opportunity to evaluate.
             continue
 
-        # Pick a strike from the (estimated) chain
+        # ── Classify against the engine's filter chain ─────────────────────
+        filter_reasons = []
+        if hr >= 15 or (hr == 14 and mn >= 50):
+            filter_reasons.append("LATE_DAY")
+        if sig["confidence"] < CONFIG.get("min_confidence", 45):
+            filter_reasons.append("LOW_CONFIDENCE")
+        if sig.get("risk_reward", 0) < 1.5:
+            filter_reasons.append("LOW_RR")
+        # Cooldown only counts against the TAKEN path. If the engine WOULD take this
+        # but the cooldown is active, it's a different kind of "missed" — we record it
+        # but mark it specially.
+        cooldown_active = (last_taken_ts is not None and
+                           (ts - last_taken_ts).total_seconds() < 900)
+        if cooldown_active and not filter_reasons:
+            filter_reasons.append("COOLDOWN")
+
+        would_be_taken = (len(filter_reasons) == 0)
+
+        # ── Forward simulation runs EITHER WAY ─────────────────────────────
         spot = sig["price"]
         gap = inst["strike_gap"]
         atm = round(spot / gap) * gap
         ot = "CE" if sig["direction"] == "LONG" else "PE"
-        strikes = [atm + j * gap for j in range(-3, 4)]
-        # Estimate ATR from the slice — used for premium time-value
         atr_now = TA.atr(slice_df).iloc[-1]
-        # Pick strike: ATM or 1 OTM
-        chosen_strike = atm if ot == "CE" else atm
-        # Use moneyness=0 fallback delta for ATM
+        chosen_strike = atm
         delta = fallback_delta(0, dte=5, right_side=True)
         opt_premium = estimate_option_premium(spot, chosen_strike, ot, dte=5, atr=atr_now)
 
-        # Build entry / SL / T1 from index points scaled by delta
+        # Build SL/T1 using the SAME premium-pct mode the engine now defaults to (step 14)
+        exit_mode = CONFIG.get("opt_exit_mode", "premium_pct")
+        if exit_mode == "premium_pct":
+            opt_sl = round(opt_premium * (1 - float(CONFIG.get("opt_sl_pct", 0.35))), 2)
+            opt_t1 = round(opt_premium * (1 + float(CONFIG.get("opt_t1_pct", 0.50))), 2)
+            opt_t2 = round(opt_premium * (1 + float(CONFIG.get("opt_t2_pct", 1.00))), 2)
+        else:
+            idx_sl_pts = abs(sig["sl"] - sig["entry"])
+            idx_t1_pts = abs(sig["target1"] - sig["entry"])
+            idx_t2_pts = abs(sig["target2"] - sig["entry"])
+            opt_sl = round(max(opt_premium - idx_sl_pts * delta, opt_premium * 0.65), 2)
+            opt_t1 = round(opt_premium + idx_t1_pts * delta, 2)
+            opt_t2 = round(opt_premium + idx_t2_pts * delta, 2)
+
         idx_sl_pts = abs(sig["sl"] - sig["entry"])
         idx_t1_pts = abs(sig["target1"] - sig["entry"])
         idx_t2_pts = abs(sig["target2"] - sig["entry"])
-        opt_sl = round(max(opt_premium - idx_sl_pts * delta, opt_premium * 0.65), 2)
-        opt_t1 = round(opt_premium + idx_t1_pts * delta, 2)
-        opt_t2 = round(opt_premium + idx_t2_pts * delta, 2)
 
-        # Simulate forward
         future = df.iloc[i + 1: i + 25].reset_index(drop=True)
         result, exit_price, bars = simulate_trade(
             future, opt_premium, opt_sl, opt_t1, opt_t2,
             delta, idx_sl_pts, idx_t1_pts, idx_t2_pts,
             sig["direction"])
+        won = result in ("WIN", "WIN_TIMEOUT")
 
-        # Sizing: assume 50% of budget, max 3 lots
+        # Sizing
         lot = inst["lot_size"]
         max_cap = CONFIG.get("budget", 20000) * 0.5
         cost_1 = opt_premium * lot
@@ -203,6 +215,12 @@ def run_backtest(instrument: str, days: int, *, verbose: bool = False):
         gross_pnl = round((exit_price - opt_premium) * qty, 0)
         brokerage_rs, slippage_rs, _ = estimate_costs(opt_premium, exit_price, qty, lots)
         net_pnl = round(gross_pnl - brokerage_rs - slippage_rs, 0)
+
+        # ── 4-bucket classification ─────────────────────────────────────────
+        if would_be_taken and won:        bucket = "TAKEN_WIN"
+        elif would_be_taken and not won:  bucket = "TAKEN_LOSS"
+        elif not would_be_taken and won:  bucket = "FILTERED_WIN"   # ← missed opportunity
+        else:                              bucket = "FILTERED_LOSS"  # ← filter worked
 
         trade = {
             "timestamp": str(ts),
@@ -223,59 +241,92 @@ def run_backtest(instrument: str, days: int, *, verbose: bool = False):
             "brokerage_rs": brokerage_rs,
             "slippage_rs": slippage_rs,
             "net_pnl": net_pnl,
+            "bucket": bucket,
+            "would_be_taken": would_be_taken,
+            "filtered_by": ",".join(filter_reasons) if filter_reasons else None,
         }
         trades.append(trade)
-        last_signal_ts = ts
+        if would_be_taken:
+            last_taken_ts = ts
         if verbose:
-            print(f"  {ts}  {sig['direction']:<5}  conf={sig['confidence']}%  "
-                  f"strike={chosen_strike}  result={result:<14}  net=₹{net_pnl}")
+            tag = bucket.ljust(13)
+            print(f"  {ts}  {sig['direction']:<5}  conf={sig['confidence']}%  {tag}  net=₹{net_pnl}")
 
-    return _summarise(instrument, trades, days, skipped_cooldown, skipped_no_signal, skipped_low_conf)
+    return _summarise(instrument, trades, days)
 
 
-def _summarise(instrument, trades, days, skip_cool, skip_none, skip_low):
+def _summarise(instrument, trades, days):
     if not trades:
-        print("No trades generated.")
+        print("No signals generated.")
         return {"instrument": instrument, "trades": []}
     df = pd.DataFrame(trades)
-    wins   = df[df["result"].isin(["WIN", "WIN_TIMEOUT"])]
-    losses = df[df["result"].isin(["LOSS", "LOSS_TIMEOUT"])]
-    total_gross = df["gross_pnl"].sum()
-    total_net   = df["net_pnl"].sum()
-    total_costs = df["brokerage_rs"].sum() + df["slippage_rs"].sum()
-    win_rate = len(wins) / len(df) * 100 if len(df) else 0
-    avg_win  = wins["net_pnl"].mean() if len(wins) else 0
-    avg_loss = losses["net_pnl"].mean() if len(losses) else 0
-    expectancy = (win_rate / 100) * avg_win + ((100 - win_rate) / 100) * avg_loss
-    # Max drawdown on cumulative net P&L
-    cum = df["net_pnl"].cumsum()
-    running_max = cum.cummax()
-    dd = (cum - running_max).min()
 
-    print(f"\n══ Results: {instrument} ({days}d) ══")
-    print(f"  Trades:        {len(df)}  (wins {len(wins)}  losses {len(losses)})")
-    print(f"  Win rate:      {win_rate:.1f}%")
-    print(f"  Gross P&L:     ₹{total_gross:,.0f}")
-    print(f"  Costs:         ₹{total_costs:,.0f}  (brokerage+slippage)")
-    print(f"  Net P&L:       ₹{total_net:,.0f}")
-    print(f"  Avg win:       ₹{avg_win:,.0f}")
-    print(f"  Avg loss:      ₹{avg_loss:,.0f}")
-    print(f"  Expectancy:    ₹{expectancy:,.0f} per trade (net)")
-    print(f"  Max drawdown:  ₹{dd:,.0f}")
-    print(f"  Skipped — cooldown: {skip_cool}  no-signal: {skip_none}  low-conf: {skip_low}")
+    taken    = df[df["would_be_taken"] == True]
+    filtered = df[df["would_be_taken"] == False]
+    taken_w  = df[df["bucket"] == "TAKEN_WIN"]
+    taken_l  = df[df["bucket"] == "TAKEN_LOSS"]
+    filt_w   = df[df["bucket"] == "FILTERED_WIN"]    # missed opportunities
+    filt_l   = df[df["bucket"] == "FILTERED_LOSS"]   # filters that worked
+
+    print(f"\n══ Backtest: {instrument} ({days}d) ══")
+    print(f"  Total signals scanned: {len(df)}")
+    print()
+
+    # ── TAKEN path: what the engine would have alerted ──
+    taken_net = float(taken["net_pnl"].sum()) if len(taken) else 0
+    taken_wr  = len(taken_w) / max(len(taken), 1) * 100
+    print(f"══ TAKEN (engine would alert) ══")
+    print(f"  Trades:     {len(taken)}  win {len(taken_w)}  loss {len(taken_l)}  "
+          f"win-rate {taken_wr:.1f}%")
+    print(f"  Net P&L:    ₹{taken_net:,.0f}")
+    if len(taken):
+        avg_w = taken_w["net_pnl"].mean() if len(taken_w) else 0
+        avg_l = taken_l["net_pnl"].mean() if len(taken_l) else 0
+        expectancy = (taken_wr / 100) * avg_w + ((100 - taken_wr) / 100) * avg_l
+        cum = taken["net_pnl"].cumsum()
+        dd  = (cum - cum.cummax()).min() if len(cum) else 0
+        print(f"  Avg win:    ₹{avg_w:,.0f}    Avg loss: ₹{avg_l:,.0f}")
+        print(f"  Expectancy: ₹{expectancy:,.0f}/trade")
+        print(f"  Max DD:     ₹{dd:,.0f}")
+    print()
+
+    # ── FILTERED — MISSED OPPORTUNITIES ──
+    missed_net = float(filt_w["net_pnl"].sum()) if len(filt_w) else 0
+    print(f"══ FILTERED — MISSED OPPORTUNITIES ══")
+    print(f"  Trades engine SKIPPED that WOULD HAVE WON: {len(filt_w)}")
+    print(f"  P&L missed:  ₹{missed_net:,.0f}  (this is the cost of your filters)")
+    if len(filt_w):
+        print(f"  Top filters causing misses:")
+        for reason, count in filt_w["filtered_by"].value_counts().head(5).items():
+            sub_net = float(filt_w[filt_w["filtered_by"] == reason]["net_pnl"].sum())
+            print(f"    {reason:<35} {count:3d} winners filtered · ₹{sub_net:,.0f} missed")
+    print()
+
+    # ── FILTERED — CORRECT REJECTS ──
+    saved_net = abs(float(filt_l["net_pnl"].sum())) if len(filt_l) else 0
+    print(f"══ FILTERED — CORRECT REJECTS ══")
+    print(f"  Trades engine SKIPPED that WOULD HAVE LOST: {len(filt_l)}")
+    print(f"  Loss avoided: ₹{saved_net:,.0f}")
+    print()
+
+    # ── NET FILTER VALUE ──
+    net_filter = saved_net - missed_net
+    print(f"══ NET FILTER VALUE ══")
+    print(f"  Filters saved   ₹{saved_net:,.0f} on bad trades")
+    print(f"  Filters cost    ₹{missed_net:,.0f} on missed winners")
+    print(f"  Net filter:     {'+' if net_filter >= 0 else ''}₹{net_filter:,.0f}  "
+          f"({'filters HELP' if net_filter > 0 else 'filters HURT'})")
+
     return {
         "instrument": instrument, "days": days,
-        "trades_count": len(df),
-        "wins": len(wins), "losses": len(losses),
-        "win_rate_pct": round(win_rate, 1),
-        "gross_pnl": round(float(total_gross), 0),
-        "net_pnl":   round(float(total_net), 0),
-        "total_costs": round(float(total_costs), 0),
-        "expectancy": round(float(expectancy), 0),
-        "max_drawdown": round(float(dd), 0),
-        "skipped_cooldown": skip_cool,
-        "skipped_no_signal": skip_none,
-        "skipped_low_conf": skip_low,
+        "trades_scanned":  len(df),
+        "taken":           {"count": len(taken),   "wins": len(taken_w),
+                            "losses": len(taken_l), "net_pnl": round(taken_net, 0),
+                            "win_rate_pct": round(taken_wr, 1)},
+        "missed_winners":  {"count": len(filt_w),  "net_pnl_missed": round(missed_net, 0),
+                            "by_filter": filt_w["filtered_by"].value_counts().to_dict() if len(filt_w) else {}},
+        "correct_rejects": {"count": len(filt_l),  "loss_avoided": round(saved_net, 0)},
+        "net_filter_value": round(net_filter, 0),
         "trades": trades,
     }
 
@@ -295,7 +346,13 @@ def main():
     parser.add_argument("--json", type=str, default=None,
                         help="Write summary JSON to this path")
     parser.add_argument("--verbose", "-v", action="store_true",
-                        help="Print every trade as it's evaluated")
+                        help="Print every signal evaluated, with its bucket")
+    parser.add_argument("--show-missed", action="store_true",
+                        help="After the summary, list the top 10 'missed opportunity' trades "
+                             "(signals the engine filtered that would have won) with their "
+                             "timestamps + the specific filter that blocked them")
+    parser.add_argument("--top-n", type=int, default=10,
+                        help="How many missed opportunities to show with --show-missed (default 10)")
     args = parser.parse_args()
 
     if not args.all and not args.instrument:
@@ -324,16 +381,37 @@ def main():
             json.dump({"runs": slim, "generated_at": datetime.now(IST).isoformat()}, f, indent=2)
         print(f"📄 Summary JSON → {args.json}")
 
-    # Aggregate across instruments
+    # ── Show missed opportunities (step 16 — the headline feature) ──
+    if args.show_missed and all_trades:
+        missed = [t for t in all_trades if t.get("bucket") == "FILTERED_WIN"]
+        missed.sort(key=lambda t: -(t.get("net_pnl") or 0))
+        if not missed:
+            print(f"\n🎯 No missed opportunities found — your filters caught all winners.")
+        else:
+            top = missed[:args.top_n]
+            print(f"\n🎯 Top {len(top)} missed opportunities (winners the engine filtered out)")
+            print(f"   {'─' * 100}")
+            for t in top:
+                print(f"   {t['timestamp']}  {t['instrument']:<10} {t['direction']:<5}  "
+                      f"conf={t['confidence']:>2}%  rr={t.get('rr',0):.1f}  "
+                      f"filtered_by={t['filtered_by']:<25}  would-have-won ₹{t.get('net_pnl',0):,.0f}")
+
+    # ── Aggregate across instruments ──
     if len(all_results) > 1:
-        total_trades = sum(r["trades_count"] for r in all_results)
-        total_net    = sum(r["net_pnl"]      for r in all_results)
-        total_wins   = sum(r["wins"]         for r in all_results)
-        agg_winrate  = total_wins / total_trades * 100 if total_trades else 0
+        total_scanned = sum(r["trades_scanned"] for r in all_results)
+        total_taken_net = sum(r["taken"]["net_pnl"] for r in all_results)
+        total_taken     = sum(r["taken"]["count"]    for r in all_results)
+        total_taken_w   = sum(r["taken"]["wins"]     for r in all_results)
+        total_missed    = sum(r["missed_winners"]["count"] for r in all_results)
+        total_missed_net= sum(r["missed_winners"]["net_pnl_missed"] for r in all_results)
+        total_saved     = sum(r["correct_rejects"]["loss_avoided"]  for r in all_results)
+        agg_winrate     = total_taken_w / total_taken * 100 if total_taken else 0
         print(f"\n═══ Aggregate ({len(all_results)} instruments, {args.days}d) ═══")
-        print(f"  Total trades:  {total_trades}")
-        print(f"  Net P&L:       ₹{total_net:,.0f}")
-        print(f"  Win rate:      {agg_winrate:.1f}%")
+        print(f"  Signals scanned:   {total_scanned}")
+        print(f"  Trades taken:      {total_taken}  win-rate {agg_winrate:.1f}%  net ₹{total_taken_net:,.0f}")
+        print(f"  Missed winners:    {total_missed}  P&L missed ₹{total_missed_net:,.0f}")
+        print(f"  Losses avoided:    ₹{total_saved:,.0f}")
+        print(f"  Net filter value:  ₹{total_saved - total_missed_net:,.0f}")
 
 
 if __name__ == "__main__":
