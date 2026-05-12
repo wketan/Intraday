@@ -1816,7 +1816,7 @@
      *   └─────────────────────────────────────────────────────────────────────────┘
      * On kill-switch trip the row turns red and shows "🛑 KILL-SWITCH TRIPPED".
      */
-    function RiskBanner({ metrics, onTrip, onReset }) {
+    function RiskBanner({ metrics, onTrip, onReset, onStrategyChange }) {
       if (!metrics) return null;
       const risk = metrics.risk || {};
       const perf = metrics.perf_today || {};
@@ -1898,6 +1898,9 @@
             </span>
           </div>
 
+          {/* Strategy toggle (Phase 2.10) — switch v1 / v2 dry / v2 live from UI */}
+          <StrategyToggle eng={eng} onChange={onStrategyChange}/>
+
           {/* Manual override controls */}
           {tripped ? (
             <button type="button" className="btn ghost" style={{height:26, fontSize:11}}
@@ -1910,6 +1913,50 @@
               Stop alerts
             </button>
           )}
+        </div>
+      );
+    }
+
+    /**
+     * StrategyToggle — three-state segmented control rendered inside RiskBanner.
+     *
+     *   [ v1 (legacy) ]  [ v2 (dry-run) ]  [ v2 (live) ]
+     *
+     * Clicking a segment POSTs to /api/strategy. The choice persists across
+     * server restarts (stored in SQLite engine_state). User never touches
+     * Railway env vars to switch strategies.
+     */
+    function StrategyToggle({ eng, onChange }) {
+      if (!eng) return null;
+      const strategy = String(eng.strategy || 'v1').toLowerCase();
+      const dry = !!eng.dry_run_v2;
+      const active = strategy === 'v1' ? 'v1' : (dry ? 'v2dry' : 'v2live');
+      const btn = (key, label, payload, title) => (
+        <button type="button"
+          className={'seg-btn ' + (active === key ? 'on' : '')}
+          style={{
+            height: 24, padding: '0 8px', fontSize: 10,
+            fontFamily: 'var(--mono)', fontWeight: 600,
+            borderRadius: 4, border: '1px solid var(--line-1)',
+            background: active === key ? 'var(--accent-dim)' : 'transparent',
+            color: active === key ? 'var(--accent)' : 'var(--ink-2)',
+            cursor: 'pointer', whiteSpace: 'nowrap',
+          }}
+          onClick={() => onChange(payload)}
+          title={title}>
+          {label}
+        </button>
+      );
+      return (
+        <div style={{display:'flex', gap:2, alignItems:'center',
+                     border:'1px solid var(--line-1)', borderRadius:5, padding:1,
+                     background:'var(--bg-2)'}}>
+          {btn('v1',     'v1 LEGACY',  {strategy:'v1', dry_run_v2:false},
+               'Use the 13-indicator legacy strategy (currently live)')}
+          {btn('v2dry',  'v2 DRY',     {strategy:'v2', dry_run_v2:true},
+               'v2 confluence — fires Slack alerts only, no real trades. Use to evaluate v2 signal quality safely.')}
+          {btn('v2live', 'v2 LIVE',    {strategy:'v2', dry_run_v2:false},
+               'v2 confluence — REAL trades. Only enable after backtest passes the go/no-go gates.')}
         </div>
       );
     }
@@ -2625,6 +2672,30 @@ function App() {
         }
       };
 
+      // Strategy toggle (Phase 2.10) — switch v1 / v2-dry / v2-live from UI
+      // payload: {strategy: 'v1'|'v2', dry_run_v2: boolean}
+      const doStrategy = async (payload) => {
+        try {
+          const r = await apiJSON('/api/strategy', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+          });
+          const label = payload.strategy === 'v1' ? 'v1 LEGACY'
+                      : (payload.dry_run_v2 ? 'v2 DRY-RUN' : 'v2 LIVE');
+          showToast(`Strategy → ${label}`);
+          addLog('INFO', `strategy set → ${JSON.stringify(r)}`);
+          // Force a metrics refetch so the banner updates immediately
+          try {
+            const m = await apiJSON('/api/metrics');
+            if (m) setMetrics(m);
+          } catch(e) { /* silent */ }
+        } catch(e) {
+          showToast('Strategy switch failed — auth token set?');
+          addLog('ERR', `strategy switch failed: ${e.message || e}`);
+        }
+      };
+
       useEffect(() => { localStorage.setItem('se_tab', tab); }, [tab]);
       useEffect(() => { localStorage.setItem('se_mode', mode); }, [mode]);
 
@@ -3054,6 +3125,7 @@ function App() {
               metrics={metrics}
               onTrip={() => doKillswitch('trip')}
               onReset={() => doKillswitch('reset')}
+              onStrategyChange={doStrategy}
             />
           )}
 

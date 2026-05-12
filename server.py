@@ -487,6 +487,20 @@ def init_db():
             try: c.execute(f"ALTER TABLE swing_positions ADD COLUMN {col} {typ}")
             except Exception as e: log.warning(f"  swing migrate add {col}: {e}")
 
+    # ── engine_state (Phase 2.6) — runtime-mutable config from dashboard ──
+    # Key-value store for settings the user can toggle from the UI without
+    # touching Railway env vars (e.g., strategy, dry_run_v2). Persists across
+    # process restarts; survives until next Railway redeploy (filesystem
+    # ephemeral on free tier). On boot, server reads this table to override
+    # CONFIG defaults.
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS engine_state (
+            key TEXT PRIMARY KEY,
+            value TEXT,
+            updated_at TEXT
+        )
+    """)
+
     conn.commit(); conn.close()
     log.info("📊 Database ready")
 
@@ -500,6 +514,55 @@ def db_exec(q, p=(), fetch=False, fetchone=False):
     elif fetch: r = c.fetchall()
     conn.commit(); conn.close()
     return r
+
+
+# ─── engine_state helpers (Phase 2.6) ─────────────────────────────────
+
+def get_engine_state(key: str, default=None):
+    """Read a runtime-mutable setting from `engine_state` table.
+
+    Used to override CONFIG defaults at boot AND at request-time, so the user
+    can switch strategy from the dashboard without touching Railway env vars.
+    """
+    try:
+        row = db_exec("SELECT value FROM engine_state WHERE key=?", (key,), fetchone=True)
+        return row["value"] if row else default
+    except Exception:
+        return default
+
+
+def set_engine_state(key: str, value):
+    """Write a runtime setting. Persists across process restarts (Railway's
+    filesystem is ephemeral only across redeploys, not restarts)."""
+    db_exec(
+        "INSERT OR REPLACE INTO engine_state (key, value, updated_at) VALUES (?,?,?)",
+        (key, str(value), datetime.now(IST).strftime("%Y-%m-%d %H:%M:%S"))
+    )
+
+
+def hydrate_runtime_config():
+    """Apply persisted engine_state values over CONFIG defaults.
+
+    Called once at boot, AND again whenever the dashboard mutates state via
+    POST /api/strategy. Precedence:
+        engine_state DB  >  env var  >  hardcoded default
+
+    User-facing effect: toggle strategy from UI, hit Save, and the engine
+    loop's next scan picks up the new mode. No redeploy, no env vars.
+    """
+    for key in ("strategy", "dry_run_v2"):
+        v = get_engine_state(key)
+        if v is None: continue
+        if key == "dry_run_v2":
+            CONFIG[key] = (str(v).lower() == "true")
+        else:
+            CONFIG[key] = v
+    log.info(f"🛠️  Runtime config hydrated: strategy={CONFIG.get('strategy')} "
+             f"dry_run_v2={CONFIG.get('dry_run_v2')}")
+
+
+hydrate_runtime_config()
+
 
 def save_signal(instrument, signal, option, ai=None):
     """Store a signal. Returns the inserted row id so downstream code (in-flight
@@ -4533,6 +4596,70 @@ def api_killswitch():
         engine._killswitch_tripped = False
         return jsonify({"ok": True, "tripped": False})
     return jsonify({"error": "action must be 'trip' or 'reset'"}), 400
+
+
+@app.route("/api/strategy", methods=["GET"])
+def api_strategy_get():
+    """Read the current strategy + dry-run state.
+
+    Used by the dashboard's StrategyToggle to render the current selection
+    without polling /api/metrics (which is bigger).
+    """
+    return jsonify({
+        "strategy":   CONFIG.get("strategy", "v1"),
+        "dry_run_v2": bool(CONFIG.get("dry_run_v2", False)),
+        "available":  ["v1", "v2"],
+        "updated_at": get_engine_state("strategy_updated_at", default=None),
+    })
+
+
+@app.route("/api/strategy", methods=["POST"])
+@require_auth
+def api_strategy_set():
+    """Switch strategy + dry-run mode from the dashboard. Persists in SQLite
+    so the choice survives process restarts. Engine's next scan tick picks
+    up the new mode automatically — no redeploy, no env vars.
+
+    Body:
+        {"strategy": "v1" | "v2", "dry_run_v2": true | false}
+
+    Either field is optional; missing fields stay at current value.
+    """
+    d = flask_request.json or {}
+    new_strategy = d.get("strategy")
+    new_dry_run  = d.get("dry_run_v2")
+
+    if new_strategy is not None:
+        s = str(new_strategy).lower()
+        if s not in ("v1", "v2"):
+            return jsonify({"error": "strategy must be 'v1' or 'v2'"}), 400
+        CONFIG["strategy"] = s
+        set_engine_state("strategy", s)
+
+    if new_dry_run is not None:
+        b = bool(new_dry_run)
+        CONFIG["dry_run_v2"] = b
+        set_engine_state("dry_run_v2", "true" if b else "false")
+
+    set_engine_state("strategy_updated_at", datetime.now(IST).strftime("%Y-%m-%d %H:%M:%S"))
+
+    # Slack-notify the change so it's auditable
+    try:
+        SlackAlert.send(
+            f"⚙️ *Engine strategy changed*\n"
+            f"strategy = `{CONFIG.get('strategy','v1')}`  ·  "
+            f"dry_run_v2 = `{CONFIG.get('dry_run_v2', False)}`"
+        )
+    except Exception:
+        pass
+
+    log.info(f"⚙️  Strategy set via API: strategy={CONFIG.get('strategy')} "
+             f"dry_run_v2={CONFIG.get('dry_run_v2')}")
+    return jsonify({
+        "ok": True,
+        "strategy":   CONFIG.get("strategy", "v1"),
+        "dry_run_v2": bool(CONFIG.get("dry_run_v2", False)),
+    })
 
 
 # ── Swing engine singleton ──────────────────────────────────────────
