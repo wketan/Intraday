@@ -103,6 +103,17 @@ CONFIG = {
     # that the request silently runs uncached, no error. Set to "false" to disable.
     "anthropic_cache_enabled": os.environ.get("ANTHROPIC_CACHE_ENABLED", "true").lower() == "true",
 
+    # ── Strategy selector (Phase 2) ──────────────────────────────────────────
+    # "v1" = legacy 13-indicator heuristic scorer (default — proven, but unverified edge)
+    # "v2" = trend-momentum 3-of-4 confluence (research-backed, see PLAN_V2.md)
+    # Flip via env var on Railway — no code redeploy. Default v1 = zero risk to live.
+    "strategy":          os.environ.get("STRATEGY", "v1").lower(),
+    # When STRATEGY=v2 AND DRY_RUN_V2=true, signals fire to Slack (with [DRY RUN] tag)
+    # and log lines, but are NOT saved to the signals table and DO NOT trigger
+    # OptPicker / kill-switch / Layer B. Use to observe v2 signal quality live
+    # without risking capital or polluting trade history.
+    "dry_run_v2":        os.environ.get("DRY_RUN_V2", "false").lower() == "true",
+
     # ── Security ──
     # Shared secret required on write endpoints (X-Auth-Token header). If empty, writes are rejected.
     "auth_token":        os.environ.get("AUTH_TOKEN", ""),
@@ -1406,12 +1417,26 @@ class SignalGen:
     def analyze(self, df, weight_adj=None, blocked_windows=None):
         """Score candle data into a directional signal.
 
+        Routes to v2 strategy (signal_v2.SignalGenV2) when CONFIG['strategy']=='v2'.
+        Default v1 path stays unchanged — zero risk to live engine.
+
         weight_adj      — dict with -5..+5 deltas applied to the base contribution
                           for each indicator family. Keys: rsi, macd, supertrend,
                           vwap, ema, volume. Loaded from prior-day Claude EOD.
+                          (v1-only; v2 ignores it)
         blocked_windows — list of "HH:MM-HH:MM" strings. If current IST falls in
-                          any window, return None. Loaded from prior-day Claude EOD.
+                          any window, return None. (v1-only; v2 uses regime.py)
         """
+        # ── v2 dispatch (Phase 2) ─────────────────────────────────────────
+        strategy = CONFIG.get("strategy", "v1").lower()
+        if strategy == "v2":
+            try:
+                from signal_v2 import SignalGenV2
+                return SignalGenV2.analyze(df)
+            except Exception as e:
+                log.error(f"v2 strategy crashed — falling back to v1: {e}")
+                # fall through to v1 below
+
         if len(df)<30: return None
         # Time-window block (Layer C): "skip 11:30-12:30 today" type guidance
         if blocked_windows:
@@ -3083,6 +3108,25 @@ class Engine:
 
                     df=self.client.candles(inst["token"],inst["exchange"])
                     if df.empty or len(df)<30: continue
+
+                    # ── v2 regime gate (Phase 2): check VIX, day-of-week, expiry-window ──
+                    # Only active when STRATEGY=v2; v1 path keeps the legacy time gate inside analyze().
+                    strategy = CONFIG.get("strategy", "v1").lower()
+                    if strategy == "v2":
+                        try:
+                            from regime import RegimeFilter
+                            ok, reason = RegimeFilter.should_trade(
+                                angel_client=self.client, symbol=name)
+                            if not ok:
+                                # Don't even bother computing the signal — bail early.
+                                if name not in (self._prev or {}):
+                                    log.info(f"  {name} v2 regime BLOCK: {reason}")
+                                self.metrics.setdefault("regime_blocked", 0)
+                                self.metrics["regime_blocked"] += 1
+                                continue
+                        except Exception as e:
+                            log.warning(f"  regime filter crashed (failing open): {e}")
+
                     sig=self.sgen.analyze(df, weight_adj=self._weight_adj,
                                           blocked_windows=self._blocked_windows)
                     if not sig:
@@ -3099,6 +3143,39 @@ class Engine:
                                 except Exception: continue
                         continue
                     self.metrics["signals_generated"] += 1
+
+                    # ── DRY_RUN_V2 (Phase 2): observe v2 signals live without trading ──
+                    # When STRATEGY=v2 AND DRY_RUN_V2=true: fire to Slack + log only.
+                    # Skip OptPicker, kill-switch, Layer B, save_signal. Comes BEFORE all
+                    # those gates so dry-run signals are never blocked by them.
+                    if strategy == "v2" and CONFIG.get("dry_run_v2", False):
+                        log.info(f"📋 [DRY RUN v2] {name} {sig['direction']} "
+                                 f"conf={sig['confidence']}%  score={sig.get('v2_score','?')}/4  "
+                                 f"price={sig.get('price','?')}  rr={sig.get('risk_reward','?')}  "
+                                 f"reasons={'; '.join(sig.get('reasons',[])[:3])}")
+                        try:
+                            SlackAlert.send(
+                                f"📋 *[DRY RUN v2]* {name} {sig['direction']}\n"
+                                f"  Confidence: {sig['confidence']}%  ·  Score: {sig.get('v2_score','?')}/4\n"
+                                f"  Spot ₹{sig.get('price')}  ·  Entry ₹{sig.get('entry')}  ·  SL ₹{sig.get('sl')}  ·  T1 ₹{sig.get('target1')}\n"
+                                f"  R:R {sig.get('risk_reward')}\n"
+                                f"  Reasons: {'; '.join(sig.get('reasons',[])[:3])}\n"
+                                f"  _(observation only — no trade taken)_"
+                            )
+                        except Exception:
+                            pass
+                        # Update self.latest so dashboard sees v2 signals
+                        self.latest[name] = {
+                            "instrument": name, "lot_size": inst["lot_size"],
+                            "signal": sig, "option": None, "timing": None,
+                            "chain_analytics": {}, "dry_run": True,
+                            "updated_at": datetime.now(IST).strftime("%H:%M:%S"),
+                        }
+                        # Don't continue to OptPicker / save_signal / kill-switch.
+                        # Just track in metrics and move on.
+                        self.metrics.setdefault("dry_run_v2_fires", 0)
+                        self.metrics["dry_run_v2_fires"] += 1
+                        continue
 
                     # ════════════════════════════════════════════════════════
                     # STEP 1: Fetch option chain + analytics ALWAYS
@@ -4416,6 +4493,8 @@ def api_metrics():
             "weight_adjustments": engine._weight_adj,
             "blocked_windows":    engine._blocked_windows,
             "auto_close": f"{int(CONFIG.get('auto_close_hour',15)):02d}:{int(CONFIG.get('auto_close_minute',15)):02d}",
+            "strategy":   CONFIG.get("strategy", "v1"),
+            "dry_run_v2": bool(CONFIG.get("dry_run_v2", False)),
         },
         "metrics_today": engine.metrics,
         "perf_today":    perf,
