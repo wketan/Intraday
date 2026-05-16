@@ -157,62 +157,17 @@
     border-radius: 11px;
     background: linear-gradient(140deg, var(--accent), var(--accent-2));
     box-shadow:
-      0 4px 16px oklch(0.55 0.18 290 / 0.45),
-      inset 0 1px 0 oklch(1 0 0 / 0.20),
+      0 4px 14px oklch(0.55 0.18 290 / 0.40),
+      inset 0 1px 0 oklch(1 0 0 / 0.18),
       inset 0 -10px 18px oklch(0 0 0 / 0.20);
     overflow: hidden;
-    animation: bm-aura 3.4s ease-in-out infinite;
-  }
-  @keyframes bm-aura {
-    0%, 100% {
-      box-shadow:
-        0 4px 16px oklch(0.55 0.18 290 / 0.40),
-        inset 0 1px 0 oklch(1 0 0 / 0.20),
-        inset 0 -10px 18px oklch(0 0 0 / 0.20);
-    }
-    50% {
-      box-shadow:
-        0 6px 28px oklch(0.55 0.18 290 / 0.75),
-        0 0 0 0.5px oklch(1 0 0 / 0.15),
-        inset 0 1px 0 oklch(1 0 0 / 0.28),
-        inset 0 -10px 18px oklch(0 0 0 / 0.20);
-    }
   }
   .brand-mark .bm-svg { width: 100%; height: 100%; display: block; }
-
-  .brand-mark .bm-rings {
-    transform-origin: 16px 17px;
-    animation: bm-rings 4s ease-in-out infinite;
-  }
-  @keyframes bm-rings {
-    0%, 100% { opacity: 0.20; transform: scale(1); }
-    50%      { opacity: 0.40; transform: scale(1.06); }
-  }
-
-  .brand-mark .bm-bar {
-    transform-box: fill-box;
-    transform-origin: bottom;
-    filter: drop-shadow(0 0 1px oklch(1 0 0 / 0.55));
-    animation: bm-bar-pulse 2.8s ease-in-out infinite;
-  }
-  .brand-mark .bm-bar.b1 { fill: oklch(1 0 0 / 0.55); animation-delay: -0.0s; }
-  .brand-mark .bm-bar.b2 { fill: oklch(1 0 0 / 0.72); animation-delay: -0.4s; }
-  .brand-mark .bm-bar.b3 { fill: oklch(1 0 0 / 0.86); animation-delay: -0.8s; }
-  .brand-mark .bm-bar.b4 { fill: oklch(1 0 0 / 1.00); animation-delay: -1.2s; }
-  @keyframes bm-bar-pulse {
-    0%, 100% { transform: scaleY(1);    opacity: 1;    }
-    50%      { transform: scaleY(0.92); opacity: 0.90; }
-  }
-
-  .brand-mark .bm-curve,
-  .brand-mark .bm-arrow {
-    filter: drop-shadow(0 0 2px oklch(1 0 0 / 0.7));
-    animation: bm-arrow-glow 3s ease-in-out infinite;
-  }
-  @keyframes bm-arrow-glow {
-    0%, 100% { filter: drop-shadow(0 0 1.5px oklch(1 0 0 / 0.55)); }
-    50%      { filter: drop-shadow(0 0 4px   oklch(1 0 0 / 0.95)); }
-  }
+  .brand-mark .bm-rings { opacity: 0.22; }
+  .brand-mark .bm-bar.b1 { fill: oklch(1 0 0 / 0.55); }
+  .brand-mark .bm-bar.b2 { fill: oklch(1 0 0 / 0.72); }
+  .brand-mark .bm-bar.b3 { fill: oklch(1 0 0 / 0.86); }
+  .brand-mark .bm-bar.b4 { fill: oklch(1 0 0 / 1.00); }
   .brand-name {
     font-family: var(--font-sans);
     font-weight: 600; font-size: 15px;
@@ -1569,6 +1524,18 @@
   }
   .modal-actions .btn-primary,
   .modal-actions .btn-ghost { flex: 1; }
+
+  /* ─── live tick flash (real-time price ticker effect) ──────────────── */
+  @keyframes tick-up {
+    0%   { color: var(--win); text-shadow: 0 0 8px var(--win-glow); }
+    100% { text-shadow: none; }
+  }
+  @keyframes tick-down {
+    0%   { color: var(--loss); text-shadow: 0 0 8px var(--loss-glow); }
+    100% { text-shadow: none; }
+  }
+  .tick-up   { animation: tick-up   0.85s cubic-bezier(0.4, 0, 0.2, 1); }
+  .tick-down { animation: tick-down 0.85s cubic-bezier(0.4, 0, 0.2, 1); }
 
   /* ─── premium load animations ──────────────────────────────────────── */
   @keyframes fade-up {
