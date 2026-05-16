@@ -2212,6 +2212,18 @@
       const budget = 20000;
       const estLots = Math.max(1, Math.min(3, Math.floor((budget * 0.5) / (estEntry * lotSize))));
       const estCapital = estEntry * lotSize * estLots;
+
+      // Bridge diagnostic: show WHY the endpoint returned null so the user knows what to fix
+      const debug = bridge?.debug || {};
+      const reason = bridge?.reason || (err ? `fetch error: ${err}` : 'no data');
+      const debugRows = [
+        { lbl: 'Angel connected', ok: !!debug.angel_connected, val: debug.angel_connected ? '✓' : '✗' },
+        { lbl: 'Spot bars retrieved', ok: (debug.spot_bars_count || 0) > 0, val: `${debug.spot_bars_count ?? '?'}` },
+        { lbl: 'jugaad-data available', ok: !!debug.jugaad_present, val: debug.jugaad_present ? '✓' : '✗' },
+        { lbl: 'NSE day OHLC fetched', ok: !!debug.nse_day_fetched, val: debug.nse_day_fetched ? '✓' : '✗' },
+        { lbl: 'Option token in master', ok: !!debug.option_token_found, val: debug.option_token_found ? '✓ active' : '✗ expired' },
+      ];
+
       return (
         <div style={{marginBottom:14}}>
           <div style={{display:'flex', alignItems:'center', gap:8, marginBottom:10, flexWrap:'wrap'}}>
@@ -2223,7 +2235,7 @@
             </span>
             <span style={{fontSize:10, fontFamily:'var(--mono)', color:'var(--warn)',
               background:'var(--warn-dim)', padding:'3px 8px', borderRadius:3, fontWeight:600}}>
-              ⚠ EST (NSE bridge unavailable: {err || 'no data'})
+              ⚠ EST (bridge failed)
             </span>
           </div>
           <div style={{fontSize:9, color:'var(--ink-3)', textTransform:'uppercase',
@@ -2240,9 +2252,27 @@
               </div>
             ))}
           </div>
-          <div style={{fontSize:10, color:'var(--warn)', padding:'4px 0', lineHeight:1.5}}>
-            ⚠ Coarse linear estimate. Server's /api/replay-premium did not return data.
-            Verify the real LTP on your broker chart before any decision.
+
+          {/* Diagnostic box — surfaces the exact failure step so user knows what to fix */}
+          <div style={{background:'var(--warn-dim)', border:'1px solid var(--warn)',
+                       borderRadius:6, padding:'10px 12px', marginBottom:8}}>
+            <div style={{fontSize:10, color:'var(--warn)', fontWeight:700, marginBottom:6,
+                         textTransform:'uppercase', letterSpacing:'0.08em'}}>
+              ⚠ Why is the bridge unavailable?
+            </div>
+            <div style={{fontSize:11, color:'var(--ink-1)', marginBottom:8, lineHeight:1.4}}>{reason}</div>
+            <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:'3px 12px', fontSize:10, fontFamily:'var(--mono)'}}>
+              {debugRows.map(({lbl, ok, val}) => (
+                <div key={lbl} style={{display:'flex', justifyContent:'space-between'}}>
+                  <span style={{color:'var(--ink-2)'}}>{lbl}</span>
+                  <span style={{color: ok ? 'var(--long)' : 'var(--short)', fontWeight:600}}>{val}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div style={{fontSize:10, color:'var(--ink-3)', padding:'4px 0', lineHeight:1.5}}>
+            Coarse linear estimate shown above. Verify the real LTP on your broker chart before any decision.
           </div>
         </div>
       );

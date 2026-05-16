@@ -4748,27 +4748,123 @@ def api_replay_premium():
             expiry_d = d + timedelta(days=days_ahead)
             expiry_s = expiry_d.strftime("%Y-%m-%d")
 
-        import data_layer
-        result = data_layer.get_option_premium_at(
-            symbol, strike, opt_type, expiry_d, ts,
-            angel_client=engine.client if engine.client and engine.client.connected else None,
-        )
+        # ── Diagnostic trace — every step records its outcome so the dashboard
+        # can show EXACTLY which dependency failed (Angel auth? NSE block? etc) ──
+        debug = {
+            "expiry_used":          expiry_s,
+            "expiry_d_diff_days":   (expiry_d - ts.date()).days,
+            "angel_present":        bool(engine.client),
+            "angel_connected":      bool(engine.client and engine.client.connected),
+            "ensure_login_tried":   False,
+            "ensure_login_ok":      False,
+            "instrument_master":    bool(_master.loaded),
+            "option_token_found":   None,
+            "jugaad_present":       None,
+            "nse_day_fetched":      None,
+            "nse_day_settle":       None,
+            "spot_bars_count":      None,
+        }
+
+        # Force Angel login if not connected — the bridge needs it for spot + (sometimes) the option token
+        if engine.client and not engine.client.connected:
+            debug["ensure_login_tried"] = True
+            try:
+                debug["ensure_login_ok"] = bool(engine.client.ensure())
+            except Exception as _e:
+                debug["ensure_login_err"] = str(_e)[:200]
+
+        ac = engine.client if engine.client and engine.client.connected else None
+
+        # Check if the option token exists in current instrument master (will fail for expired contracts)
+        try:
+            if _master.loaded:
+                key = (symbol, float(strike), opt_type,
+                       expiry_d.strftime("%d%b%Y").upper())
+                debug["option_token_found"] = key in _master.nfo
+        except Exception:
+            pass
+
+        # Pre-check: does jugaad-data even load?
+        try:
+            import data_layer
+            debug["jugaad_present"] = bool(data_layer._HAS_JUGAAD)
+        except Exception as _e:
+            debug["data_layer_import_err"] = str(_e)[:200]
+
+        # Spot probe — independent of option-chain, validates Angel historical works for this date
+        try:
+            spot_probe = data_layer.get_spot_bars(
+                symbol, ts - timedelta(minutes=10), ts + timedelta(minutes=10),
+                "5min", angel_client=ac
+            )
+            debug["spot_bars_count"] = int(len(spot_probe))
+            if not spot_probe.empty and "close" in spot_probe.columns:
+                debug["spot_at_ts"] = float(spot_probe["close"].iloc[-1])
+        except Exception as _e:
+            debug["spot_probe_err"] = str(_e)[:200]
+
+        # NSE day probe — does jugaad-data return this contract's daily OHLC?
+        try:
+            nse_probe = data_layer.get_nse_contract_day(symbol, float(strike), opt_type,
+                                                        expiry_d, ts.date())
+            debug["nse_day_fetched"] = bool(nse_probe)
+            if nse_probe:
+                debug["nse_day_settle"] = nse_probe.get("settle")
+                debug["nse_day_high"]   = nse_probe.get("high")
+                debug["nse_day_low"]    = nse_probe.get("low")
+        except Exception as _e:
+            debug["nse_day_err"] = str(_e)[:200]
+
+        # Now the actual cascade
+        try:
+            result = data_layer.get_option_premium_at(
+                symbol, strike, opt_type, expiry_d, ts, angel_client=ac,
+            )
+        except Exception as _e:
+            log.warning(f"  /api/replay-premium cascade crash: {_e}")
+            return jsonify({"price": None, "source": "error",
+                            "error": str(_e), "debug": debug,
+                            "symbol": symbol, "strike": strike, "opt_type": opt_type,
+                            "expiry": expiry_s, "ts": ts_s_clean}), 200
+
         if result is None:
             return jsonify({
                 "price": None, "source": "missing",
+                "reason": _diagnose_missing(debug),
+                "debug": debug,
                 "symbol": symbol, "strike": strike, "opt_type": opt_type,
                 "expiry": expiry_s, "ts": ts_s_clean,
             })
         out = dict(result)
+        out["debug"] = debug
         out.update({
             "symbol": symbol, "strike": strike, "opt_type": opt_type,
             "expiry": expiry_s, "ts": ts_s_clean,
         })
         return jsonify(out)
     except Exception as e:
-        import traceback
-        log.warning(f"  /api/replay-premium error: {e}")
+        log.warning(f"  /api/replay-premium top-level error: {e}")
         return jsonify({"error": str(e), "price": None, "source": "error"}), 200
+
+
+def _diagnose_missing(debug: dict) -> str:
+    """Translate a debug snapshot into a human-readable failure reason so the
+    dashboard's user can act on it (e.g., 'log in to Angel' or 'NSE blocked')."""
+    if not debug.get("angel_connected"):
+        if debug.get("ensure_login_tried") and not debug.get("ensure_login_ok"):
+            return ("Angel One re-login failed during the request. "
+                    "Hit /api/login on the server, or set the ANGEL_* env vars on Railway and redeploy.")
+        return "Angel One client is not connected. The bridge needs Angel for spot data."
+    if debug.get("spot_bars_count") == 0:
+        return ("Angel returned no historical spot bars for this timestamp. "
+                "May be too far in the past (Angel keeps ~30 days of intraday).")
+    if not debug.get("jugaad_present"):
+        return ("jugaad-data not installed in the Railway image. "
+                "Add `jugaad-data>=0.30` to requirements.txt and redeploy.")
+    if debug.get("nse_day_fetched") is False:
+        return ("NSE blocked the bhavcopy request (common from cloud IPs). "
+                "Try locally; or wait for the Dhan account.")
+    return "Unknown — see debug field for details."
 
 
 @app.route("/api/v2-diag")
