@@ -1,0 +1,905 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>ProveWay · design preview</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    /* ── canvas ── */
+    --bg-base:    oklch(0.090 0.010 40);
+    --bg-surface: oklch(0.140 0.014 35 / 0.62);
+    --bg-elev:    oklch(0.180 0.015 35 / 0.78);
+    --bg-deep:    oklch(0.072 0.008 40);
+    /* ── ink ── */
+    --ink-0: oklch(0.985 0.006 60);
+    --ink-1: oklch(0.760 0.012 60);
+    --ink-2: oklch(0.560 0.012 60);
+    --ink-3: oklch(0.420 0.010 60);
+    /* ── lines ── */
+    --line-0: oklch(1 0 0 / 0.05);
+    --line-1: oklch(1 0 0 / 0.09);
+    --line-2: oklch(1 0 0 / 0.14);
+    /* ── semantics ── */
+    --win:        oklch(0.80 0.18 150);
+    --win-dim:    oklch(0.80 0.18 150 / 0.16);
+    --win-glow:   oklch(0.80 0.18 150 / 0.35);
+    --loss:       oklch(0.69 0.22 24);
+    --loss-dim:   oklch(0.69 0.22 24 / 0.16);
+    --loss-glow:  oklch(0.69 0.22 24 / 0.35);
+    --warn:       oklch(0.82 0.17 78);
+    --warn-dim:   oklch(0.82 0.17 78 / 0.16);
+    /* ── brand accent (aurora) ── */
+    --accent:     oklch(0.75 0.17 50);
+    --accent-2:   oklch(0.65 0.20 35);
+    --accent-dim: oklch(0.75 0.17 50 / 0.18);
+    /* ── shadows ── */
+    --shadow-card: 0 1px 0 oklch(1 0 0 / 0.04) inset,
+                   0 0 0 1px var(--line-1),
+                   0 8px 30px oklch(0 0 0 / 0.50);
+    --shadow-hi:   0 1px 0 oklch(1 0 0 / 0.06) inset,
+                   0 0 0 1px var(--line-2),
+                   0 14px 40px oklch(0 0 0 / 0.65);
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin:0; padding:0; }
+  body {
+    font-family: 'Inter', system-ui, sans-serif;
+    background: var(--bg-base);
+    color: var(--ink-0);
+    min-height: 100vh;
+    overflow-x: hidden;
+    letter-spacing: -0.005em;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* ── Aurora background ── */
+  .aurora {
+    position: fixed; inset: 0; z-index: 0; pointer-events: none;
+    background:
+      radial-gradient(900px 700px at 90% -10%, oklch(0.78 0.20 45 / 0.55), transparent 60%),
+      radial-gradient(600px 500px at 105% 35%, oklch(0.66 0.22 30 / 0.40), transparent 60%),
+      radial-gradient(800px 600px at -10% 100%, oklch(0.50 0.18 30 / 0.22), transparent 65%);
+    filter: saturate(1.05);
+  }
+  .grain {
+    position: fixed; inset: 0; z-index: 1; pointer-events: none; opacity: 0.04;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+  }
+
+  /* ── App shell ── */
+  .app {
+    position: relative; z-index: 2;
+    display: grid;
+    grid-template-columns: 240px 1fr;
+    gap: 0;
+    min-height: 100vh;
+  }
+
+  /* ── Sidebar ── */
+  .sidebar {
+    padding: 22px 18px 18px;
+    border-right: 1px solid var(--line-0);
+    background: linear-gradient(180deg, oklch(0.08 0.008 40 / 0.45), oklch(0.06 0.008 40 / 0.30));
+    backdrop-filter: blur(20px);
+    display: flex; flex-direction: column;
+  }
+  .brand {
+    display: flex; align-items: center; gap: 10px;
+    margin-bottom: 28px; padding: 4px 6px;
+  }
+  .brand-mark {
+    width: 28px; height: 28px;
+    background: conic-gradient(from 210deg, var(--accent), var(--accent-2), var(--accent));
+    border-radius: 8px;
+    box-shadow: 0 4px 16px oklch(0.70 0.20 45 / 0.50);
+    position: relative;
+  }
+  .brand-mark::after {
+    content:''; position:absolute; inset:6px;
+    background: var(--bg-deep); border-radius: 4px;
+  }
+  .brand-name {
+    font-family: 'Outfit', sans-serif; font-weight: 700; font-size: 17px;
+    letter-spacing: -0.02em;
+  }
+  .nav-section {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.10em;
+    color: var(--ink-3); padding: 14px 8px 8px; font-weight: 600;
+  }
+  .nav-item {
+    display: flex; align-items: center; gap: 11px;
+    padding: 9px 10px; border-radius: 8px; cursor: pointer;
+    color: var(--ink-1); font-size: 13.5px; font-weight: 500;
+    margin-bottom: 1px;
+    transition: all 0.15s;
+  }
+  .nav-item:hover { background: var(--line-0); color: var(--ink-0); }
+  .nav-item.on {
+    background: linear-gradient(95deg, var(--accent-dim), transparent);
+    color: var(--ink-0);
+    box-shadow: inset 2px 0 0 var(--accent);
+  }
+  .nav-item .ico {
+    width: 16px; height: 16px;
+    display: flex; align-items: center; justify-content: center;
+    opacity: 0.85;
+  }
+  .nav-item .badge {
+    margin-left: auto; font-family: 'JetBrains Mono', monospace; font-size: 10px;
+    background: var(--line-1); color: var(--ink-2);
+    padding: 2px 6px; border-radius: 999px;
+  }
+  .help-widget {
+    margin-top: auto;
+    background: linear-gradient(140deg, oklch(0.70 0.18 45 / 0.18), oklch(0.50 0.20 30 / 0.10));
+    border: 1px solid oklch(0.70 0.18 45 / 0.22);
+    border-radius: 14px;
+    padding: 14px;
+    text-align: center;
+    position: relative;
+  }
+  .help-widget .help-icon {
+    width: 36px; height: 36px; margin: -28px auto 8px;
+    background: var(--bg-deep);
+    border: 1px solid oklch(0.70 0.18 45 / 0.40);
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    color: var(--accent); font-size: 16px;
+  }
+  .help-widget h4 {
+    margin: 0 0 4px;
+    font-family: 'Outfit', sans-serif; font-weight: 600; font-size: 14px;
+  }
+  .help-widget p { margin: 0 0 10px; font-size: 11px; color: var(--ink-2); line-height: 1.45; }
+  .help-widget button {
+    background: linear-gradient(95deg, var(--accent), var(--accent-2));
+    color: oklch(0.15 0.02 35);
+    border: 0; border-radius: 8px;
+    padding: 7px 14px; font-family: 'Inter', sans-serif;
+    font-weight: 600; font-size: 11.5px; cursor: pointer;
+    box-shadow: 0 4px 14px oklch(0.65 0.20 35 / 0.40);
+  }
+
+  /* ── Main column ── */
+  .main {
+    padding: 22px 26px 40px;
+    overflow-x: hidden;
+  }
+
+  /* ── Top bar ── */
+  .topbar {
+    display: flex; align-items: center; gap: 14px;
+    margin-bottom: 22px;
+  }
+  .search {
+    flex: 1; max-width: 460px;
+    display: flex; align-items: center; gap: 10px;
+    background: var(--bg-surface);
+    border: 1px solid var(--line-1);
+    backdrop-filter: blur(20px);
+    border-radius: 12px;
+    padding: 10px 14px;
+    color: var(--ink-2);
+    font-size: 13px;
+  }
+  .search input {
+    background: transparent; border: 0; color: var(--ink-0);
+    font-family: inherit; font-size: 13px; outline: none; width: 100%;
+  }
+  .search input::placeholder { color: var(--ink-3); }
+  .topbar-spacer { flex: 1; }
+  .iconbtn {
+    width: 38px; height: 38px;
+    background: var(--bg-surface);
+    border: 1px solid var(--line-1);
+    backdrop-filter: blur(20px);
+    border-radius: 10px;
+    color: var(--ink-1); cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 14px;
+    transition: all 0.15s;
+  }
+  .iconbtn:hover { color: var(--ink-0); border-color: var(--line-2); }
+  .iconbtn.dot::after {
+    content: ''; position: absolute;
+    width: 7px; height: 7px; border-radius: 50%;
+    background: var(--accent);
+    box-shadow: 0 0 8px var(--accent);
+    margin-top: -16px; margin-left: 10px;
+  }
+  .userchip {
+    display: flex; align-items: center; gap: 10px;
+    padding: 6px 14px 6px 6px;
+    background: var(--bg-surface);
+    border: 1px solid var(--line-1);
+    backdrop-filter: blur(20px);
+    border-radius: 999px;
+    cursor: pointer;
+  }
+  .userchip .avatar {
+    width: 28px; height: 28px; border-radius: 50%;
+    background: conic-gradient(from 0deg, var(--win), var(--accent), var(--loss), var(--accent), var(--win));
+    box-shadow: 0 0 0 2px var(--bg-base);
+  }
+  .userchip .name { font-size: 12.5px; font-weight: 600; }
+  .userchip .role { font-size: 10px; color: var(--ink-2); margin-top: 1px; }
+
+  /* ── Card primitive ── */
+  .card {
+    background: var(--bg-surface);
+    border: 1px solid var(--line-1);
+    backdrop-filter: blur(28px);
+    -webkit-backdrop-filter: blur(28px);
+    border-radius: 16px;
+    box-shadow: var(--shadow-card);
+    position: relative;
+    overflow: hidden;
+  }
+  .card-hi { box-shadow: var(--shadow-hi); }
+  .card-pad { padding: 20px 22px; }
+  .card-head {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 14px;
+  }
+  .card-title {
+    font-family: 'Outfit', sans-serif; font-weight: 600; font-size: 14px;
+    letter-spacing: -0.005em;
+  }
+  .card-sub {
+    font-size: 11px; color: var(--ink-3);
+    font-family: 'JetBrains Mono', monospace; letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+
+  /* ── Hero row ── */
+  .hero-row {
+    display: grid;
+    grid-template-columns: 1.4fr 1.6fr 0.9fr;
+    gap: 14px;
+    margin-bottom: 14px;
+  }
+  .hero-stat {
+    padding: 22px 24px;
+  }
+  .hero-eyebrow {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.12em;
+    color: var(--ink-3); margin-bottom: 8px;
+  }
+  .hero-big {
+    font-family: 'Outfit', sans-serif;
+    font-weight: 600; font-size: 44px; line-height: 1; letter-spacing: -0.025em;
+    margin-bottom: 8px;
+  }
+  .hero-big.win { color: var(--win); text-shadow: 0 0 24px var(--win-glow); }
+  .hero-big.loss { color: var(--loss); text-shadow: 0 0 24px var(--loss-glow); }
+  .hero-foot {
+    display: flex; align-items: center; gap: 8px;
+    font-size: 12px; color: var(--ink-2);
+  }
+  .pct-pill {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 3px 9px; border-radius: 999px;
+    font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 600;
+  }
+  .pct-pill.win { background: var(--win-dim); color: var(--win); }
+  .pct-pill.loss { background: var(--loss-dim); color: var(--loss); }
+
+  /* ── Win-rate gauge ── */
+  .gauge-wrap {
+    display: flex; align-items: center; gap: 22px;
+    padding: 18px 22px;
+  }
+  .gauge-svg {
+    width: 175px; height: 175px;
+    filter: drop-shadow(0 0 24px var(--win-glow));
+  }
+  .gauge-track { fill: none; stroke: var(--line-1); stroke-width: 16; }
+  .gauge-progress {
+    fill: none; stroke-width: 16; stroke-linecap: round;
+    transform: rotate(-90deg); transform-origin: center;
+  }
+  .gauge-center {
+    font-family: 'Outfit', sans-serif; font-weight: 700;
+    font-size: 32px; fill: var(--ink-0); text-anchor: middle;
+    letter-spacing: -0.02em;
+  }
+  .gauge-label {
+    font-family: 'JetBrains Mono', monospace; font-size: 9.5px;
+    fill: var(--ink-3); text-anchor: middle; text-transform: uppercase; letter-spacing: 0.10em;
+  }
+  .gauge-stats { flex: 1; }
+  .gauge-stat-row {
+    display: flex; justify-content: space-between; align-items: baseline;
+    padding: 7px 0; border-bottom: 1px dashed var(--line-0);
+  }
+  .gauge-stat-row:last-child { border-bottom: 0; }
+  .gauge-stat-label { font-size: 11px; color: var(--ink-2); }
+  .gauge-stat-val { font-family: 'JetBrains Mono', monospace; font-size: 13.5px; font-weight: 600; }
+
+  /* ── Streak card ── */
+  .streak-card {
+    padding: 22px;
+    display: flex; flex-direction: column; gap: 12px;
+    background:
+      linear-gradient(140deg, oklch(0.80 0.18 150 / 0.18), oklch(0.80 0.18 150 / 0.04)),
+      var(--bg-surface);
+  }
+  .streak-num {
+    font-family: 'Outfit', sans-serif; font-weight: 600;
+    font-size: 56px; line-height: 0.9; color: var(--win);
+    letter-spacing: -0.03em;
+    text-shadow: 0 0 30px var(--win-glow);
+  }
+  .streak-dots {
+    display: flex; gap: 5px; margin-top: 4px;
+  }
+  .streak-dot {
+    width: 18px; height: 5px; border-radius: 999px;
+    background: var(--line-1);
+  }
+  .streak-dot.win { background: var(--win); box-shadow: 0 0 8px var(--win-glow); }
+  .streak-dot.loss { background: var(--loss); }
+
+  /* ── Index pills row ── */
+  .pill-row {
+    display: grid; grid-template-columns: repeat(3, 1fr);
+    gap: 12px; margin-bottom: 14px;
+  }
+  .pill {
+    padding: 16px 18px;
+    display: flex; align-items: center; gap: 16px;
+  }
+  .pill-name {
+    font-family: 'Outfit', sans-serif; font-weight: 600; font-size: 13px;
+    color: var(--ink-1); letter-spacing: 0;
+  }
+  .pill-price {
+    font-family: 'JetBrains Mono', monospace; font-weight: 600;
+    font-size: 19px; color: var(--ink-0); margin-top: 2px;
+    letter-spacing: -0.02em;
+  }
+  .pill-spark {
+    margin-left: auto; width: 90px; height: 36px; flex-shrink: 0;
+  }
+  .pill-pill {
+    margin-top: 6px;
+  }
+
+  /* ── Two-column body ── */
+  .body-grid {
+    display: grid; grid-template-columns: 1.55fr 1fr; gap: 14px;
+  }
+  .body-grid > .stack { display: flex; flex-direction: column; gap: 14px; }
+
+  /* ── Signals feed ── */
+  .feed { padding: 20px 22px; }
+  .feed-tabs {
+    display: flex; gap: 6px;
+    background: var(--bg-deep);
+    padding: 4px; border-radius: 999px;
+    border: 1px solid var(--line-1);
+  }
+  .feed-tab {
+    font-size: 11.5px; padding: 6px 14px;
+    border-radius: 999px; color: var(--ink-2);
+    cursor: pointer; font-weight: 500;
+    transition: all 0.15s;
+  }
+  .feed-tab.on {
+    background: linear-gradient(95deg, var(--accent), var(--accent-2));
+    color: oklch(0.15 0.02 35); font-weight: 600;
+    box-shadow: 0 4px 14px oklch(0.65 0.20 35 / 0.40);
+  }
+  .signal-list {
+    display: flex; flex-direction: column;
+    gap: 8px; margin-top: 14px;
+  }
+  .signal-row {
+    display: grid;
+    grid-template-columns: 4px auto 1fr auto auto;
+    gap: 14px; align-items: center;
+    padding: 14px 16px 14px 12px;
+    background: var(--bg-elev);
+    border: 1px solid var(--line-0);
+    border-radius: 12px;
+    transition: all 0.15s;
+    cursor: pointer;
+  }
+  .signal-row:hover {
+    border-color: var(--line-1);
+    transform: translateY(-1px);
+    box-shadow: 0 6px 20px oklch(0 0 0 / 0.30);
+  }
+  .signal-bar {
+    width: 4px; align-self: stretch; border-radius: 4px;
+  }
+  .signal-bar.win  { background: var(--win); box-shadow: 0 0 10px var(--win-glow); }
+  .signal-bar.loss { background: var(--loss); box-shadow: 0 0 10px var(--loss-glow); }
+  .signal-bar.warn { background: var(--warn); }
+  .signal-icon {
+    width: 38px; height: 38px;
+    border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    font-family: 'Outfit', sans-serif; font-weight: 700; font-size: 13px;
+    color: var(--ink-0);
+  }
+  .signal-icon.long  { background: linear-gradient(140deg, oklch(0.80 0.18 150 / 0.30), oklch(0.50 0.20 150 / 0.18)); color: var(--win); border: 1px solid var(--win-dim); }
+  .signal-icon.short { background: linear-gradient(140deg, oklch(0.69 0.22 24 / 0.30), oklch(0.50 0.22 24 / 0.18));  color: var(--loss); border: 1px solid var(--loss-dim); }
+  .signal-meta { min-width: 0; }
+  .signal-title {
+    font-family: 'Outfit', sans-serif; font-weight: 600; font-size: 14px;
+    color: var(--ink-0); margin-bottom: 2px;
+  }
+  .signal-sub {
+    font-family: 'JetBrains Mono', monospace; font-size: 11px;
+    color: var(--ink-2);
+  }
+  .signal-chip {
+    display: inline-flex; align-items: center; gap: 5px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10.5px; font-weight: 600;
+    padding: 4px 10px; border-radius: 999px; letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+  .signal-chip.win  { background: var(--win-dim); color: var(--win); }
+  .signal-chip.loss { background: var(--loss-dim); color: var(--loss); }
+  .signal-chip.warn { background: var(--warn-dim); color: var(--warn); }
+  .signal-pnl {
+    font-family: 'Outfit', sans-serif; font-weight: 700;
+    font-size: 17px; letter-spacing: -0.02em;
+    text-align: right;
+    min-width: 96px;
+  }
+  .signal-pnl.win  { color: var(--win); }
+  .signal-pnl.loss { color: var(--loss); }
+  .signal-pnl.warn { color: var(--warn); }
+  .signal-pnl .lots { font-size: 9.5px; color: var(--ink-3); font-family: 'JetBrains Mono', monospace; font-weight: 500; display: block; margin-top: 2px; }
+
+  /* ── Equity curve ── */
+  .equity { padding: 18px 22px; }
+  .equity-svg { width: 100%; height: 180px; display: block; }
+
+  /* ── Top setups ── */
+  .setups { padding: 18px 20px; }
+  .setup-row {
+    display: grid; grid-template-columns: auto 1fr auto;
+    gap: 12px; align-items: center;
+    padding: 11px 4px;
+    border-bottom: 1px dashed var(--line-0);
+  }
+  .setup-row:last-child { border-bottom: 0; }
+  .setup-icon {
+    width: 30px; height: 30px; border-radius: 9px;
+    background: linear-gradient(140deg, var(--accent-dim), transparent);
+    border: 1px solid var(--line-1);
+    display: flex; align-items: center; justify-content: center;
+    color: var(--accent); font-weight: 700; font-size: 12px;
+    font-family: 'Outfit', sans-serif;
+  }
+  .setup-name { font-family: 'Outfit', sans-serif; font-weight: 600; font-size: 13px; }
+  .setup-sub { font-size: 11px; color: var(--ink-3); font-family: 'JetBrains Mono', monospace; margin-top: 1px; }
+  .setup-pnl {
+    font-family: 'JetBrains Mono', monospace; font-weight: 600; font-size: 13px;
+    text-align: right;
+  }
+  .setup-pnl.win  { color: var(--win); }
+  .setup-pnl.loss { color: var(--loss); }
+
+  /* ── Footer credit ── */
+  .creditline {
+    margin-top: 28px; text-align: center;
+    color: var(--ink-3); font-size: 11px;
+    font-family: 'JetBrains Mono', monospace; letter-spacing: 0.04em;
+  }
+
+  /* ── Subtle animations ── */
+  @keyframes pulse-glow {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.65; }
+  }
+  .pulse { animation: pulse-glow 2.2s ease-in-out infinite; }
+
+  @keyframes shimmer {
+    0% { background-position: -120% 0; }
+    100% { background-position: 220% 0; }
+  }
+
+  /* ── Preview banner ── */
+  .preview-banner {
+    position: fixed; top: 14px; left: 50%;
+    transform: translateX(-50%);
+    background: linear-gradient(95deg, oklch(0.85 0.18 80), oklch(0.78 0.20 60));
+    color: oklch(0.18 0.04 60);
+    padding: 6px 16px; border-radius: 999px;
+    font-family: 'JetBrains Mono', monospace; font-size: 10.5px;
+    font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase;
+    z-index: 100;
+    box-shadow: 0 6px 24px oklch(0.70 0.20 60 / 0.40);
+  }
+</style>
+</head>
+<body>
+
+<div class="preview-banner">◐ design preview · mock data only</div>
+
+<div class="aurora"></div>
+<div class="grain"></div>
+
+<div class="app">
+
+  <!-- ─── SIDEBAR ─── -->
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="brand-mark"></div>
+      <div class="brand-name">ProveWay</div>
+    </div>
+
+    <div class="nav-section">Trading</div>
+    <div class="nav-item on">
+      <span class="ico">●</span> Live engine
+      <span class="badge">on</span>
+    </div>
+    <div class="nav-item">
+      <span class="ico">◧</span> Backtest
+    </div>
+    <div class="nav-item">
+      <span class="ico">≡</span> Journal
+      <span class="badge">17</span>
+    </div>
+    <div class="nav-item">
+      <span class="ico">∑</span> Stats
+    </div>
+
+    <div class="nav-section">Tools</div>
+    <div class="nav-item">
+      <span class="ico">⌗</span> Calculator
+    </div>
+    <div class="nav-item">
+      <span class="ico">⊟</span> Audit logs
+    </div>
+    <div class="nav-item">
+      <span class="ico">⚙</span> Settings
+    </div>
+
+    <div class="help-widget">
+      <div class="help-icon">?</div>
+      <h4>Need help?</h4>
+      <p>Check the strategy docs or open a ticket. We'll respond within an hour.</p>
+      <button type="button">Contact us</button>
+    </div>
+  </aside>
+
+  <!-- ─── MAIN ─── -->
+  <main class="main">
+
+    <!-- top bar -->
+    <div class="topbar">
+      <div class="search">
+        <span>⌕</span>
+        <input placeholder="Search by date, strike, or instrument…"/>
+      </div>
+      <div class="topbar-spacer"></div>
+      <div class="iconbtn" title="theme">◐</div>
+      <div class="iconbtn dot" title="alerts">🔔</div>
+      <div class="userchip">
+        <div class="avatar"></div>
+        <div>
+          <div class="name">Ketan W.</div>
+          <div class="role">₹50,000 capital</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ─── HERO ROW ─── -->
+    <div class="hero-row">
+      <!-- Today's P&L -->
+      <div class="card card-hi hero-stat">
+        <div class="hero-eyebrow">Today's P&amp;L</div>
+        <div class="hero-big win">+₹4,250</div>
+        <div class="hero-foot">
+          <span class="pct-pill win">▲ +8.5%</span>
+          <span>of ₹50,000 capital</span>
+        </div>
+      </div>
+      <!-- Win-rate gauge -->
+      <div class="card gauge-wrap">
+        <svg class="gauge-svg" viewBox="0 0 100 100">
+          <defs>
+            <linearGradient id="g-win" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stop-color="oklch(0.80 0.18 150)"/>
+              <stop offset="100%" stop-color="oklch(0.68 0.22 110)"/>
+            </linearGradient>
+          </defs>
+          <circle cx="50" cy="50" r="40" class="gauge-track"/>
+          <circle cx="50" cy="50" r="40" class="gauge-progress"
+                  stroke="url(#g-win)"
+                  stroke-dasharray="251.3"
+                  stroke-dashoffset="45"/>
+          <text x="50" y="48" class="gauge-center">82%</text>
+          <text x="50" y="64" class="gauge-label">win rate</text>
+        </svg>
+        <div class="gauge-stats">
+          <div class="gauge-stat-row">
+            <span class="gauge-stat-label">Wins</span>
+            <span class="gauge-stat-val" style="color: var(--win)">14</span>
+          </div>
+          <div class="gauge-stat-row">
+            <span class="gauge-stat-label">Losses</span>
+            <span class="gauge-stat-val" style="color: var(--loss)">2</span>
+          </div>
+          <div class="gauge-stat-row">
+            <span class="gauge-stat-label">Whipsaws</span>
+            <span class="gauge-stat-val" style="color: var(--warn)">1</span>
+          </div>
+          <div class="gauge-stat-row">
+            <span class="gauge-stat-label">Avg R:R</span>
+            <span class="gauge-stat-val">1 : 1.8</span>
+          </div>
+        </div>
+      </div>
+      <!-- Streak -->
+      <div class="card streak-card">
+        <div class="hero-eyebrow">Current streak</div>
+        <div class="streak-num">4<span style="font-size: 22px; opacity: 0.6; margin-left: 2px;">w</span></div>
+        <div class="streak-dots">
+          <div class="streak-dot loss"></div>
+          <div class="streak-dot win"></div>
+          <div class="streak-dot win"></div>
+          <div class="streak-dot win"></div>
+          <div class="streak-dot win"></div>
+        </div>
+        <div style="font-size: 11px; color: var(--ink-2); margin-top: 4px;">Best: 7 · session high</div>
+      </div>
+    </div>
+
+    <!-- ─── INDEX PILLS ─── -->
+    <div class="pill-row">
+      <div class="card pill">
+        <div>
+          <div class="pill-name">NIFTY 50</div>
+          <div class="pill-price">23,855.20</div>
+          <div class="pill-pill"><span class="pct-pill win">▲ +0.42%</span></div>
+        </div>
+        <svg class="pill-spark" viewBox="0 0 90 36" preserveAspectRatio="none">
+          <polyline points="0,28 12,22 24,24 36,18 48,14 60,16 72,8 90,4"
+                    fill="none" stroke="oklch(0.80 0.18 150)" stroke-width="1.8"/>
+          <polyline points="0,28 12,22 24,24 36,18 48,14 60,16 72,8 90,4 90,36 0,36"
+                    fill="oklch(0.80 0.18 150 / 0.12)" stroke="none"/>
+        </svg>
+      </div>
+      <div class="card pill">
+        <div>
+          <div class="pill-name">BANK NIFTY</div>
+          <div class="pill-price">51,012.80</div>
+          <div class="pill-pill"><span class="pct-pill loss">▼ −0.18%</span></div>
+        </div>
+        <svg class="pill-spark" viewBox="0 0 90 36" preserveAspectRatio="none">
+          <polyline points="0,10 12,12 24,8 36,16 48,18 60,22 72,20 90,28"
+                    fill="none" stroke="oklch(0.69 0.22 24)" stroke-width="1.8"/>
+          <polyline points="0,10 12,12 24,8 36,16 48,18 60,22 72,20 90,28 90,36 0,36"
+                    fill="oklch(0.69 0.22 24 / 0.12)" stroke="none"/>
+        </svg>
+      </div>
+      <div class="card pill">
+        <div>
+          <div class="pill-name">FIN NIFTY</div>
+          <div class="pill-price">24,180.35</div>
+          <div class="pill-pill"><span class="pct-pill win">▲ +0.11%</span></div>
+        </div>
+        <svg class="pill-spark" viewBox="0 0 90 36" preserveAspectRatio="none">
+          <polyline points="0,22 12,18 24,20 36,18 48,16 60,18 72,14 90,12"
+                    fill="none" stroke="oklch(0.80 0.18 150)" stroke-width="1.8"/>
+          <polyline points="0,22 12,18 24,20 36,18 48,16 60,18 72,14 90,12 90,36 0,36"
+                    fill="oklch(0.80 0.18 150 / 0.12)" stroke="none"/>
+        </svg>
+      </div>
+    </div>
+
+    <!-- ─── BODY GRID ─── -->
+    <div class="body-grid">
+
+      <!-- Signals feed -->
+      <section class="card feed">
+        <div class="card-head">
+          <div>
+            <div class="card-title">Signals feed</div>
+            <div class="card-sub" style="margin-top: 3px;">Live + recent · click any row</div>
+          </div>
+          <div class="feed-tabs">
+            <div class="feed-tab on">All</div>
+            <div class="feed-tab">Wins</div>
+            <div class="feed-tab">Losses</div>
+            <div class="feed-tab">Open</div>
+          </div>
+        </div>
+
+        <div class="signal-list">
+
+          <!-- WIN -->
+          <div class="signal-row">
+            <div class="signal-bar win"></div>
+            <div class="signal-icon short">PE</div>
+            <div class="signal-meta">
+              <div class="signal-title">NIFTY 23,900 PE · short</div>
+              <div class="signal-sub">11th May 2026 · Mon · 02:50 pm · 1L × 75</div>
+            </div>
+            <div><span class="signal-chip win">✓ Target 1 hit</span></div>
+            <div class="signal-pnl win">+₹2,325 <span class="lots">+50% on entry ₹235</span></div>
+          </div>
+
+          <!-- LOSS -->
+          <div class="signal-row">
+            <div class="signal-bar loss"></div>
+            <div class="signal-icon long">CE</div>
+            <div class="signal-meta">
+              <div class="signal-title">BANKNIFTY 51,000 CE · long</div>
+              <div class="signal-sub">11th May 2026 · Mon · 11:20 am · 1L × 30</div>
+            </div>
+            <div><span class="signal-chip loss">✗ SL hit</span></div>
+            <div class="signal-pnl loss">−₹1,500 <span class="lots">−35% on entry ₹142</span></div>
+          </div>
+
+          <!-- WIN -->
+          <div class="signal-row">
+            <div class="signal-bar win"></div>
+            <div class="signal-icon long">CE</div>
+            <div class="signal-meta">
+              <div class="signal-title">FINNIFTY 24,200 CE · long</div>
+              <div class="signal-sub">10th May 2026 · Sun · 01:45 pm · 1L × 65</div>
+            </div>
+            <div><span class="signal-chip win">✓ Closed in profit</span></div>
+            <div class="signal-pnl win">+₹890 <span class="lots">+12% on entry ₹108</span></div>
+          </div>
+
+          <!-- WHIPSAW -->
+          <div class="signal-row">
+            <div class="signal-bar warn"></div>
+            <div class="signal-icon long">CE</div>
+            <div class="signal-meta">
+              <div class="signal-title">NIFTY 23,800 CE · long</div>
+              <div class="signal-sub">10th May 2026 · Sun · 10:15 am · 1L × 75</div>
+            </div>
+            <div><span class="signal-chip warn">⚠ Whipsaw</span></div>
+            <div class="signal-pnl warn">±₹0 <span class="lots">SL + T1 both touched</span></div>
+          </div>
+
+          <!-- WIN big -->
+          <div class="signal-row">
+            <div class="signal-bar win"></div>
+            <div class="signal-icon long">CE</div>
+            <div class="signal-meta">
+              <div class="signal-title">NIFTY 23,700 CE · long</div>
+              <div class="signal-sub">9th May 2026 · Sat · 02:00 pm · 2L × 75</div>
+            </div>
+            <div><span class="signal-chip win">🎯 Target 2 hit</span></div>
+            <div class="signal-pnl win">+₹3,750 <span class="lots">+100% on entry ₹125</span></div>
+          </div>
+
+          <!-- LOSS -->
+          <div class="signal-row">
+            <div class="signal-bar loss"></div>
+            <div class="signal-icon short">PE</div>
+            <div class="signal-meta">
+              <div class="signal-title">BANKNIFTY 51,200 PE · short</div>
+              <div class="signal-sub">9th May 2026 · Sat · 11:50 am · 1L × 30</div>
+            </div>
+            <div><span class="signal-chip loss">✗ SL hit</span></div>
+            <div class="signal-pnl loss">−₹980 <span class="lots">−35% on entry ₹93</span></div>
+          </div>
+
+        </div>
+      </section>
+
+      <!-- Right rail -->
+      <div class="stack">
+
+        <!-- Equity curve -->
+        <section class="card equity">
+          <div class="card-head">
+            <div>
+              <div class="card-title">Equity curve</div>
+              <div class="card-sub" style="margin-top: 3px;">Last 7 sessions · ₹50K capital</div>
+            </div>
+            <span class="pct-pill win">▲ +8.5%</span>
+          </div>
+          <svg class="equity-svg" viewBox="0 0 400 160" preserveAspectRatio="none">
+            <defs>
+              <linearGradient id="eq-fill" x1="0%" y1="0%" x2="0%" y2="100%">
+                <stop offset="0%" stop-color="oklch(0.80 0.18 150 / 0.32)"/>
+                <stop offset="100%" stop-color="oklch(0.80 0.18 150 / 0.00)"/>
+              </linearGradient>
+              <linearGradient id="eq-line" x1="0%" y1="0%" x2="100%" y2="0%">
+                <stop offset="0%" stop-color="oklch(0.75 0.17 50)"/>
+                <stop offset="50%" stop-color="oklch(0.80 0.18 150)"/>
+                <stop offset="100%" stop-color="oklch(0.80 0.18 150)"/>
+              </linearGradient>
+            </defs>
+            <!-- gridlines -->
+            <g stroke="oklch(1 0 0 / 0.05)" stroke-width="1">
+              <line x1="0" y1="40" x2="400" y2="40"/>
+              <line x1="0" y1="80" x2="400" y2="80"/>
+              <line x1="0" y1="120" x2="400" y2="120"/>
+            </g>
+            <!-- equity area -->
+            <polyline
+              points="0,100 50,92 100,108 150,80 200,72 250,84 300,52 350,42 400,30"
+              fill="none" stroke="url(#eq-line)" stroke-width="2.5" stroke-linejoin="round"/>
+            <polyline
+              points="0,100 50,92 100,108 150,80 200,72 250,84 300,52 350,42 400,30 400,160 0,160"
+              fill="url(#eq-fill)" stroke="none"/>
+            <!-- dots -->
+            <g fill="oklch(0.80 0.18 150)" stroke="var(--bg-base)" stroke-width="2">
+              <circle cx="0" cy="100" r="3.5"/>
+              <circle cx="100" cy="108" r="3.5"/>
+              <circle cx="200" cy="72" r="3.5"/>
+              <circle cx="300" cy="52" r="3.5"/>
+              <circle cx="400" cy="30" r="4.5"/>
+            </g>
+          </svg>
+          <div style="display: flex; justify-content: space-between; margin-top: 6px; font-family: 'JetBrains Mono', monospace; font-size: 9.5px; color: var(--ink-3);">
+            <span>05 May</span><span>07 May</span><span>09 May</span><span>11 May</span>
+          </div>
+        </section>
+
+        <!-- Top setups -->
+        <section class="card setups">
+          <div class="card-head">
+            <div>
+              <div class="card-title">Top setups</div>
+              <div class="card-sub" style="margin-top: 3px;">By net P&amp;L this week</div>
+            </div>
+          </div>
+          <div class="setup-row">
+            <div class="setup-icon">3·4</div>
+            <div>
+              <div class="setup-name">3-of-4 trend (morning)</div>
+              <div class="setup-sub">8 trades · 75% win · avg +₹1.5K</div>
+            </div>
+            <div class="setup-pnl win">+₹12,400</div>
+          </div>
+          <div class="setup-row">
+            <div class="setup-icon">VW</div>
+            <div>
+              <div class="setup-name">VWAP reclaim</div>
+              <div class="setup-sub">5 trades · 60% win · avg +₹640</div>
+            </div>
+            <div class="setup-pnl win">+₹3,200</div>
+          </div>
+          <div class="setup-row">
+            <div class="setup-icon">PD</div>
+            <div>
+              <div class="setup-name">PDH / PDL break</div>
+              <div class="setup-sub">4 trades · 50% win · avg −₹170</div>
+            </div>
+            <div class="setup-pnl loss">−₹680</div>
+          </div>
+          <div class="setup-row">
+            <div class="setup-icon">OR</div>
+            <div>
+              <div class="setup-name">Opening range</div>
+              <div class="setup-sub">3 trades · 67% win · avg +₹420</div>
+            </div>
+            <div class="setup-pnl win">+₹1,260</div>
+          </div>
+        </section>
+
+      </div>
+    </div>
+
+    <div class="creditline">
+      preview only — replace with live data after sign-off
+    </div>
+
+  </main>
+</div>
+
+</body>
+</html>
