@@ -2130,12 +2130,14 @@
         const src = bridge.source || '';
         const inRange = hasNseDay && price >= dayLow && price <= dayHigh;
 
-        // SL / T1 from same premium-pct mode the live engine uses
-        const sl = Math.max(Math.round(price * 0.65), 5);
-        const t1 = Math.round(price * 1.50);
-        const t2 = Math.round(price * 2.00);
-        const budget = 20000;
-        const estLots = Math.max(1, Math.min(3, Math.floor((budget * 0.5) / (price * lotSize))));
+        // Server-computed outcome (real backtest)
+        const oc = bridge.outcome || null;
+
+        // SL / T1 from server outcome if present, else compute client-side (back-compat)
+        const sl = oc ? oc.sl : Math.max(Math.round(price * 0.65), 5);
+        const t1 = oc ? oc.t1 : Math.round(price * 1.50);
+        const t2 = oc ? oc.t2 : Math.round(price * 2.00);
+        const estLots = oc ? oc.lots : Math.max(1, Math.min(3, Math.floor((20000 * 0.5) / (price * lotSize))));
         const estCapital = Math.round(price * lotSize * estLots);
 
         return (
@@ -2242,6 +2244,97 @@
                 <div style={{fontSize:13, fontWeight:700, fontFamily:'var(--mono)'}}>₹{estCapital.toLocaleString('en-IN')}</div>
               </div>
             </div>
+
+            {/* ── Outcome (real backtest from NSE day OHLC) ── */}
+            {oc && oc.result && (() => {
+              const r = oc.result;
+              const pnl = oc.result_pnl_rs ?? 0;
+              const isWin = ['T1_HIT','T2_HIT'].includes(r) || (r === 'HELD_TO_CLOSE' && pnl > 0);
+              const isLoss = r === 'SL_HIT' || (r === 'HELD_TO_CLOSE' && pnl < 0);
+              const accent = isWin ? 'var(--long)' : isLoss ? 'var(--short)' : 'var(--warn)';
+              const accentDim = isWin ? 'var(--long-dim)' : isLoss ? 'var(--short-dim)' : 'var(--warn-dim)';
+              const label = ({
+                T2_HIT:        '🎯 TARGET 2 HIT (+100%)',
+                T1_HIT:        '✓ TARGET 1 HIT (+50%)',
+                SL_HIT:        '✗ STOP LOSS HIT (−35%)',
+                HELD_TO_CLOSE: pnl >= 0 ? '⊙ CLOSED IN PROFIT' : '⊙ CLOSED IN LOSS',
+                WHIPSAW:       '⚠ WHIPSAW (SL + T1 both touched)',
+                UNKNOWN:       '? OUTCOME UNAVAILABLE',
+              })[r] || r;
+              const pnlSign = pnl >= 0 ? '+' : '−';
+              const pnlAbs = Math.abs(pnl).toLocaleString('en-IN');
+              return (
+                <div style={{background: accentDim, borderRadius:6, padding:'12px',
+                             marginBottom:10, borderLeft: '3px solid ' + accent}}>
+                  <div style={{fontSize:9, color:'var(--ink-3)', textTransform:'uppercase',
+                               letterSpacing:'0.08em', fontWeight:600, marginBottom:6}}>
+                    Outcome — what actually happened that day
+                  </div>
+                  <div style={{display:'flex', alignItems:'baseline', justifyContent:'space-between',
+                               gap:10, flexWrap:'wrap', marginBottom:8}}>
+                    <span style={{fontSize:13, fontWeight:700, color: accent, fontFamily:'var(--mono)'}}>
+                      {label}
+                    </span>
+                    {pnl !== 0 && (
+                      <span style={{fontSize:18, fontWeight:700, color: accent, fontFamily:'var(--mono)'}}>
+                        {pnlSign}₹{pnlAbs}
+                      </span>
+                    )}
+                  </div>
+                  {/* P&L breakdown grid */}
+                  <div style={{display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:6, marginBottom:6}}>
+                    {oc.max_profit_rs != null && (
+                      <div style={{background:'var(--bg-1)', borderRadius:4, padding:'5px 7px'}}>
+                        <div style={{fontSize:8, color:'var(--ink-3)', textTransform:'uppercase',
+                                     letterSpacing:'0.05em', fontWeight:600, marginBottom:1}}>Best case</div>
+                        <div style={{fontSize:11, fontWeight:700, color:'var(--long)', fontFamily:'var(--mono)'}}>
+                          +₹{oc.max_profit_rs.toLocaleString('en-IN')}
+                        </div>
+                        <div style={{fontSize:8, color:'var(--ink-3)', fontFamily:'var(--mono)'}}>
+                          @ ₹{Number(dayHigh).toFixed(0)}
+                        </div>
+                      </div>
+                    )}
+                    {oc.close_pnl_rs != null && (
+                      <div style={{background:'var(--bg-1)', borderRadius:4, padding:'5px 7px'}}>
+                        <div style={{fontSize:8, color:'var(--ink-3)', textTransform:'uppercase',
+                                     letterSpacing:'0.05em', fontWeight:600, marginBottom:1}}>If held to close</div>
+                        <div style={{fontSize:11, fontWeight:700, fontFamily:'var(--mono)',
+                                     color: oc.close_pnl_rs >= 0 ? 'var(--long)' : 'var(--short)'}}>
+                          {oc.close_pnl_rs >= 0 ? '+' : '−'}₹{Math.abs(oc.close_pnl_rs).toLocaleString('en-IN')}
+                        </div>
+                        <div style={{fontSize:8, color:'var(--ink-3)', fontFamily:'var(--mono)'}}>
+                          @ ₹{Number(daySettle ?? dayClose ?? 0).toFixed(0)} settle
+                        </div>
+                      </div>
+                    )}
+                    {oc.max_loss_rs != null && (
+                      <div style={{background:'var(--bg-1)', borderRadius:4, padding:'5px 7px'}}>
+                        <div style={{fontSize:8, color:'var(--ink-3)', textTransform:'uppercase',
+                                     letterSpacing:'0.05em', fontWeight:600, marginBottom:1}}>Worst case</div>
+                        <div style={{fontSize:11, fontWeight:700, color:'var(--short)', fontFamily:'var(--mono)'}}>
+                          {oc.max_loss_rs >= 0 ? '+' : '−'}₹{Math.abs(oc.max_loss_rs).toLocaleString('en-IN')}
+                        </div>
+                        <div style={{fontSize:8, color:'var(--ink-3)', fontFamily:'var(--mono)'}}>
+                          @ ₹{Number(dayLow).toFixed(0)}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                  {oc.result_note && (
+                    <div style={{fontSize:10, color:'var(--ink-2)', fontFamily:'var(--mono)', marginTop:4}}>
+                      {oc.result_note}
+                    </div>
+                  )}
+                  {oc.caveat && (
+                    <div style={{fontSize:9.5, color:'var(--ink-3)', marginTop:5, lineHeight:1.4,
+                                 borderTop:'1px dashed var(--line-1)', paddingTop:5}}>
+                      <span style={{fontFamily:'var(--mono)'}}>*</span> {oc.caveat}
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
 
             {/* Verification footnote */}
             <div style={{fontSize:10, color:'var(--ink-3)', padding:'4px 0', lineHeight:1.5}}>

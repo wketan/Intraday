@@ -4869,6 +4869,80 @@ def api_replay_premium():
             "symbol": symbol, "strike": strike, "opt_type": opt_type,
             "expiry": expiry_s, "ts": ts_s_clean,
         })
+
+        # ─── Outcome estimate (real backtest the dashboard can show) ───
+        # We BUY the option at `entry`. SL/T1/T2 use the same premium-pct
+        # ladder as the live engine (35% loss / 50% gain / 100% gain).
+        # Then classify against the NSE day OHLC we already fetched.
+        try:
+            entry = float(out.get("price") or 0)
+            day_low  = out.get("nse_day_low")
+            day_high = out.get("nse_day_high")
+            day_settle = out.get("nse_day_settle") or out.get("nse_day_close")
+            if entry > 0:
+                sl_pct = float(os.getenv("OPT_SL_PCT", 0.35))
+                t1_pct = float(os.getenv("OPT_T1_PCT", 0.50))
+                t2_pct = float(os.getenv("OPT_T2_PCT", 1.00))
+                sl = max(round(entry * (1.0 - sl_pct)), 5)
+                t1 = round(entry * (1.0 + t1_pct))
+                t2 = round(entry * (1.0 + t2_pct))
+                LOT_SIZES = {"NIFTY": 75, "BANKNIFTY": 30, "FINNIFTY": 65}
+                lot_size = LOT_SIZES.get(symbol, 75)
+                budget = 20000
+                est_lots = max(1, min(3, int((budget * 0.5) // max(entry * lot_size, 1))))
+                contracts = est_lots * lot_size
+
+                outcome = {
+                    "entry": entry, "sl": sl, "t1": t1, "t2": t2,
+                    "lot_size": lot_size, "lots": est_lots, "contracts": contracts,
+                }
+                if day_low is not None and day_high is not None:
+                    day_low_f  = float(day_low)
+                    day_high_f = float(day_high)
+                    sl_touched = day_low_f  <= sl
+                    t1_touched = day_high_f >= t1
+                    t2_touched = day_high_f >= t2
+
+                    outcome["max_profit_pts"] = round(day_high_f - entry, 2)
+                    outcome["max_loss_pts"]   = round(day_low_f  - entry, 2)
+                    outcome["max_profit_rs"]  = int(round((day_high_f - entry) * contracts))
+                    outcome["max_loss_rs"]    = int(round((day_low_f  - entry) * contracts))
+                    if day_settle is not None:
+                        outcome["close_pnl_pts"] = round(float(day_settle) - entry, 2)
+                        outcome["close_pnl_rs"]  = int(round((float(day_settle) - entry) * contracts))
+
+                    if sl_touched and t1_touched:
+                        outcome["result"] = "WHIPSAW"
+                        outcome["result_pnl_rs"] = outcome.get("close_pnl_rs", 0)
+                        outcome["result_note"]   = "Both SL and T1 touched same day — order unknown without intraday bars. Net = held-to-close."
+                    elif t2_touched:
+                        outcome["result"] = "T2_HIT"
+                        outcome["result_pnl_rs"] = int(round((t2 - entry) * contracts))
+                        outcome["result_note"]   = "Day's high reached Target 2 (+100%)."
+                    elif t1_touched:
+                        outcome["result"] = "T1_HIT"
+                        outcome["result_pnl_rs"] = int(round((t1 - entry) * contracts))
+                        outcome["result_note"]   = "Day's high reached Target 1 (+50%)."
+                    elif sl_touched:
+                        outcome["result"] = "SL_HIT"
+                        outcome["result_pnl_rs"] = int(round((sl - entry) * contracts))
+                        outcome["result_note"]   = "Day's low reached SL (−35%)."
+                    else:
+                        outcome["result"] = "HELD_TO_CLOSE"
+                        outcome["result_pnl_rs"] = outcome.get("close_pnl_rs", 0)
+                        outcome["result_note"]   = "Neither SL nor T1 touched — closed at settle."
+
+                    # Full-day OHLC includes pre-signal moves. Honest disclaimer.
+                    outcome["caveat"] = ("Based on the option's full-day OHLC. "
+                                         "For exact post-signal outcome, intraday option bars (Dhan) are needed.")
+                else:
+                    outcome["result"] = "UNKNOWN"
+                    outcome["result_note"] = "NSE day range not available — cannot estimate outcome."
+
+                out["outcome"] = outcome
+        except Exception as _e:
+            log.warning(f"  /api/replay-premium outcome calc failed: {_e}")
+
         return jsonify(out)
     except Exception as e:
         log.warning(f"  /api/replay-premium top-level error: {e}")
