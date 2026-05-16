@@ -1570,11 +1570,8 @@
   .view.on .history-list .live-row:nth-child(5) { animation-delay: 0.90s; }
   .view.on .history-list .live-row:nth-child(6) { animation-delay: 0.96s; }
 
-  /* Gauge sweep — JS sets --gauge-offset before triggering */
-  .gauge-progress.anim {
-    stroke-dashoffset: 263.9;
-    transition: stroke-dashoffset 1.6s cubic-bezier(0.4, 0, 0.2, 1);
-  }
+  /* Gauge sweep — controlled entirely by inline style from JS so the SVG
+     attribute can never get overridden by a CSS rule. */
 
   /* Path/area draw-in (equity curve + sparklines) */
   .draw-line {
@@ -2436,10 +2433,27 @@
   const renderRupeeShort = (v, prefix='+') => prefix + '₹' + Math.round(v).toLocaleString('en-IN');
   const renderInt = v => Math.round(v).toLocaleString('en-IN');
 
-  // refreshSizingOnPage gets a flag — when called as "first paint" we animate
-  // from 0; on subsequent calls (capital change) we animate from the current
-  // displayed value to the new one for a smooth premium feel.
+  // Animation timing — first paint runs longer/slower so the rise is visible,
+  // subsequent updates (capital change) are quicker.
+  const DUR_FIRST = 2400;
+  const DUR_UPDATE = 900;
+
   let firstPaintDone = false;
+
+  // Wipe all the animated numbers to zero so the count-up genuinely starts
+  // from 0 instead of flashing the HTML default value first.
+  function zeroAllNumbers() {
+    const pnlNum = document.querySelector('.hero-pnl-num');
+    if (pnlNum) pnlNum.innerHTML = '<span class="currency">₹</span>+0';
+    document.querySelectorAll('.pnl-bk-val').forEach(el => el.textContent = '+₹0');
+    const heroPnl = document.querySelector('.live-hero[data-sig="sig-1"] .lh-pnl-num');
+    if (heroPnl) heroPnl.textContent = '+₹0';
+    const gnum = document.querySelector('.gauge-num');
+    if (gnum) gnum.innerHTML = '0<span class="pct">%</span>';
+    const streak = document.querySelector('.hero-streak-num');
+    if (streak) streak.innerHTML = '0<span>W</span>';
+  }
+
   function refreshSizingOnPage() {
     // Recompute SIGNALS map (so drawer picks up fresh numbers when re-opened)
     Object.keys(SIGNALS).forEach(id => {
@@ -2450,13 +2464,14 @@
       s.lotsize = LOT_SIZES[s.inst] || s.lotsize;
       s.capital = sz.capital;
       if (s.outcomeBasePnl) s.pnl = s.outcomeBasePnl * s.lots;
-      // LIVE HERO live P&L scales with the in-flight lots too
       if (s.kind === 'in_flight' && s.liveBasePnl != null) {
         s.pnl = s.liveBasePnl * s.lots;
       }
     });
 
-    // LIVE HERO (sig-1) — rewrite its inline sublines + live P&L
+    const dur = firstPaintDone ? DUR_UPDATE : DUR_FIRST;
+
+    // LIVE HERO (sig-1) — subline + live P&L
     const sig1 = SIGNALS['sig-1'];
     if (sig1) {
       const hero = document.querySelector('.live-hero[data-sig="sig-1"]');
@@ -2466,7 +2481,7 @@
         const pnlEl = hero.querySelector('.lh-pnl-num');
         if (pnlEl) {
           const from = firstPaintDone ? currentNum(pnlEl) : 0;
-          animateCount(pnlEl, from, sig1.pnl, 900, v => renderRupeeShort(v, '+'));
+          animateCount(pnlEl, from, sig1.pnl, dur, v => renderRupeeShort(v, '+'));
         }
       }
     }
@@ -2483,14 +2498,23 @@
       const el = row.querySelector('.pnl-bk-val');
       if (!el) return;
       const from = firstPaintDone ? currentNum(el) : 0;
-      animateCount(el, from, breakdownPnl[bkKeys[i]], 900, v => renderRupeeShort(v, '+'));
+      animateCount(el, from, breakdownPnl[bkKeys[i]], dur, v => renderRupeeShort(v, '+'));
     });
 
     const totalDaily = Object.values(breakdownPnl).reduce((a,b) => a+b, 0);
     const pnlNum = document.querySelector('.hero-pnl-num');
     if (pnlNum) {
       const from = firstPaintDone ? currentNum(pnlNum) : 0;
-      animateCount(pnlNum, from, totalDaily, 1100, renderRupee);
+      animateCount(pnlNum, from, totalDaily, dur, renderRupee);
+    }
+
+    // Gauge percentage (only on first paint or capital change should it move,
+    // but the win-rate is independent of capital so we only do it on first paint)
+    if (!firstPaintDone) {
+      const gnum = document.querySelector('.gauge-num');
+      if (gnum) animateCount(gnum, 0, 82, dur, v => Math.round(v) + '<span class="pct">%</span>');
+      const streak = document.querySelector('.hero-streak-num');
+      if (streak) animateCount(streak, 0, 4, 1400, v => Math.round(v) + '<span>W</span>');
     }
 
     // User chip
@@ -2646,17 +2670,19 @@
   setInterval(applyEngineState, 30_000);
 
   // ─── chart entrance animations ────────────────────────────────────
-  // Gauge: sweep from full circle to actual progress
+  // Gauge: sweep from full (hidden) circumference to the real progress.
+  // Inline style only — CSS class-based control kept overriding our
+  // attribute updates.
   const gaugeProgress = document.querySelector('.gauge-progress');
   if (gaugeProgress) {
-    const finalOffset = gaugeProgress.getAttribute('stroke-dashoffset') || '47.5';
-    gaugeProgress.setAttribute('stroke-dashoffset', '263.9');
-    requestAnimationFrame(() => {
-      gaugeProgress.classList.add('anim');
-      requestAnimationFrame(() => {
-        gaugeProgress.setAttribute('stroke-dashoffset', finalOffset);
-      });
-    });
+    const finalOffset = parseFloat(gaugeProgress.getAttribute('stroke-dashoffset') || '47.5');
+    // start hidden immediately so there's never a flash of "filled"
+    gaugeProgress.style.strokeDashoffset = '263.9';
+    gaugeProgress.style.transition = 'stroke-dashoffset 2.4s cubic-bezier(0.4, 0, 0.2, 1)';
+    // sweep with the same 650ms delay used by the count-up so they feel synced
+    setTimeout(() => {
+      gaugeProgress.style.strokeDashoffset = String(finalOffset);
+    }, 650);
   }
 
   // Equity curve + sparklines: stroke-draw
@@ -2805,16 +2831,19 @@
     },
   };
 
-  // Stash original per-share P&L on each signal so we can scale by new lots,
-  // then run the initial sizing paint. Must happen AFTER SIGNALS is declared
-  // because `const` has a temporal dead zone.
+  // Stash original per-share P&L on each signal so we can scale by new lots.
   Object.keys(SIGNALS).forEach(id => {
     const s = SIGNALS[id];
     if (s.entry && s.pnl != null && s.lots) {
       s.outcomeBasePnl = s.pnl / s.lots;
     }
   });
-  refreshSizingOnPage();
+
+  // Initial render: blank the numbers to 0 *synchronously* before the user
+  // sees anything, then start the count-ups once the card-mount animation
+  // is mostly in-frame (~650ms after parse).
+  zeroAllNumbers();
+  setTimeout(refreshSizingOnPage, 650);
 
   const drawer = document.getElementById('drawer');
   const drawerBackdrop = document.getElementById('drawer-backdrop');
