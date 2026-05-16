@@ -23,68 +23,94 @@
        Dual theme (dark / light) · cinematic motion · Bloomberg density
        =============================================================== */
 
+    /* ===== rich-pastel palette (ported from preview.html) ============
+       Existing variable names preserved so all 22+ components inherit
+       the new look automatically. New ones added underneath for the
+       upcoming glass cards / glow / aurora.                          */
+
     :root, [data-theme="dark"] {
-      --bg-0: oklch(0.145 0.010 260);
-      --bg-1: oklch(0.178 0.012 260);
-      --bg-2: oklch(0.210 0.013 260);
-      --bg-3: oklch(0.250 0.015 260);
-      --bg-elev: oklch(0.178 0.012 260 / 0.78);
-      --ink-0: oklch(0.98 0.005 260);
-      --ink-1: oklch(0.80 0.010 260);
-      --ink-2: oklch(0.60 0.012 260);
-      --ink-3: oklch(0.44 0.012 260);
-      --line-0: oklch(1 0 0 / 0.06);
-      --line-1: oklch(1 0 0 / 0.11);
-      --line-2: oklch(1 0 0 / 0.17);
-      --long: oklch(0.80 0.17 150);
-      --long-dim: oklch(0.80 0.17 150 / 0.15);
-      --short: oklch(0.72 0.22 25);
-      --short-dim: oklch(0.72 0.22 25 / 0.15);
-      --warn: oklch(0.82 0.17 80);
-      --warn-dim: oklch(0.82 0.17 80 / 0.15);
-      --accent: oklch(0.82 0.15 75);
-      --accent-ink: oklch(0.15 0.02 75);
-      --accent-dim: oklch(0.82 0.15 75 / 0.20);
-      --accent-faint: oklch(0.82 0.15 75 / 0.08);
+      --bg-0: oklch(0.100 0.012 35);
+      --bg-1: oklch(0.130 0.014 35);
+      --bg-2: oklch(0.160 0.013 35);
+      --bg-3: oklch(0.190 0.014 35);
+      --bg-elev: oklch(0.140 0.014 35 / 0.62);
+      --ink-0: oklch(0.985 0.006 80);
+      --ink-1: oklch(0.800 0.012 60);
+      --ink-2: oklch(0.600 0.014 60);
+      --ink-3: oklch(0.450 0.012 60);
+      --line-0: oklch(1 0 0 / 0.05);
+      --line-1: oklch(1 0 0 / 0.10);
+      --line-2: oklch(1 0 0 / 0.16);
+      --long:      oklch(0.86 0.13 152);     /* sage mint */
+      --long-dim:  oklch(0.86 0.13 152 / 0.16);
+      --short:     oklch(0.76 0.14 22);      /* dusty rose */
+      --short-dim: oklch(0.76 0.14 22 / 0.16);
+      --warn:      oklch(0.86 0.11 80);      /* warm cream */
+      --warn-dim:  oklch(0.86 0.11 80 / 0.18);
+      --accent:    oklch(0.80 0.11 280);     /* periwinkle */
+      --accent-2:  oklch(0.72 0.14 295);     /* deeper violet */
+      --accent-ink: oklch(0.18 0.04 280);
+      --accent-dim: oklch(0.80 0.11 280 / 0.22);
+      --accent-faint: oklch(0.80 0.11 280 / 0.08);
       --shadow-sm: 0 1px 2px oklch(0 0 0 / 0.40);
       --shadow-md: 0 6px 24px oklch(0 0 0 / 0.35);
       --shadow-lg: 0 20px 60px oklch(0 0 0 / 0.55);
-      --glow-accent: 0 0 0 1px var(--accent), 0 0 28px oklch(0.82 0.15 75 / 0.25);
-      --glow-long:   0 0 0 1px var(--long),   0 0 28px oklch(0.80 0.17 150 / 0.25);
-      --scrim: radial-gradient(1200px 600px at 90% -10%, oklch(0.82 0.15 75 / 0.06), transparent 60%),
-               radial-gradient(900px 500px at -10% 110%, oklch(0.80 0.17 150 / 0.04), transparent 60%);
+      --glow-accent: 0 0 0 1px var(--accent), 0 0 28px oklch(0.80 0.11 280 / 0.25);
+      --glow-long:   0 0 0 1px var(--long),   0 0 28px oklch(0.86 0.13 152 / 0.25);
+      --win-glow:    oklch(0.86 0.13 152 / 0.35);
+      --loss-glow:   oklch(0.76 0.14 22 / 0.35);
+      /* glass card primitives (used by upcoming new components) */
+      --glass-bg:        linear-gradient(140deg, oklch(1 0 0 / 0.07), oklch(1 0 0 / 0.018));
+      --glass-bg-hi:     linear-gradient(140deg, oklch(1 0 0 / 0.11), oklch(1 0 0 / 0.030));
+      --glass-border:    oklch(1 0 0 / 0.11);
+      --glass-border-hi: oklch(1 0 0 / 0.18);
+      --glass-shadow:
+        inset 0 1px 0 oklch(1 0 0 / 0.10),
+        0 1px 2px oklch(0 0 0 / 0.30),
+        0 16px 40px oklch(0 0 0 / 0.55);
+      --scrim: none;  /* aurora handled by the .aurora layer */
     }
 
     [data-theme="light"] {
-      --bg-0: oklch(0.985 0.003 85);
+      --bg-0: oklch(0.975 0.008 75);
       --bg-1: oklch(1 0 0);
-      --bg-2: oklch(0.965 0.005 85);
-      --bg-3: oklch(0.935 0.008 85);
+      --bg-2: oklch(0.955 0.010 75);
+      --bg-3: oklch(0.930 0.012 75);
       --bg-elev: oklch(1 0 0 / 0.82);
-      --ink-0: oklch(0.20 0.015 260);
-      --ink-1: oklch(0.38 0.015 260);
-      --ink-2: oklch(0.55 0.012 260);
-      --ink-3: oklch(0.68 0.008 260);
-      --line-0: oklch(0 0 0 / 0.06);
-      --line-1: oklch(0 0 0 / 0.10);
-      --line-2: oklch(0 0 0 / 0.16);
-      --long: oklch(0.55 0.17 150);
-      --long-dim: oklch(0.55 0.17 150 / 0.12);
-      --short: oklch(0.56 0.22 25);
-      --short-dim: oklch(0.56 0.22 25 / 0.10);
-      --warn: oklch(0.65 0.17 70);
-      --warn-dim: oklch(0.65 0.17 70 / 0.12);
-      --accent: oklch(0.62 0.16 55);
+      --ink-0: oklch(0.18 0.020 35);
+      --ink-1: oklch(0.36 0.018 35);
+      --ink-2: oklch(0.52 0.016 35);
+      --ink-3: oklch(0.66 0.012 35);
+      --line-0: oklch(0 0 0 / 0.04);
+      --line-1: oklch(0 0 0 / 0.08);
+      --line-2: oklch(0 0 0 / 0.14);
+      --long:      oklch(0.62 0.13 152);
+      --long-dim:  oklch(0.62 0.13 152 / 0.14);
+      --short:     oklch(0.62 0.16 25);
+      --short-dim: oklch(0.62 0.16 25 / 0.14);
+      --warn:      oklch(0.68 0.14 78);
+      --warn-dim:  oklch(0.68 0.14 78 / 0.14);
+      --accent:    oklch(0.60 0.14 280);
+      --accent-2:  oklch(0.52 0.16 295);
       --accent-ink: oklch(0.99 0 0);
-      --accent-dim: oklch(0.62 0.16 55 / 0.14);
-      --accent-faint: oklch(0.62 0.16 55 / 0.06);
+      --accent-dim: oklch(0.60 0.14 280 / 0.18);
+      --accent-faint: oklch(0.60 0.14 280 / 0.06);
       --shadow-sm: 0 1px 2px oklch(0 0 0 / 0.05);
       --shadow-md: 0 6px 24px oklch(0 0 0 / 0.08);
       --shadow-lg: 0 20px 60px oklch(0 0 0 / 0.12);
-      --glow-accent: 0 0 0 1px var(--accent), 0 4px 24px oklch(0.62 0.16 55 / 0.20);
-      --glow-long:   0 0 0 1px var(--long),   0 4px 24px oklch(0.55 0.17 150 / 0.20);
-      --scrim: radial-gradient(1200px 600px at 90% -10%, oklch(0.62 0.16 55 / 0.05), transparent 60%),
-               radial-gradient(900px 500px at -10% 110%, oklch(0.55 0.17 150 / 0.04), transparent 60%);
+      --glow-accent: 0 0 0 1px var(--accent), 0 4px 24px oklch(0.60 0.14 280 / 0.20);
+      --glow-long:   0 0 0 1px var(--long),   0 4px 24px oklch(0.62 0.13 152 / 0.20);
+      --win-glow:    oklch(0.62 0.13 152 / 0.30);
+      --loss-glow:   oklch(0.62 0.16 25 / 0.30);
+      --glass-bg:        linear-gradient(140deg, oklch(1 0 0 / 0.65), oklch(1 0 0 / 0.42));
+      --glass-bg-hi:     linear-gradient(140deg, oklch(1 0 0 / 0.78), oklch(1 0 0 / 0.50));
+      --glass-border:    oklch(1 0 0 / 0.55);
+      --glass-border-hi: oklch(1 0 0 / 0.75);
+      --glass-shadow:
+        inset 0 1px 0 oklch(1 0 0 / 0.60),
+        0 1px 2px oklch(0 0 0 / 0.04),
+        0 16px 40px oklch(0 0 0 / 0.10);
+      --scrim: none;
     }
 
     :root {
@@ -104,17 +130,46 @@
     html, body { margin:0; padding:0; width:100%; height:100%; }
     body {
       background: var(--bg-0);
-      background-image: var(--scrim);
-      background-attachment: fixed;
       color: var(--ink-0);
       font-family: var(--ui);
       font-feature-settings: "tnum", "ss01";
       font-size: 13px;
       line-height: 1.45;
+      letter-spacing: -0.005em;
       -webkit-font-smoothing: antialiased;
       -moz-osx-font-smoothing: grayscale;
+      overflow-x: hidden;
     }
-    #root { width:100%; height:100%; display:flex; flex-direction:column; }
+
+    /* ── aurora canvas (soft pastel blobs behind everything) ─────────── */
+    .aurora {
+      position: fixed; inset: 0; z-index: 0; pointer-events: none; overflow: hidden;
+    }
+    .aurora .blob { position: absolute; border-radius: 50%; filter: blur(80px); opacity: 0.85; }
+    .aurora .b1 { width: 720px; height: 720px; top: -220px; right: -160px;
+                  background: radial-gradient(circle, oklch(0.80 0.12 280 / 0.50), transparent 70%); }
+    .aurora .b2 { width: 620px; height: 620px; top: 28%; right: -200px;
+                  background: radial-gradient(circle, oklch(0.78 0.12 320 / 0.36), transparent 70%); }
+    .aurora .b3 { width: 540px; height: 540px; bottom: -140px; left: -100px;
+                  background: radial-gradient(circle, oklch(0.78 0.13 22 / 0.30), transparent 70%); }
+    .aurora .b4 { width: 420px; height: 420px; top: 38%; left: 16%;
+                  background: radial-gradient(circle, oklch(0.84 0.11 152 / 0.22), transparent 70%); }
+    [data-theme="light"] .aurora .blob { opacity: 0.60; }
+    [data-theme="light"] .aurora .b1 { background: radial-gradient(circle, oklch(0.88 0.09 280 / 0.55), transparent 70%); }
+    [data-theme="light"] .aurora .b2 { background: radial-gradient(circle, oklch(0.90 0.08 320 / 0.45), transparent 70%); }
+    [data-theme="light"] .aurora .b3 { background: radial-gradient(circle, oklch(0.92 0.08 22 / 0.40), transparent 70%); }
+    [data-theme="light"] .aurora .b4 { background: radial-gradient(circle, oklch(0.92 0.08 152 / 0.35), transparent 70%); }
+    .aurora .grid {
+      position: absolute; inset: 0;
+      background-image: radial-gradient(oklch(1 0 0 / 0.05) 1px, transparent 1px);
+      background-size: 28px 28px;
+      mask-image: radial-gradient(ellipse at center, black 30%, transparent 80%);
+    }
+    [data-theme="light"] .aurora .grid {
+      background-image: radial-gradient(oklch(0 0 0 / 0.05) 1px, transparent 1px);
+    }
+
+    #root { width:100%; height:100%; display:flex; flex-direction:column; position: relative; z-index: 1; }
     *, *::before, *::after {
       transition:
         background-color 260ms cubic-bezier(.2,.6,.2,1),
@@ -176,21 +231,26 @@
       flex-shrink: 0;
       flex-wrap: wrap;
     }
-    .brand { display:flex; align-items:center; gap:10px; font-weight:600; letter-spacing:-0.01em; font-size:14px; }
+    .brand { display:flex; align-items:center; gap:11px; font-weight:600; letter-spacing:-0.018em; font-size:15px; }
     .brand .mark {
-      width:26px; height:26px; border-radius:7px;
-      background: conic-gradient(from 180deg at 50% 50%,
-        var(--accent) 0deg, oklch(0.90 0.17 65) 140deg, var(--accent) 360deg);
-      position:relative; display:flex; align-items:center; justify-content:center;
-      box-shadow: 0 4px 14px oklch(0.82 0.15 75 / 0.30), inset 0 0 0 1px oklch(1 0 0 / 0.15);
-      flex-shrink: 0;
+      width:34px; height:34px; flex-shrink:0;
+      position:relative; border-radius:10px;
+      background: linear-gradient(140deg, var(--accent), var(--accent-2));
+      box-shadow:
+        0 4px 14px oklch(0.55 0.18 290 / 0.40),
+        inset 0 1px 0 oklch(1 0 0 / 0.18),
+        inset 0 -10px 18px oklch(0 0 0 / 0.20);
+      overflow: hidden;
     }
-    .brand .mark::before { content:''; position:absolute; inset:3px; border-radius:4px; background: var(--bg-0); }
-    .brand .mark::after { content:''; position:absolute; width:10px; height:2px; background: var(--accent); border-radius:1px;
-      box-shadow: 0 4px 0 var(--accent), 0 -4px 0 oklch(0.82 0.15 75 / 0.4); }
-    .brand .name { display:flex; flex-direction:column; line-height:1.05; }
-    .brand .name span:first-child { font-weight:600; font-size:14px; color: var(--ink-0); }
-    .brand .sub  { font-size:9.5px; letter-spacing:0.14em; text-transform:uppercase; color:var(--ink-3); font-weight:500; font-family:var(--mono); }
+    .brand .mark svg { width: 100%; height: 100%; display: block; }
+    .brand .mark .bm-rings { opacity: 0.22; }
+    .brand .mark .bm-bar.b1 { fill: oklch(1 0 0 / 0.55); }
+    .brand .mark .bm-bar.b2 { fill: oklch(1 0 0 / 0.72); }
+    .brand .mark .bm-bar.b3 { fill: oklch(1 0 0 / 0.86); }
+    .brand .mark .bm-bar.b4 { fill: oklch(1 0 0 / 1.00); }
+    .brand .name { display:flex; flex-direction:column; line-height:1.1; }
+    .brand .name span:first-child { font-weight:600; font-size:15px; color: var(--ink-0); }
+    .brand .sub  { font-size:9.5px; letter-spacing:0.14em; text-transform:uppercase; color:var(--ink-3); font-weight:500; font-family:var(--mono); margin-top:1px; }
 
     .market-status { display:flex; align-items:center; gap:8px; font-family:var(--mono); font-size:11.5px; color:var(--ink-1); }
     .market-status .pulse { width:7px; height:7px; border-radius:99px; background:var(--long);
@@ -514,6 +574,13 @@
   </style>
 </head>
 <body>
+  <div class="aurora" aria-hidden="true">
+    <div class="blob b1"></div>
+    <div class="blob b2"></div>
+    <div class="blob b3"></div>
+    <div class="blob b4"></div>
+    <div class="grid"></div>
+  </div>
   <div id="root"></div>
 
   <script crossOrigin="anonymous" src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
@@ -3578,10 +3645,30 @@ function App() {
         <div key={theme+accent} style={{width:'100%', height:'100%', display:'flex', flexDirection:'column'}}>
           <div className="chrome">
             <div className="brand">
-              <div className="mark"/>
+              <div className="mark" aria-hidden="true">
+                <svg viewBox="0 0 32 32">
+                  <g className="bm-rings" fill="none" stroke="oklch(1 0 0 / 0.85)">
+                    <circle cx="16" cy="17" r="13" strokeWidth="0.30"/>
+                    <circle cx="16" cy="17" r="9"  strokeWidth="0.30"/>
+                    <circle cx="16" cy="17" r="5"  strokeWidth="0.30"/>
+                  </g>
+                  <rect className="bm-bar b1" x="7.5"  y="22" width="3.5" height="5"  rx="0.6"/>
+                  <rect className="bm-bar b2" x="12"   y="18" width="3.5" height="9"  rx="0.6"/>
+                  <rect className="bm-bar b3" x="16.5" y="14" width="3.5" height="13" rx="0.6"/>
+                  <rect className="bm-bar b4" x="21"   y="8"  width="3.5" height="19" rx="0.6"/>
+                  <path className="bm-curve"
+                        d="M5 24 C 11 23, 17 14, 26 5"
+                        fill="none" stroke="oklch(1 0 0 / 0.95)"
+                        strokeWidth="1" strokeLinecap="round"/>
+                  <path className="bm-arrow"
+                        d="M22 5 L26.2 4.4 L25.6 8.6"
+                        fill="none" stroke="oklch(1 0 0 / 0.95)"
+                        strokeWidth="1" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+              </div>
               <div className="name">
-                <span>Signal Engine</span>
-                <span className="sub">Intraday + Swing · NSE</span>
+                <span>Intraday Engine</span>
+                <span className="sub">v2 · live</span>
               </div>
             </div>
 
