@@ -437,44 +437,217 @@ def _angel_option_lookup(angel_client, symbol, strike, opt_type, expiry_d, ts):
     return None
 
 
-def _bs_interpolate(symbol, strike, opt_type, expiry_d, ts, angel_client):
-    """Last-resort: compute Black-Scholes price from spot + IV.
+def get_nse_contract_day(symbol: str, strike: float, opt_type: str,
+                         expiry, date_d) -> Optional[dict]:
+    """Fetch ONE option contract's DAILY OHLC + settle from NSE's historical
+    contract-wise price-volume report (the page user pointed to at
+    nseindia.com/report-detail/fo_eq_security). Cached in `option_eod` SQLite
+    table so repeat queries are instant.
 
-    IV comes from the EOD chain's ATM IV (or 0.18 fallback for index options).
-    Spot comes from intraday spot bar. Result is clearly marked
-    `source="bs_interpolated"` so the backtest can flag it.
+    Returns:
+        {"open", "high", "low", "close", "settle", "ltp", "volume", "oi", "source"}
+        or None if NSE returned no row for that (symbol, strike, type, expiry, date).
+
+    This is the SINGLE SOURCE OF TRUTH for the "what range did this option trade in
+    on that day" question — used to (a) calibrate real day-IV from the settle
+    price, and (b) HARD-CLAMP any Black-Scholes intraday estimate to [low, high]
+    so we never display a number outside what actually traded.
+    """
+    if pd is None or not _HAS_JUGAAD:
+        return None
+    d = _to_date(date_d)
+    exp_d = _to_date(expiry)
+
+    # Cache lookup (option_eod has the right schema)
+    conn = _cache_conn()
+    row = conn.execute(
+        "SELECT * FROM option_eod WHERE symbol=? AND date=? AND expiry=? "
+        "AND strike=? AND opt_type=?",
+        (symbol.upper(), _fmt_date(d), _fmt_date(exp_d), float(strike), opt_type.upper())
+    ).fetchone()
+    conn.close()
+    if row:
+        r = dict(row)
+        return {
+            "open": r.get("open"), "high": r.get("high"),
+            "low": r.get("low"), "close": r.get("close"),
+            "settle": r.get("settle"), "volume": r.get("volume"),
+            "oi": r.get("oi"),
+            "source": "cache:" + (r.get("source") or "?"),
+        }
+
+    # Fetch via jugaad-data (wraps NSE's contract-wise historical report)
+    try:
+        df = derivatives_df(
+            symbol=symbol.upper(),
+            from_date=d, to_date=d,
+            expiry_date=exp_d,
+            instrument_type="OPTIDX",
+            option_type=opt_type.upper(),
+            strike_price=float(strike),
+        )
+    except Exception as e:
+        print(f"[data_layer] NSE fetch failed for {symbol} {strike}{opt_type} {exp_d}@{d}: {e}")
+        return None
+    if df is None or df.empty:
+        return None
+
+    row = df.iloc[0]
+    result = {
+        "open":   float(row.get("OPEN", 0) or 0),
+        "high":   float(row.get("HIGH", 0) or 0),
+        "low":    float(row.get("LOW", 0) or 0),
+        "close":  float(row.get("CLOSE", 0) or 0),
+        "settle": float(row.get("SETTLE PRICE", row.get("SETTLE PR.", row.get("CLOSE", 0))) or 0),
+        "volume": float(row.get("TOTAL TRADED QUANTITY", row.get("CONTRACTS", 0)) or 0),
+        "oi":     float(row.get("OPEN INTEREST", row.get("OPEN INT", 0)) or 0),
+        "source": "nse_jugaad",
+    }
+
+    # Persist to cache for repeat queries
+    try:
+        conn = _cache_conn()
+        conn.execute(
+            "INSERT OR REPLACE INTO option_eod "
+            "(symbol, date, expiry, strike, opt_type, open, high, low, close, settle, "
+            " volume, oi, change_oi, source) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            (symbol.upper(), _fmt_date(d), _fmt_date(exp_d), float(strike), opt_type.upper(),
+             result["open"], result["high"], result["low"], result["close"],
+             result["settle"], result["volume"], result["oi"], 0,
+             "nse_jugaad")
+        )
+        conn.commit(); conn.close()
+    except Exception as e:
+        print(f"[data_layer] cache write failed: {e}")
+    return result
+
+
+def _calibrate_iv_from_nse_settle(symbol: str, strike: float, opt_type: str,
+                                  expiry_d, date_d, settle_price: float,
+                                  angel_client) -> Optional[float]:
+    """Given NSE's day-settle for this option, back-solve the IV that the market
+    actually traded at. This replaces the previous "assume 18%" hack with real IV.
+
+    NSE settle is computed at 15:30 IST, so we use the spot value at 15:30 of
+    that date to invert Black-Scholes.
+    """
+    if settle_price is None or settle_price <= 0: return None
+    try:
+        # Get end-of-day spot — use the 15:25-15:30 bar to approximate
+        eod_dt = datetime.combine(_to_date(date_d), datetime.min.time()).replace(hour=15, minute=25)
+        spot_df = get_spot_bars(symbol.upper(),
+                                eod_dt - timedelta(minutes=15),
+                                eod_dt + timedelta(minutes=10),
+                                "5min", angel_client=angel_client)
+        if spot_df.empty: return None
+        # Closest bar to 15:25
+        spot_df["ts"] = pd.to_datetime(spot_df["ts"])
+        idx = (spot_df["ts"] - eod_dt).abs().argsort()
+        if len(idx) == 0: return None
+        eod_spot = float(spot_df.iloc[idx[0]]["close"])
+        if not eod_spot: return None
+
+        dte = max(0.5, (_to_date(expiry_d) - _to_date(date_d)).days)
+        iv = _implied_vol(eod_spot, settle_price, float(strike),
+                          dte / 365.0, opt_type.upper())
+        # Sanity: clamp absurd IVs (data quality issues sometimes give 500%+)
+        if iv is None: return None
+        if iv < 0.03 or iv > 1.5: return None
+        return iv
+    except Exception as e:
+        print(f"[data_layer] IV calibration failed: {e}")
+        return None
+
+
+def _bs_interpolate(symbol, strike, opt_type, expiry_d, ts, angel_client):
+    """Intraday option-premium estimator that uses REAL NSE data as the anchor.
+
+    New (bridge plan) algorithm:
+      1. Pull this contract's NSE daily OHLC+settle (jugaad-data → NSE archives)
+      2. Back-solve the day's REAL IV from settle (no more 18% assumption)
+      3. Compute Black-Scholes at the requested intraday timestamp using that IV
+      4. HARD-CLAMP the result inside [day_low, day_high] — never display a
+         price that didn't actually trade. Flag the row if clamping happened.
+
+    Returns dict with extra context so the journal can show: NSE day range,
+    IV used + source, whether the BS estimate was clamped to range.
     """
     try:
-        # Get spot at `ts` (need 5-min spot bar covering ts)
+        # 1. Get spot at `ts` (5-min bar)
         from_dt = ts - timedelta(minutes=10)
         to_dt   = ts + timedelta(minutes=10)
         spot_df = get_spot_bars(symbol.upper(), from_dt, to_dt, "5min", angel_client=angel_client)
         if spot_df.empty:
             return None
-        spot_row = spot_df.iloc[(spot_df["ts"] - ts).abs().argsort()[0]] if "ts" in spot_df else None
+        spot_df["ts"] = pd.to_datetime(spot_df["ts"])
+        spot_row = spot_df.iloc[(spot_df["ts"] - ts).abs().argsort()[0]]
         spot = float(spot_row["close"]) if spot_row is not None else None
         if not spot:
             return None
 
-        # ATM IV from EOD chain
-        chain = get_eod_option_chain(symbol.upper(), ts.date())
-        atm_iv = 0.18  # default fallback for Indian index options
-        if not chain.empty:
-            atm_strike = round(spot / _strike_step(symbol.upper())) * _strike_step(symbol.upper())
-            atm_row = chain[(chain["strike"] == atm_strike) & (chain["opt_type"] == "CE")]
-            if not atm_row.empty and atm_row.iloc[0].get("close", 0) > 0:
-                # Imply IV from ATM CE price using Newton-Raphson
-                dte = max(1, (expiry_d - ts.date()).days)
-                atm_iv = _implied_vol(spot, float(atm_row.iloc[0]["close"]),
-                                      atm_strike, dte / 365.0) or 0.18
+        # 2. Get NSE daily OHLC for THIS specific contract
+        nse_day = get_nse_contract_day(symbol.upper(), float(strike), opt_type,
+                                       expiry_d, ts.date())
 
-        # Compute target BS price
-        dte = max(1, (expiry_d - ts.date()).days)
-        price = _bs_price(spot, strike, dte / 365.0, atm_iv, opt_type)
+        # 3. Calibrate IV from NSE settle (real day-IV) — fall back to 18% if no NSE row
+        atm_iv = 0.18
+        iv_source = "default_0.18"
+        if nse_day and nse_day.get("settle", 0) > 0:
+            calibrated = _calibrate_iv_from_nse_settle(
+                symbol.upper(), float(strike), opt_type, expiry_d, ts.date(),
+                float(nse_day["settle"]), angel_client
+            )
+            if calibrated is not None:
+                atm_iv = calibrated
+                iv_source = "nse_settle_calibrated"
+
+        # 4. Compute BS at the requested timestamp
+        dte = max(0.5, (_to_date(expiry_d) - ts.date()).days)
+        # On expiry day with intraday timing, prorate to fraction-of-day remaining
+        if dte <= 1.0:
+            mins_remaining = max(15, (15*60 + 30) - (ts.hour*60 + ts.minute))   # till 15:30
+            dte = mins_remaining / (24.0 * 60.0)   # in days
+            dte = max(0.01, dte)
+        bs_price = _bs_price(spot, float(strike), dte / 365.0, atm_iv, opt_type)
+        bs_raw = round(bs_price, 2)
+
+        # 5. HARD CLAMP to NSE day's traded range (the user's key requirement:
+        #    no number that didn't actually trade should ever surface)
+        final_price = bs_raw
+        clamped = False
+        out_of_range = False
+        if nse_day and nse_day.get("low", 0) > 0 and nse_day.get("high", 0) > 0:
+            day_low  = float(nse_day["low"])
+            day_high = float(nse_day["high"])
+            if bs_raw < day_low:
+                final_price = day_low; clamped = True; out_of_range = True
+            elif bs_raw > day_high:
+                final_price = day_high; clamped = True; out_of_range = True
+
         return {
-            "price": round(price, 2),
-            "volume": None, "oi": None, "iv": atm_iv,
-            "source": "bs_interpolated",
+            "price":             final_price,
+            "price_raw_bs":      bs_raw,            # what BS computed before clamp
+            "iv":                round(atm_iv, 4),
+            "iv_source":         iv_source,
+            # NSE day context — surfaced in journal so user can sanity-check every row
+            "nse_day_open":      nse_day.get("open")   if nse_day else None,
+            "nse_day_high":      nse_day.get("high")   if nse_day else None,
+            "nse_day_low":       nse_day.get("low")    if nse_day else None,
+            "nse_day_close":     nse_day.get("close")  if nse_day else None,
+            "nse_day_settle":    nse_day.get("settle") if nse_day else None,
+            "nse_day_volume":    nse_day.get("volume") if nse_day else None,
+            "nse_day_oi":        nse_day.get("oi")     if nse_day else None,
+            "clamped":           clamped,
+            "out_of_range":      out_of_range,
+            "spot_at_ts":        round(spot, 2),
+            # Source label tells you EXACTLY what backed this row:
+            #   nse_calibrated_clamped — clamped to NSE day range (BS was outside)
+            #   nse_calibrated         — BS within NSE range, real IV used
+            #   bs_no_nse              — couldn't get NSE data, used 18% default
+            "source": ("nse_calibrated_clamped" if clamped
+                       else "nse_calibrated"    if nse_day
+                       else "bs_no_nse"),
+            "volume": None, "oi": None,
         }
     except Exception as e:
         print(f"[data_layer] BS interpolation failed: {e}")

@@ -111,7 +111,20 @@ class Trade:
     net_pnl:        float
     bucket:         str
     filter_reason:  str   # empty for TAKEN_*; populated for FILTERED_*
-    price_source:   str   # angel / cache / bs_interpolated / missing
+    price_source:   str   # angel / cache / nse_calibrated / nse_calibrated_clamped / bs_no_nse
+    # ── NSE day context (the bridge): real day range + real IV — so you can
+    #    verify EVERY row against NSE's actual published OHLC for that day.
+    nse_day_open:    float
+    nse_day_high:    float
+    nse_day_low:     float
+    nse_day_close:   float
+    nse_day_settle:  float
+    nse_day_volume:  float
+    nse_day_oi:      float
+    iv_used:         float
+    iv_source:       str   # nse_settle_calibrated | default_0.18 | live (when Dhan/Angel)
+    clamped:         bool  # True if BS estimate was outside NSE day range and we clamped
+    bs_raw:          float # the BS price BEFORE clamping (for transparency)
     rsi:            float
     vwap:           float
     vwap_dev_pct:   float
@@ -332,6 +345,10 @@ def run_backtest(symbol: str, from_date: date, to_date: date,
             last_taken_ts = ts
 
         ind = sig.get("indicators", {})
+        # Pull NSE day context from the entry-data dict (always populated when
+        # _bs_interpolate ran and could reach NSE). For real-data sources (angel,
+        # cache, dhan) these fields will be None — that's expected and means
+        # the row didn't need the bridge.
         trade = Trade(
             date=ts.strftime("%Y-%m-%d"),
             time=ts.strftime("%H:%M:%S"),
@@ -353,6 +370,20 @@ def run_backtest(symbol: str, from_date: date, to_date: date,
             bucket=bucket,
             filter_reason="" if would_be_taken else reason,
             price_source=f"{entry_source}→{exit_source}",
+            # NSE day context from the entry-lookup result. When source != NSE
+            # these are None — the journal viewer treats None as "didn't need
+            # to clamp (real data was used)".
+            nse_day_open=    entry_data.get("nse_day_open"),
+            nse_day_high=    entry_data.get("nse_day_high"),
+            nse_day_low=     entry_data.get("nse_day_low"),
+            nse_day_close=   entry_data.get("nse_day_close"),
+            nse_day_settle=  entry_data.get("nse_day_settle"),
+            nse_day_volume=  entry_data.get("nse_day_volume"),
+            nse_day_oi=      entry_data.get("nse_day_oi"),
+            iv_used=         entry_data.get("iv"),
+            iv_source=       entry_data.get("iv_source") or "live",
+            clamped=         bool(entry_data.get("clamped")),
+            bs_raw=          entry_data.get("price_raw_bs"),
             rsi=ind.get("rsi", 0),
             vwap=ind.get("vwap", 0),
             vwap_dev_pct=ind.get("vwap_dev_pct", 0),
@@ -448,14 +479,30 @@ def summarise(trades: list[Trade]):
             for sub_src in src.split(","):
                 sub_src = sub_src.strip().split(":")[-1]
                 src_counter[sub_src] += 1
-    real = sum(c for s, c in src_counter.items() if s in ("angel", "jugaad"))
-    interp = src_counter.get("bs_interpolated", 0)
+    real = sum(c for s, c in src_counter.items() if s in ("angel", "jugaad", "dhan", "nse_jugaad"))
+    nse_calibrated = sum(c for s, c in src_counter.items() if s.startswith("nse_calibrated"))
+    bs_no_nse = src_counter.get("bs_no_nse", 0)
     total_src = sum(src_counter.values()) or 1
     real_pct = real / total_src * 100
-    print(f"\n  ► Price data integrity: {real_pct:.1f}% real exchange data · "
-          f"{interp/total_src*100:.1f}% BS-interpolated")
-    if real_pct < 70:
-        print(f"    ⚠ Less than 70% real prices — interpret results with caution")
+    cal_pct  = nse_calibrated / total_src * 100
+    raw_pct  = bs_no_nse / total_src * 100
+    print(f"\n  ► Price provenance:")
+    print(f"      real exchange data:    {real_pct:5.1f}%   (angel / dhan / NSE bhavcopy direct)")
+    print(f"      NSE-calibrated bridge: {cal_pct:5.1f}%   (BS w/ real IV from NSE settle, clamped to NSE day range)")
+    print(f"      BS w/ default IV:      {raw_pct:5.1f}%   (NSE row not reachable — least reliable)")
+    if real_pct + cal_pct < 70:
+        print(f"    ⚠ Less than 70% of rows backed by NSE-real data — interpret cautiously")
+
+    # ── Clamp / IV-source breakdown — surfaces transparency about the bridge ──
+    n_clamped = sum(1 for t in trades if t.clamped)
+    iv_counter = Counter(t.iv_source for t in trades if t.iv_source)
+    print(f"\n  ► Bridge accuracy (NSE day-range clamp + real IV):")
+    print(f"      Rows clamped to NSE day range:  {n_clamped:4d} ({n_clamped/len(trades)*100:.1f}%) "
+          f"— BS estimate was outside actual range, snapped to nearest boundary")
+    for src, cnt in iv_counter.most_common(4):
+        pct = cnt / len(trades) * 100
+        marker = "✓" if src == "nse_settle_calibrated" else ("·" if src == "live" else "⚠")
+        print(f"      {marker} IV {src:<30} {cnt:4d} ({pct:5.1f}%)")
 
 
 def write_csv(trades: list[Trade], path: str):
@@ -511,16 +558,40 @@ def write_html(trades: list[Trade], path: str):
     for t in trades:
         cls = {"TAKEN_WIN":"win", "TAKEN_LOSS":"loss",
                "FILTERED_WIN":"miss", "FILTERED_LOSS":"avoid"}.get(t.bucket, "")
+        # NSE day-range chip — lets user verify entry/exit are within day's
+        # actual traded range without leaving the report
+        nse_range_html = ""
+        if t.nse_day_low is not None and t.nse_day_high is not None and t.nse_day_low > 0:
+            in_range = t.nse_day_low <= t.opt_entry <= t.nse_day_high
+            color = "#1ea54d" if in_range else "#c47900"
+            nse_range_html = (f"<span style='font-size:10px; color:{color}; font-family:monospace'>"
+                              f"NSE day: ₹{t.nse_day_low:.1f}-₹{t.nse_day_high:.1f}"
+                              f" · settle ₹{t.nse_day_settle:.1f}</span>")
+        clamp_badge = ""
+        if t.clamped:
+            clamp_badge = (f"<span class='chip clamp' title='BS estimate was outside NSE day "
+                           f"range and was clamped. Raw BS: ₹{t.bs_raw}. "
+                           f"Verify against your broker chart.'>CLAMPED</span>")
+        iv_html = ""
+        if t.iv_used is not None:
+            iv_pct = t.iv_used * 100 if t.iv_used < 5 else t.iv_used
+            iv_color = "#1ea54d" if t.iv_source == "nse_settle_calibrated" else "#999"
+            iv_html = (f"<span style='font-size:10px; color:{iv_color}; font-family:monospace'>"
+                       f"IV {iv_pct:.1f}% ({t.iv_source})</span>")
         rows_html.append(
             f"<tr class='{cls}'>"
-            f"<td>{t.date}</td><td>{t.time}</td><td>{t.instrument}</td>"
+            f"<td>{t.date}<br><span style='color:#888; font-size:10px'>{t.time}</span></td>"
+            f"<td>{t.instrument}</td>"
             f"<td class='{'long' if t.direction=='LONG' else 'short'}'>{t.direction}</td>"
             f"<td>{t.score}/4</td><td>{t.strike}{t.opt_type}</td>"
-            f"<td>{t.expiry}</td><td>₹{t.opt_entry:.1f}</td><td>₹{t.opt_exit:.1f}</td>"
+            f"<td>{t.expiry}</td>"
+            f"<td>₹{t.opt_entry:.1f}{clamp_badge}<br>{nse_range_html}</td>"
+            f"<td>₹{t.opt_exit:.1f}</td>"
             f"<td>{t.exit_reason}</td>"
             f"<td class='{'pos' if t.net_pnl>=0 else 'neg'}'>₹{t.net_pnl:+,.0f}</td>"
             f"<td><span class='chip {cls}'>{t.bucket}</span></td>"
-            f"<td>{t.filter_reason}</td><td style='font-size:10px'>{t.price_source}</td>"
+            f"<td>{t.filter_reason}<br>{iv_html}</td>"
+            f"<td style='font-size:10px'>{t.price_source}</td>"
             f"</tr>"
         )
 
@@ -545,18 +616,31 @@ def write_html(trades: list[Trade], path: str):
   .chip.loss  {{ background: #c0392b20; color: #c0392b; }}
   .chip.miss  {{ background: #ffaf0030; color: #c47900; }}
   .chip.avoid {{ background: #00000010; color: #666; }}
+  .chip.clamp {{ background: #c47900; color: #fff; margin-left: 4px;
+                 padding: 1px 5px; font-size: 9px; border-radius: 2px; }}
   .summary {{ background: #fff; padding: 16px; border-radius: 6px; margin: 16px 0; box-shadow: 0 1px 3px rgba(0,0,0,0.06); }}
+  .legend {{ font-size: 11px; color: #666; padding: 10px 16px; background: #fff;
+             border-radius: 6px; margin: 8px 0 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.06); }}
+  .legend strong {{ color: #c47900; }}
 </style>
 </head>
 <body>
 <h1>📈 Backtest v2 — Per-Trade Journal</h1>
 <p style="color:#666">Generated {datetime.now(IST).strftime('%Y-%m-%d %H:%M:%S IST')} · {len(trades)} signals · v2.1 strategy + regime filter</p>
+<div class="legend">
+  <strong>How to read this journal:</strong>
+  Every option-entry row shows the NSE day range and IV source.
+  Rows tagged <span class="chip clamp">CLAMPED</span> mean the Black-Scholes estimate fell outside
+  NSE's published day-low/day-high — the value was clamped to the nearest real boundary.
+  IV labelled <span style="color:#1ea54d; font-family:monospace">nse_settle_calibrated</span> means we back-solved real IV from NSE's settle price.
+  IV labelled <span style="color:#999; font-family:monospace">default_0.18</span> means NSE data wasn't reachable for that contract.
+</div>
 <div class="summary">{img_html}</div>
 <table>
 <thead><tr>
-  <th>Date</th><th>Time</th><th>Inst</th><th>Dir</th><th>Score</th>
-  <th>Option</th><th>Expiry</th><th>Entry</th><th>Exit</th><th>Reason</th>
-  <th>Net P&amp;L</th><th>Bucket</th><th>Filter</th><th>Source</th>
+  <th>Date / Time</th><th>Inst</th><th>Dir</th><th>Score</th>
+  <th>Option</th><th>Expiry</th><th>Entry (NSE day range)</th><th>Exit</th><th>Reason</th>
+  <th>Net P&amp;L</th><th>Bucket</th><th>Filter / IV</th><th>Source</th>
 </tr></thead>
 <tbody>{''.join(rows_html)}</tbody>
 </table>
