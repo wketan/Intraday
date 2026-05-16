@@ -571,6 +571,426 @@
       .tweaks { width: calc(100% - 40px); left: 20px; right: 20px; }
       .position-monitor { width: calc(100% - 40px); left: 20px; right: 20px; }
     }
+
+    /* ═══════════════════════════════════════════════════════════════════
+       ▼  PORTED DESIGN (preview.html → real engine)
+       Sidebar shell · topbar · hero row · pills · LIVE HERO · drawer · modal
+       ═══════════════════════════════════════════════════════════════════ */
+
+    .app-shell {
+      display: grid; grid-template-columns: 240px 1fr;
+      min-height: 100vh; width: 100%;
+      position: relative; z-index: 1;
+    }
+    @media (max-width: 900px) { .app-shell { grid-template-columns: 1fr; } .sidebar { display:none; } }
+
+    /* ── sidebar ─────────────────────────────────────────────────────── */
+    .sidebar {
+      padding: 18px 14px 16px;
+      display: flex; flex-direction: column;
+      border-right: 1px solid var(--line-0);
+    }
+    .sidebar .brand { padding: 4px 6px; margin-bottom: 24px; }
+    .nav-sec {
+      font-family: var(--mono); font-size: 9.5px; font-weight: 500;
+      text-transform: uppercase; letter-spacing: 0.14em;
+      color: var(--ink-3); padding: 12px 10px 6px;
+    }
+    .nav-item {
+      display: flex; align-items: center; gap: 11px;
+      padding: 9px 11px; margin-bottom: 2px;
+      border-radius: 10px; cursor: pointer;
+      color: var(--ink-1); font-size: 13px; font-weight: 500;
+      position: relative; background: transparent; border: 0;
+      width: 100%; text-align: left;
+      transition: color 0.15s, background 0.15s;
+    }
+    .nav-item:hover { color: var(--ink-0); background: var(--line-0); }
+    .nav-item.on {
+      color: var(--ink-0);
+      background: linear-gradient(95deg, var(--accent-dim) 0%, transparent 80%);
+    }
+    .nav-item.on::before {
+      content:''; position:absolute; left:0; top:8px; bottom:8px;
+      width: 2.5px; border-radius: 4px;
+      background: linear-gradient(180deg, var(--accent), var(--accent-2));
+      box-shadow: 0 0 8px var(--accent);
+    }
+    .nav-item .ico { width: 16px; height: 16px; flex-shrink: 0; display:inline-flex; }
+    .nav-item .ico svg { width:100%; height:100%; stroke: currentColor; fill: none; stroke-width: 1.7; opacity: 0.85; }
+    .nav-item .nav-badge {
+      margin-left: auto; font-family: var(--mono); font-size: 10px;
+      padding: 2px 8px; border-radius: 999px;
+      border: 1px solid var(--line-1); color: var(--ink-2);
+      background: oklch(0 0 0 / 0.20);
+    }
+    .nav-item .nav-badge.live {
+      color: oklch(0.78 0.20 22);
+      border-color: oklch(0.78 0.20 22 / 0.35);
+      background: oklch(0.78 0.20 22 / 0.16);
+      display: inline-flex; align-items: center; gap: 6px; font-weight: 700;
+    }
+    .nav-item .nav-badge .nav-dot {
+      width: 6px; height: 6px; border-radius: 50%;
+      background: oklch(0.78 0.20 22);
+      box-shadow: 0 0 6px oklch(0.78 0.20 22);
+      animation: nav-pulse 1.6s ease-in-out infinite;
+    }
+    @keyframes nav-pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50%      { opacity: 0.5; transform: scale(1.35); }
+    }
+    .help-widget {
+      margin-top: auto; position: relative; overflow: hidden;
+      background: linear-gradient(140deg, oklch(0.70 0.13 280 / 0.24), oklch(0.55 0.16 320 / 0.12));
+      border: 1px solid oklch(0.70 0.13 280 / 0.32);
+      border-radius: 14px; padding: 14px; text-align: center;
+    }
+    .help-widget h4 { margin: 0 0 4px; font-size: 13.5px; font-weight: 600; letter-spacing: -0.012em; }
+    .help-widget p { margin: 0 0 10px; font-size: 11px; color: var(--ink-2); line-height: 1.4; }
+    .help-widget button {
+      background: linear-gradient(95deg, var(--accent), var(--accent-2));
+      color: var(--accent-ink); border: 0; border-radius: 8px;
+      padding: 7px 14px; font-weight: 600; font-size: 11.5px; cursor: pointer;
+      box-shadow: 0 6px 18px oklch(0.55 0.18 290 / 0.45);
+    }
+
+    /* ── topbar ──────────────────────────────────────────────────────── */
+    .main-col { min-width: 0; padding: 18px 22px 40px; display: flex; flex-direction: column; }
+    .topbar { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
+    .topbar .grow { flex: 1; }
+    .iconbtn-glass {
+      width: 38px; height: 38px;
+      background: var(--glass-bg); border: 1px solid var(--glass-border);
+      backdrop-filter: blur(30px) saturate(180%);
+      border-radius: 11px; color: var(--ink-1); cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      position: relative; transition: color 0.15s, transform 0.15s;
+      box-shadow: var(--glass-shadow);
+    }
+    .iconbtn-glass:hover { color: var(--ink-0); transform: translateY(-1px); }
+    .iconbtn-glass svg { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 1.7; }
+    .theme-toggle {
+      position: relative; width: 64px; height: 32px;
+      background: var(--glass-bg); border: 1px solid var(--glass-border);
+      border-radius: 999px; cursor: pointer; backdrop-filter: blur(20px);
+      overflow: hidden; box-shadow: var(--glass-shadow);
+    }
+    .theme-toggle .thumb {
+      position: absolute; top: 3px; left: 3px;
+      width: 24px; height: 24px; border-radius: 50%;
+      background: linear-gradient(140deg, var(--accent), var(--accent-2));
+      box-shadow: 0 2px 8px oklch(0 0 0 / 0.40), inset 0 1px 0 oklch(1 0 0 / 0.30);
+      transition: left 0.35s cubic-bezier(0.65, 0, 0.35, 1);
+      z-index: 2;
+    }
+    [data-theme="light"] .theme-toggle .thumb { left: 35px; background: linear-gradient(140deg, oklch(0.95 0.05 80), oklch(0.80 0.12 60)); }
+    .theme-toggle svg { position: absolute; top: 50%; transform: translateY(-50%); width: 14px; height: 14px; stroke: var(--ink-2); fill: none; stroke-width: 2; transition: opacity 0.3s; }
+    .theme-toggle .ico-sun  { left: 9px; }
+    .theme-toggle .ico-moon { right: 9px; }
+    [data-theme="dark"]  .theme-toggle .ico-sun  { opacity: 0.40; }
+    [data-theme="dark"]  .theme-toggle .ico-moon { opacity: 1; color: var(--ink-0); }
+    [data-theme="light"] .theme-toggle .ico-sun  { opacity: 1; color: var(--accent); }
+    [data-theme="light"] .theme-toggle .ico-moon { opacity: 0.40; }
+    .userchip {
+      display: flex; align-items: center; gap: 11px;
+      padding: 5px 14px 5px 5px;
+      background: var(--glass-bg); border: 1px solid var(--glass-border);
+      backdrop-filter: blur(30px) saturate(180%);
+      border-radius: 999px; cursor: pointer;
+      box-shadow: var(--glass-shadow);
+      font-family: inherit; color: inherit;
+      transition: transform 0.15s, border-color 0.15s;
+    }
+    .userchip:hover { transform: translateY(-1px); border-color: var(--glass-border-hi); }
+    .userchip .avatar {
+      width: 30px; height: 30px; border-radius: 50%;
+      background: linear-gradient(140deg, var(--accent), var(--accent-2));
+      box-shadow: 0 0 0 2px var(--bg-0);
+    }
+    .userchip .name { font-size: 12.5px; font-weight: 600; color: var(--ink-0); letter-spacing: -0.01em; text-align: left; }
+    .userchip .cap  { font-size: 10px; color: var(--ink-2); margin-top: 1px; font-family: var(--mono); text-align: left; }
+
+    /* ── glass card ──────────────────────────────────────────────────── */
+    .gcard {
+      background: var(--glass-bg);
+      border: 1px solid var(--glass-border);
+      border-top-color: var(--glass-border-hi);
+      backdrop-filter: blur(40px) saturate(180%);
+      border-radius: 16px;
+      box-shadow: var(--glass-shadow);
+      position: relative; overflow: hidden;
+    }
+    .gcard-hi { background: var(--glass-bg-hi); }
+
+    /* ── live status strip ───────────────────────────────────────────── */
+    .live-strip {
+      display: flex; align-items: center; gap: 12px;
+      padding: 9px 14px; margin-bottom: 10px;
+      background: var(--glass-bg); border: 1px solid var(--glass-border);
+      backdrop-filter: blur(30px) saturate(180%);
+      border-radius: 12px; box-shadow: var(--glass-shadow);
+    }
+    .live-strip .ldot {
+      width: 9px; height: 9px; border-radius: 50%;
+      background: var(--long); box-shadow: 0 0 12px var(--long);
+      animation: nav-pulse 1.6s ease-in-out infinite;
+    }
+    .live-strip.off .ldot { background: var(--ink-3); box-shadow: none; animation: none; }
+    .live-strip.off { opacity: 0.92; }
+    .live-strip .ltitle { font-size: 13.5px; font-weight: 600; color: var(--ink-0); letter-spacing: -0.005em; }
+    .live-strip .lsub { font-family: var(--mono); font-size: 10.5px; color: var(--ink-2); margin-top: 1px; letter-spacing: 0.02em; }
+
+    /* ── engine toggle (inside live strip) ─────────────────────────── */
+    .engine-toggle {
+      display: inline-flex; align-items: center; gap: 12px; margin-left: auto;
+      padding: 5px 6px 5px 12px;
+      background: var(--glass-bg); border: 1px solid var(--glass-border);
+      border-radius: 999px; cursor: pointer; font-family: inherit;
+      transition: border-color 0.2s, transform 0.15s;
+    }
+    .engine-toggle:hover { transform: translateY(-1px); border-color: var(--glass-border-hi); }
+    .engine-toggle .et-info { display:flex; flex-direction:column; align-items:flex-end; line-height:1.1; }
+    .engine-toggle .et-label {
+      font-family: var(--mono); font-size: 10.5px; font-weight: 700; letter-spacing: 0.12em;
+    }
+    .engine-toggle.on  .et-label { color: var(--long); }
+    .engine-toggle.off .et-label { color: var(--ink-2); }
+    .engine-toggle .et-sub {
+      font-family: var(--mono); font-size: 9px;
+      color: var(--ink-3); margin-top: 1px; letter-spacing: 0.04em;
+    }
+    .engine-toggle .et-switch {
+      width: 32px; height: 18px; border-radius: 999px;
+      background: var(--line-2); position: relative; flex-shrink: 0;
+      transition: background 0.3s, box-shadow 0.3s;
+    }
+    .engine-toggle .et-switch::after {
+      content:''; position:absolute; width: 12px; height: 12px;
+      top: 3px; left: 3px; border-radius: 50%;
+      background: oklch(1 0 0 / 0.95);
+      box-shadow: 0 1px 3px oklch(0 0 0 / 0.35);
+      transition: left 0.32s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    .engine-toggle.on .et-switch {
+      background: var(--long);
+      box-shadow: 0 0 0 3px var(--long-dim), 0 0 12px var(--win-glow);
+    }
+    .engine-toggle.on .et-switch::after { left: 17px; }
+
+    /* ── hero row ────────────────────────────────────────────────────── */
+    .hero-row {
+      display: grid; grid-template-columns: 1.35fr 1.7fr 0.95fr;
+      gap: 10px; margin-bottom: 10px;
+    }
+    @media (max-width: 1100px) { .hero-row { grid-template-columns: 1fr; } }
+    .hero-pnl-card { padding: 16px 18px; position: relative; overflow: hidden; }
+    .hero-pnl-card::before {
+      content:''; position:absolute; top:-40%; right:-10%; width:60%; height:200%;
+      background: radial-gradient(circle, var(--win-glow), transparent 60%);
+      pointer-events: none; filter: blur(30px);
+    }
+    .h-eb { font-family: var(--mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.14em; color: var(--ink-3); margin-bottom: 6px; position: relative; }
+    .h-big {
+      font-weight: 700; font-size: 38px; line-height: 1; letter-spacing: -0.04em;
+      font-variant-numeric: tabular-nums; margin-bottom: 6px; position: relative;
+    }
+    .h-big.win  { color: var(--long); text-shadow: 0 0 32px var(--win-glow); }
+    .h-big.loss { color: var(--short); text-shadow: 0 0 32px var(--loss-glow); }
+    .h-big .currency { font-size: inherit; opacity: 1; font-weight: inherit; }
+    .h-foot { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--ink-2); position: relative; }
+    .pct-pill {
+      display: inline-flex; align-items: center; gap: 4px;
+      padding: 3px 9px; border-radius: 999px;
+      font-family: var(--mono); font-size: 11px; font-weight: 600;
+    }
+    .pct-pill.win  { background: var(--long-dim);  color: var(--long); }
+    .pct-pill.loss { background: var(--short-dim); color: var(--short); }
+
+    /* gauge */
+    .hero-gauge { padding: 14px 18px; display:flex; align-items:center; gap:16px; }
+    .gauge-wrap { position: relative; width: 140px; height: 140px; flex-shrink: 0; }
+    .gauge-svg { width: 100%; height: 100%; filter: drop-shadow(0 0 18px var(--win-glow)); }
+    .gauge-track { fill:none; stroke: var(--line-1); stroke-width: 11; }
+    .gauge-progress { fill:none; stroke-width: 11; stroke-linecap: round; transform: rotate(-90deg); transform-origin: center; }
+    .gauge-overlay {
+      position: absolute; inset: 0; display:flex; flex-direction:column;
+      align-items: center; justify-content: center; pointer-events: none;
+    }
+    .gauge-num {
+      font-weight: 700; font-size: 28px; line-height: 1; letter-spacing: -0.04em;
+      color: var(--ink-0); font-variant-numeric: tabular-nums;
+    }
+    .gauge-num .pct { font-size: 14px; color: var(--ink-2); margin-left: 1px; vertical-align: 5px; font-weight: 600; }
+    .gauge-lbl { font-family: var(--mono); font-size: 9px; text-transform: uppercase; letter-spacing: 0.14em; color: var(--ink-3); margin-top: 4px; }
+    .gauge-stats { flex: 1; min-width: 0; }
+    .gauge-row { display:flex; justify-content:space-between; align-items:baseline; padding: 5px 0; border-bottom: 1px dashed var(--line-0); }
+    .gauge-row:last-child { border-bottom: 0; }
+    .gauge-rl { font-size: 11px; color: var(--ink-2); }
+    .gauge-rv { font-family: var(--mono); font-weight: 600; font-size: 12.5px; color: var(--ink-0); }
+    .gauge-rv.win  { color: var(--long); }
+    .gauge-rv.loss { color: var(--short); }
+    .gauge-rv.warn { color: var(--warn); }
+
+    /* streak */
+    .hero-streak {
+      padding: 14px 16px; position: relative; overflow: hidden;
+      background: linear-gradient(140deg, var(--long-dim), transparent 70%), var(--glass-bg);
+    }
+    .streak-big {
+      font-weight: 700; font-size: 44px; line-height: 0.9; letter-spacing: -0.04em;
+      color: var(--long); text-shadow: 0 0 22px var(--win-glow);
+      font-variant-numeric: tabular-nums;
+    }
+    .streak-big span { font-size: 16px; opacity: 0.6; margin-left: 3px; vertical-align: 10px; font-weight: 600; }
+    .streak-dots { display: flex; gap: 5px; margin-top: 10px; }
+    .streak-dot { flex: 1; height: 4px; border-radius: 999px; background: var(--line-1); }
+    .streak-dot.win  { background: var(--long);  box-shadow: 0 0 8px var(--win-glow); }
+    .streak-dot.loss { background: var(--short); box-shadow: 0 0 8px var(--loss-glow); }
+    .streak-foot { margin-top: 8px; font-size: 11px; color: var(--ink-2); font-family: var(--mono); }
+
+    /* ── index pills ─────────────────────────────────────────────────── */
+    .pill-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 10px; }
+    @media (max-width: 800px) { .pill-row { grid-template-columns: 1fr; } }
+    .pill-card { padding: 12px 14px; display: flex; align-items: center; gap: 14px; }
+    .pill-name { font-size: 12px; font-weight: 600; color: var(--ink-2); letter-spacing: 0.02em; text-transform: uppercase; }
+    .pill-price { font-family: var(--mono); font-weight: 600; font-size: 17px; color: var(--ink-0); margin-top: 2px; letter-spacing: -0.02em; }
+    .pill-pill { margin-top: 5px; }
+    .pill-spark { margin-left: auto; width: 80px; height: 34px; flex-shrink: 0; }
+
+    /* ── live HERO card ──────────────────────────────────────────────── */
+    .live-hero {
+      position: relative; margin-bottom: 10px;
+      padding: 14px 16px; border-radius: 14px;
+      background: linear-gradient(120deg, var(--accent-dim) 0%, transparent 70%), var(--glass-bg);
+      border: 1.5px solid var(--accent); overflow: hidden; cursor: pointer;
+      transition: transform 0.2s;
+    }
+    .live-hero:hover { transform: translateY(-1px); }
+    .live-hero::before {
+      content:''; position:absolute; inset:-2px; z-index:-1;
+      border-radius: 14px;
+      background: linear-gradient(140deg, var(--accent), oklch(0.65 0.18 320));
+      opacity: 0.40; filter: blur(12px);
+      animation: lh-pulse 2.4s ease-in-out infinite;
+    }
+    @keyframes lh-pulse { 0%,100%{opacity:0.25} 50%{opacity:0.55} }
+    .lh-status { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; font-family: var(--mono); font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.12em; font-weight: 700; }
+    .lh-pill { display: inline-flex; align-items: center; gap: 6px; padding: 3px 9px; border-radius: 999px; border: 1px solid; font-weight: 700; }
+    .lh-pill.live  { color: oklch(0.78 0.20 22); background: oklch(0.78 0.20 22 / 0.12); border-color: oklch(0.78 0.20 22 / 0.30); }
+    .lh-pill .lh-dot { width: 7px; height: 7px; border-radius: 50%; background: oklch(0.78 0.20 22); box-shadow: 0 0 8px oklch(0.78 0.20 22); animation: nav-pulse 1.3s ease-in-out infinite; }
+    .lh-time { margin-left: auto; color: var(--ink-3); font-weight: 500; letter-spacing: 0.04em; }
+    .lh-main { display:flex; align-items:baseline; justify-content:space-between; gap: 12px; margin-bottom: 8px; }
+    .lh-title { font-size: 16px; font-weight: 700; letter-spacing: -0.018em; color: var(--ink-0); line-height: 1.15; }
+    .lh-sub { font-family: var(--mono); font-size: 10.5px; color: var(--ink-2); margin-top: 2px; letter-spacing: 0.02em; }
+    .lh-pnl { text-align: right; flex-shrink: 0; }
+    .lh-pnl-num {
+      font-size: 22px; font-weight: 700; letter-spacing: -0.035em;
+      color: var(--long); line-height: 1; font-variant-numeric: tabular-nums;
+      text-shadow: 0 0 14px var(--win-glow);
+    }
+    .lh-pnl-pct { font-family: var(--mono); font-size: 10px; font-weight: 600; color: var(--long); margin-top: 2px; }
+    .lh-row {
+      display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+      font-family: var(--mono); font-size: 11.5px; color: var(--ink-2);
+    }
+    .lh-row b { color: var(--ink-0); font-weight: 700; font-variant-numeric: tabular-nums; }
+    .lh-row .sep { color: var(--ink-3); padding: 0 2px; }
+    .lh-row .lvl-inline { display: inline-flex; gap: 5px; align-items: baseline; }
+    .lh-row .lvl-inline .lvl-k { font-size: 9.5px; color: var(--ink-3); letter-spacing: 0.08em; text-transform: uppercase; }
+    .lh-row .lvl-inline.sl b { color: var(--short); }
+    .lh-row .lvl-inline.t1 b, .lh-row .lvl-inline.t2 b, .lh-row .lvl-inline.ltp b { color: var(--long); }
+    .lh-cta {
+      margin-left: auto; padding: 7px 14px; border-radius: 9px;
+      background: linear-gradient(95deg, var(--accent), var(--accent-2));
+      color: var(--accent-ink); border: 0;
+      font-weight: 600; font-size: 11.5px; cursor: pointer;
+      box-shadow: 0 4px 14px oklch(0.55 0.18 290 / 0.35);
+      transition: transform 0.15s;
+    }
+    .lh-cta:hover { transform: translateY(-1px); }
+
+    /* ── view tab fallback (Backtest/Calc/etc placeholders) ────────── */
+    .empty-view {
+      padding: 60px 36px; text-align: center;
+      background: var(--glass-bg); border: 1px solid var(--glass-border);
+      border-radius: 16px; backdrop-filter: blur(40px); box-shadow: var(--glass-shadow);
+    }
+    .empty-view h2 { font-weight: 700; font-size: 26px; margin: 0 0 8px; color: var(--ink-0); letter-spacing: -0.025em; }
+    .empty-view p { font-size: 12.5px; color: var(--ink-2); max-width: 460px; margin: 0 auto; line-height: 1.55; }
+
+    /* ── profile modal ───────────────────────────────────────────────── */
+    .modal-backdrop {
+      position: fixed; inset: 0; z-index: 1000;
+      background: oklch(0 0 0 / 0.55);
+      backdrop-filter: blur(8px);
+      opacity: 0; pointer-events: none;
+      transition: opacity 0.22s ease;
+    }
+    .modal-backdrop.on { opacity: 1; pointer-events: auto; }
+    .modal-card {
+      position: fixed; top: 50%; left: 50%;
+      transform: translate(-50%, -48%) scale(0.96);
+      width: 380px; max-width: calc(100vw - 32px); z-index: 1001;
+      background: linear-gradient(160deg, oklch(0.13 0.014 35 / 0.92), oklch(0.10 0.014 35 / 0.88));
+      backdrop-filter: blur(40px) saturate(180%);
+      border: 1px solid var(--glass-border-hi); border-radius: 18px;
+      padding: 22px 24px 20px; box-shadow: 0 30px 80px oklch(0 0 0 / 0.55);
+      opacity: 0; pointer-events: none;
+      transition: opacity 0.22s ease, transform 0.32s cubic-bezier(0.4,0,0.2,1);
+    }
+    [data-theme="light"] .modal-card { background: linear-gradient(160deg, oklch(1 0 0 / 0.88), oklch(0.99 0.005 70 / 0.82)); }
+    .modal-card.on { opacity: 1; pointer-events: auto; transform: translate(-50%, -50%) scale(1); }
+    .modal-eb { font-family: var(--mono); font-size: 9.5px; font-weight: 600; color: var(--ink-3); letter-spacing: 0.14em; text-transform: uppercase; margin-bottom: 6px; }
+    .modal-tt { font-size: 19px; font-weight: 700; letter-spacing: -0.022em; color: var(--ink-0); margin-bottom: 4px; }
+    .modal-desc { font-size: 12px; color: var(--ink-2); margin-bottom: 18px; line-height: 1.5; }
+    .modal-label { display: block; font-family: var(--mono); font-size: 9.5px; font-weight: 600; color: var(--ink-3); letter-spacing: 0.14em; text-transform: uppercase; margin-bottom: 6px; }
+    .modal-input-wrap {
+      display: flex; align-items: center;
+      background: oklch(0 0 0 / 0.30);
+      border: 1px solid var(--line-2); border-radius: 11px;
+      padding: 0 14px 0 16px; margin-bottom: 14px;
+      transition: border-color 0.15s, box-shadow 0.15s;
+    }
+    [data-theme="light"] .modal-input-wrap { background: oklch(1 0 0 / 0.60); }
+    .modal-input-wrap:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-dim); }
+    .modal-input-wrap .pre { font-size: 20px; font-weight: 600; color: var(--ink-2); margin-right: 2px; }
+    .modal-input {
+      flex: 1; background: transparent; border: 0; outline: 0; color: var(--ink-0);
+      font-family: var(--ui); font-size: 20px; font-weight: 700; letter-spacing: -0.022em;
+      font-variant-numeric: tabular-nums; padding: 12px 0; min-width: 0;
+    }
+    .modal-input.small { font-size: 16px; font-weight: 500; padding: 11px 0; letter-spacing: -0.005em; }
+    .modal-input::-webkit-outer-spin-button,
+    .modal-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+    .modal-quick { display: flex; gap: 6px; margin-top: 4px; margin-bottom: 14px; flex-wrap: wrap; }
+    .modal-quick button {
+      padding: 6px 12px; border-radius: 7px;
+      background: var(--glass-bg); border: 1px solid var(--glass-border);
+      color: var(--ink-1); cursor: pointer;
+      font-family: var(--mono); font-size: 11px; font-weight: 600;
+      transition: all 0.15s;
+    }
+    .modal-quick button:hover { color: var(--ink-0); border-color: var(--accent); background: var(--accent-dim); }
+    .modal-actions { display: flex; gap: 8px; }
+    .btn-prim, .btn-ghost-mod {
+      flex: 1; padding: 11px 14px; border-radius: 10px;
+      font-weight: 600; font-size: 12.5px; cursor: pointer;
+      font-family: var(--ui); letter-spacing: -0.005em;
+      transition: transform 0.15s, background 0.15s;
+    }
+    .btn-prim {
+      background: linear-gradient(95deg, var(--accent), var(--accent-2));
+      color: var(--accent-ink); border: 0;
+      box-shadow: 0 6px 18px oklch(0.55 0.18 290 / 0.40);
+    }
+    .btn-prim:hover { transform: translateY(-1px); }
+    .btn-ghost-mod {
+      background: var(--glass-bg); border: 1px solid var(--glass-border); color: var(--ink-1);
+    }
+
+    /* hide the old tab bar inside the new shell — sidebar replaces it */
+    .app-shell .tabs { display: none !important; }
   </style>
 </head>
 <body>
@@ -2931,13 +3351,387 @@ function SwingTab({ data, getServer, getAuthToken, showToast }) {
   );
 }
 
-function App() {
+    // ═══════════════════════════════════════════════════════════════════
+    // ▼  NEW SHELL COMPONENTS (ported from preview.html)
+    // ═══════════════════════════════════════════════════════════════════
+
+    function NewSidebar({ tab, mode, setTab, setMode, signals, onSettings }) {
+      const liveCount = (signals || []).filter(s => s && (s.status === 'LIVE' || s.status === 'READY')).length;
+      const journalCount = (signals || []).length;
+      const items = [
+        { id:'signals-live',   label:'Live signals', tab:'signals', mode:'live',
+          ico: <svg viewBox="0 0 24 24"><path d="M3 12h4l3-9 4 18 3-9h4"/></svg>,
+          badge: liveCount > 0 ? <span className="nav-badge live"><span className="nav-dot"></span>{liveCount}</span> : null,
+        },
+        { id:'signals-back',   label:'Backtest',     tab:'signals', mode:'replay',
+          ico: <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M9 4v16"/></svg>,
+        },
+        { id:'journal',  label:'Journal', tab:'journal',
+          ico: <svg viewBox="0 0 24 24"><path d="M4 4h12a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H4z"/><path d="M4 4v18M8 8h8M8 12h8M8 16h6"/></svg>,
+          badge: journalCount ? <span className="nav-badge">{journalCount}</span> : null,
+        },
+        { id:'stats',    label:'Stats', tab:'stats',
+          ico: <svg viewBox="0 0 24 24"><path d="M3 21V8M9 21V3M15 21v-9M21 21v-6"/></svg>,
+        },
+        { id:'calc',     label:'Calculator', tab:'calc',
+          ico: <svg viewBox="0 0 24 24"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M8 7h8M8 11h.01M12 11h.01M16 11h.01M8 15h.01M12 15h.01M16 15h.01M8 19h8"/></svg>,
+        },
+        { id:'log',      label:'Audit logs', tab:'log',
+          ico: <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M9 13h6M9 17h4"/></svg>,
+        },
+        { id:'settings', label:'Settings', settings: true,
+          ico: <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09a1.65 1.65 0 0 0-1.08-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1.08 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>,
+        },
+      ];
+      const trading = items.slice(0, 4);
+      const tools   = items.slice(4, 6);
+      const system  = items.slice(6);
+      function isActive(it) {
+        if (it.settings) return false;
+        if (it.tab === 'signals') return tab === 'signals' && (mode || 'live') === it.mode;
+        return tab === it.tab;
+      }
+      function activate(it) {
+        if (it.settings) { onSettings(); return; }
+        if (it.tab === 'signals') { setTab('signals'); setMode(it.mode); }
+        else setTab(it.tab);
+      }
+      function renderGroup(group, label) {
+        return (
+          <>
+            <div className="nav-sec">{label}</div>
+            {group.map(it => (
+              <button key={it.id} type="button" className={`nav-item ${isActive(it)?'on':''}`} onClick={() => activate(it)}>
+                <span className="ico">{it.ico}</span>
+                <span>{it.label}</span>
+                {it.badge}
+              </button>
+            ))}
+          </>
+        );
+      }
+      return (
+        <aside className="sidebar">
+          <div className="brand">
+            <div className="mark" aria-hidden="true">
+              <svg viewBox="0 0 32 32">
+                <g className="bm-rings" fill="none" stroke="oklch(1 0 0 / 0.85)">
+                  <circle cx="16" cy="17" r="13" strokeWidth="0.30"/>
+                  <circle cx="16" cy="17" r="9"  strokeWidth="0.30"/>
+                  <circle cx="16" cy="17" r="5"  strokeWidth="0.30"/>
+                </g>
+                <rect className="bm-bar b1" x="7.5"  y="22" width="3.5" height="5"  rx="0.6"/>
+                <rect className="bm-bar b2" x="12"   y="18" width="3.5" height="9"  rx="0.6"/>
+                <rect className="bm-bar b3" x="16.5" y="14" width="3.5" height="13" rx="0.6"/>
+                <rect className="bm-bar b4" x="21"   y="8"  width="3.5" height="19" rx="0.6"/>
+                <path className="bm-curve" d="M5 24 C 11 23, 17 14, 26 5" fill="none" stroke="oklch(1 0 0 / 0.95)" strokeWidth="1" strokeLinecap="round"/>
+                <path className="bm-arrow" d="M22 5 L26.2 4.4 L25.6 8.6" fill="none" stroke="oklch(1 0 0 / 0.95)" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            </div>
+            <div className="name">
+              <span>Intraday Engine</span>
+              <span className="sub">v2 · live</span>
+            </div>
+          </div>
+          {renderGroup(trading, 'Trading')}
+          {renderGroup(tools, 'Tools')}
+          {renderGroup(system, 'System')}
+          <div className="help-widget">
+            <h4>Need help?</h4>
+            <p>Strategy docs, alerts setup, brokerage costs.</p>
+            <button type="button">Open docs</button>
+          </div>
+        </aside>
+      );
+    }
+
+    function NewTopbar({ theme, setTheme, userName, capital, onProfileClick, onTweaks }) {
+      const capShort = (() => {
+        const n = Number(capital) || 50000;
+        if (n >= 100000) return '₹' + (n / 100000).toFixed(n % 100000 === 0 ? 0 : 1) + 'L cap';
+        if (n >= 1000)   return '₹' + (n / 1000).toFixed(n % 1000 === 0 ? 0 : 1) + 'K cap';
+        return '₹' + n + ' cap';
+      })();
+      return (
+        <div className="topbar">
+          <span className="grow"/>
+          <button type="button" className="theme-toggle" onClick={() => setTheme(theme==='dark'?'light':'dark')} aria-label="toggle theme">
+            <svg className="ico-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
+            <svg className="ico-moon" viewBox="0 0 24 24"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+            <span className="thumb"/>
+          </button>
+          <div className="iconbtn-glass" onClick={onTweaks} title="settings">
+            <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09a1.65 1.65 0 0 0-1.08-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1.08 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+          </div>
+          <button type="button" className="userchip" onClick={onProfileClick}>
+            <div className="avatar"></div>
+            <div>
+              <div className="name">{userName || 'You'}</div>
+              <div className="cap">{capShort}</div>
+            </div>
+          </button>
+        </div>
+      );
+    }
+
+    function LiveStripBar({ on, mode, doStart, doStop, replayDays, speed, setSpeed, setReplayDays }) {
+      const istTime = (() => {
+        const d = new Date();
+        const utc = d.getUTCHours() * 60 + d.getUTCMinutes();
+        const ist = (utc + 330) % 1440;
+        const h = Math.floor(ist / 60), m = ist % 60;
+        const h12 = ((h + 11) % 12) + 1;
+        return `${String(h12).padStart(2,'0')}:${String(m).padStart(2,'0')} ${h < 12 ? 'am' : 'pm'}`;
+      })();
+      const isAutoActive = (() => {
+        const d = new Date();
+        const ist = ((d.getUTCHours() * 60 + d.getUTCMinutes()) + 330) % 1440;
+        return ist >= (8*60+45) && ist < (17*60);
+      })();
+      return (
+        <div className={`live-strip ${on ? '' : 'off'}`}>
+          <div className="ldot"></div>
+          <div>
+            <div className="ltitle">{on ? (mode==='replay' ? 'Backtest replay running' : 'AI engine live · scanning price action') : 'Engine paused'}</div>
+            <div className="lsub">
+              {mode === 'replay'
+                ? `${replayDays || 5}d window · ${speed||1}x speed · IST ${istTime}`
+                : `v2 · OHLC + RSI + EMA + VWAP + level breaks · IST ${istTime}`}
+            </div>
+          </div>
+          {mode === 'replay' && !on && (
+            <div style={{display:'flex',alignItems:'center',gap:6,fontSize:11.5,color:'var(--ink-2)'}}>
+              <span>Days</span>
+              <DaysInput value={replayDays} onCommit={setReplayDays} />
+              <div className="seg">
+                {[1,2,4].map(x => (
+                  <button type="button" key={x} className={speed===x?'on':''} onClick={()=>setSpeed(x)}>{x}x</button>
+                ))}
+              </div>
+            </div>
+          )}
+          <button type="button" className={`engine-toggle ${on ? 'on' : 'off'}`} onClick={on ? doStop : doStart}>
+            <span className="et-info">
+              <span className="et-label">{on ? 'LIVE' : 'OFF'}</span>
+              <span className="et-sub">{on ? 'tap to stop' : (isAutoActive ? 'tap to start' : 'auto-on 08:45 IST')}</span>
+            </span>
+            <span className="et-switch" aria-hidden="true"/>
+          </button>
+        </div>
+      );
+    }
+
+    function HeroRow({ trades, signals, capital }) {
+      const closed = (trades || []).filter(t => t && t.status && t.status !== 'OPEN');
+      const pnl = closed.reduce((a, b) => a + (Number(b.pnl) || 0), 0);
+      const wins   = closed.filter(t => t.status === 'WIN').length;
+      const losses = closed.filter(t => t.status === 'LOSS' || t.status === 'SL').length;
+      const winRate = closed.length ? Math.round((wins / closed.length) * 100) : 0;
+      const pnlPct = capital ? ((pnl / capital) * 100) : 0;
+      const recent = [...closed].slice(-5).reverse();
+      let streak = 0;
+      for (const t of recent) { if (t.status === 'WIN') streak++; else break; }
+      const dots = recent.length ? recent.slice(0, 5).reverse() : [];
+      const C = 2 * Math.PI * 42; // gauge circumference
+      const offset = C * (1 - winRate / 100);
+      const pnlClass = pnl >= 0 ? 'win' : 'loss';
+      const pnlSign = pnl >= 0 ? '+' : '−';
+      return (
+        <div className="hero-row">
+          <div className="gcard gcard-hi hero-pnl-card">
+            <div className="h-eb">Today's P&amp;L</div>
+            <div className={`h-big ${pnlClass}`}>
+              <span className="currency">₹</span>{pnlSign}{Math.abs(Math.round(pnl)).toLocaleString('en-IN')}
+            </div>
+            <div className="h-foot">
+              <span className={`pct-pill ${pnlClass}`}>{pnl>=0?'▲ +':'▼ −'}{Math.abs(pnlPct).toFixed(2)}%</span>
+              <span>{closed.length} closed · {(signals||[]).length} signals</span>
+            </div>
+          </div>
+          <div className="gcard hero-gauge">
+            <div className="gauge-wrap">
+              <svg className="gauge-svg" viewBox="0 0 100 100">
+                <defs>
+                  <linearGradient id="gw" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <stop offset="0%"   stopColor="oklch(0.86 0.13 152)"/>
+                    <stop offset="100%" stopColor="oklch(0.78 0.13 120)"/>
+                  </linearGradient>
+                </defs>
+                <circle cx="50" cy="50" r="42" className="gauge-track"/>
+                <circle cx="50" cy="50" r="42" className="gauge-progress"
+                        stroke="url(#gw)"
+                        strokeDasharray={C.toFixed(1)}
+                        strokeDashoffset={offset.toFixed(1)}/>
+              </svg>
+              <div className="gauge-overlay">
+                <div className="gauge-num">{winRate}<span className="pct">%</span></div>
+                <div className="gauge-lbl">win rate</div>
+              </div>
+            </div>
+            <div className="gauge-stats">
+              <div className="gauge-row"><span className="gauge-rl">Wins</span><span className="gauge-rv win">{wins}</span></div>
+              <div className="gauge-row"><span className="gauge-rl">Losses</span><span className="gauge-rv loss">{losses}</span></div>
+              <div className="gauge-row"><span className="gauge-rl">Closed</span><span className="gauge-rv">{closed.length}</span></div>
+              <div className="gauge-row"><span className="gauge-rl">Signals</span><span className="gauge-rv">{(signals||[]).length}</span></div>
+            </div>
+          </div>
+          <div className="gcard hero-streak">
+            <div className="h-eb">Current streak</div>
+            <div className="streak-big">{streak}<span>W</span></div>
+            <div className="streak-dots">
+              {dots.length === 0 && [0,1,2,3,4].map(i => <div key={i} className="streak-dot"/>)}
+              {dots.map((t, i) => <div key={i} className={`streak-dot ${t.status==='WIN'?'win':'loss'}`}/>)}
+            </div>
+            <div className="streak-foot">{closed.length} trades total</div>
+          </div>
+        </div>
+      );
+    }
+
+    function IndexPills({ live }) {
+      const order = [
+        { key: 'NIFTY',     label: 'NIFTY 50' },
+        { key: 'BANKNIFTY', label: 'BANK NIFTY' },
+        { key: 'FINNIFTY',  label: 'FIN NIFTY' },
+      ];
+      const lv = live || {};
+      return (
+        <div className="pill-row">
+          {order.map(o => {
+            const d = lv[o.key] || {};
+            const ltp = d.ltp ?? d.price ?? null;
+            const chg = d.pct ?? d.change ?? null;
+            const isUp = chg == null ? null : chg >= 0;
+            return (
+              <div key={o.key} className="gcard pill-card">
+                <div>
+                  <div className="pill-name">{o.label}</div>
+                  <div className="pill-price">{ltp != null ? Number(ltp).toLocaleString('en-IN', {minimumFractionDigits:2, maximumFractionDigits:2}) : '—'}</div>
+                  <div className="pill-pill">
+                    {chg != null
+                      ? <span className={`pct-pill ${isUp?'win':'loss'}`}>{isUp?'▲ +':'▼ −'}{Math.abs(chg).toFixed(2)}%</span>
+                      : <span className="pct-pill" style={{color:'var(--ink-3)',background:'var(--line-0)'}}>—</span>}
+                  </div>
+                </div>
+                <svg className="pill-spark" viewBox="0 0 90 40" preserveAspectRatio="none">
+                  <polyline points={isUp===false?"0,10 12,12 24,8 36,16 48,18 60,22 72,24 90,30":"0,28 12,24 24,26 36,18 48,16 60,18 72,9 90,4"}
+                            fill="none" stroke={isUp===false?'oklch(0.76 0.14 22)':'oklch(0.86 0.13 152)'} strokeWidth="2"/>
+                </svg>
+              </div>
+            );
+          })}
+        </div>
+      );
+    }
+
+    function LiveHeroCard({ signal, live, capital, onOpen }) {
+      if (!signal) return null;
+      const instLive = (live || {})[signal.inst] || {};
+      const entry = Number(signal.entry || 0);
+      const sl = Number(signal.sl || 0);
+      const t1 = Number(signal.target1 || 0);
+      const t2 = Number(signal.target2 || 0);
+      const ltp = instLive.ltp ?? entry;
+      const lotSize = ({NIFTY:75, BANKNIFTY:30, FINNIFTY:65})[signal.inst] || 75;
+      const budget = (capital || 50000) * 0.5;
+      const perLotCost = entry * lotSize;
+      const lots = Math.max(1, Math.min(3, perLotCost ? Math.floor(budget / perLotCost) : 1));
+      const cap = Math.round(perLotCost * lots);
+      const contracts = lots * lotSize;
+      const pnl = Math.round((ltp - entry) * contracts);
+      const pct = entry ? ((ltp - entry) / entry * 100) : 0;
+      const pnlIsWin = pnl >= 0;
+      return (
+        <div className="live-hero" onClick={onOpen}>
+          <div className="lh-status">
+            <span className="lh-pill live"><span className="lh-dot"></span> LIVE · In flight</span>
+            <span className="lh-time">{signal.t || ''}</span>
+          </div>
+          <div className="lh-main">
+            <div>
+              <div className="lh-title">{signal.inst} {signal.strike} {signal.type} · {String(signal.dir||'').toLowerCase()}</div>
+              <div className="lh-sub">{signal.date ? signal.date : ''} · {lots}L × {lotSize} · cap ₹{cap.toLocaleString('en-IN')}</div>
+            </div>
+            <div className="lh-pnl">
+              <div className="lh-pnl-num" style={{color: pnlIsWin?'var(--long)':'var(--short)'}}>
+                {pnlIsWin?'+':'−'}₹{Math.abs(pnl).toLocaleString('en-IN')}
+              </div>
+              <div className="lh-pnl-pct" style={{color: pnlIsWin?'var(--long)':'var(--short)'}}>
+                {pnlIsWin?'▲ +':'▼ −'}{Math.abs(pct).toFixed(1)}%
+              </div>
+            </div>
+          </div>
+          <div className="lh-row">
+            <span className="lvl-inline"><span className="lvl-k">Entry</span><b>₹{Math.round(entry)}</b></span>
+            <span className="sep">→</span>
+            <span className="lvl-inline ltp"><span className="lvl-k">LTP</span><b>₹{Math.round(ltp)}</b></span>
+            <span className="sep">·</span>
+            <span className="lvl-inline sl"><span className="lvl-k">SL</span><b>₹{Math.round(sl)}</b></span>
+            <span className="lvl-inline t1"><span className="lvl-k">T1</span><b>₹{Math.round(t1)}</b></span>
+            <span className="lvl-inline t2"><span className="lvl-k">T2</span><b>₹{Math.round(t2)}</b></span>
+            <button type="button" className="lh-cta">Details →</button>
+          </div>
+        </div>
+      );
+    }
+
+    function ProfileModal({ open, userName, capital, onClose, onSave }) {
+      const [name, setName] = React.useState(userName || 'You');
+      const [cap, setCap]   = React.useState(capital || 50000);
+      React.useEffect(() => { if (open) { setName(userName || 'You'); setCap(capital || 50000); } }, [open, userName, capital]);
+      const handleSave = () => {
+        const n = (name || '').replace(/\s+/g, ' ').trim() || 'You';
+        const c = parseInt(cap, 10);
+        if (isNaN(c) || c < 5000) return;
+        onSave({ name: n, capital: c });
+      };
+      const handleKey = e => {
+        if (e.key === 'Enter')  { e.preventDefault(); handleSave(); }
+        if (e.key === 'Escape') { e.preventDefault(); onClose(); }
+      };
+      return (
+        <>
+          <div className={`modal-backdrop ${open?'on':''}`} onClick={onClose}/>
+          <div className={`modal-card ${open?'on':''}`} role="dialog">
+            <div className="modal-eb">Profile</div>
+            <div className="modal-tt">Your trading setup</div>
+            <div className="modal-desc">Sizing scales to your capital — 50% per trade, 1–3 lots, SL capped at 3% of capital.</div>
+            <label className="modal-label">Your name</label>
+            <div className="modal-input-wrap">
+              <input type="text" className="modal-input small" maxLength="40" value={name} onChange={e => setName(e.target.value)} onKeyDown={handleKey}/>
+            </div>
+            <label className="modal-label">Trading capital</label>
+            <div className="modal-input-wrap">
+              <span className="pre">₹</span>
+              <input type="number" className="modal-input" inputMode="numeric" min="5000" max="10000000" step="1000" value={cap} onChange={e => setCap(e.target.value)} onKeyDown={handleKey}/>
+            </div>
+            <div className="modal-quick">
+              {[10000, 20000, 50000, 100000, 500000].map(v => (
+                <button key={v} type="button" onClick={() => setCap(v)}>{v >= 100000 ? `₹${v/100000}L` : `₹${v/1000}K`}</button>
+              ))}
+            </div>
+            <div className="modal-actions">
+              <button type="button" className="btn-ghost-mod" onClick={onClose}>Cancel</button>
+              <button type="button" className="btn-prim" onClick={handleSave}>Save</button>
+            </div>
+          </div>
+        </>
+      );
+    }
+
+    function App() {
       const [tab, setTab] = useState(() => localStorage.getItem('se_tab') || 'signals');
       const [inst, setInst] = useState(0);
       const [theme, setThemeState] = useState(() => localStorage.getItem('se_theme') || 'dark');
       const [accent, setAccentState] = useState(() => localStorage.getItem('se_accent') || 'amber');
       const [density, setDensityState] = useState(() => localStorage.getItem('se_density') || 'comfortable');
       const [tweakOpen, setTweakOpen] = useState(false);
+      const [profileOpen, setProfileOpen] = useState(false);
+      const [userName, setUserName] = useState(() => localStorage.getItem('se_user_name') || 'You');
+      const [capital, setCapital]   = useState(() => {
+        const v = parseInt(localStorage.getItem('se_capital'), 10);
+        return (!isNaN(v) && v >= 5000) ? v : 50000;
+      });
       const [showPosMonitor, setShowPosMonitor] = useState(false);
 
       // ── engine state ─────────────────────────────────
@@ -3641,182 +4435,95 @@ function App() {
       const safeCandles = (candles && typeof candles === 'object' && !Array.isArray(candles)) ? candles : {};
       const safeLive    = (live && typeof live === 'object' && !Array.isArray(live)) ? live : {};
 
+      // First active LIVE signal for the LIVE HERO card
+      const activeLive = (safeSignals || []).find(s => s && (s.status === 'LIVE' || s.status === 'READY')) || null;
+
       return (
-        <div key={theme+accent} style={{width:'100%', height:'100%', display:'flex', flexDirection:'column'}}>
-          <div className="chrome">
-            <div className="brand">
-              <div className="mark" aria-hidden="true">
-                <svg viewBox="0 0 32 32">
-                  <g className="bm-rings" fill="none" stroke="oklch(1 0 0 / 0.85)">
-                    <circle cx="16" cy="17" r="13" strokeWidth="0.30"/>
-                    <circle cx="16" cy="17" r="9"  strokeWidth="0.30"/>
-                    <circle cx="16" cy="17" r="5"  strokeWidth="0.30"/>
-                  </g>
-                  <rect className="bm-bar b1" x="7.5"  y="22" width="3.5" height="5"  rx="0.6"/>
-                  <rect className="bm-bar b2" x="12"   y="18" width="3.5" height="9"  rx="0.6"/>
-                  <rect className="bm-bar b3" x="16.5" y="14" width="3.5" height="13" rx="0.6"/>
-                  <rect className="bm-bar b4" x="21"   y="8"  width="3.5" height="19" rx="0.6"/>
-                  <path className="bm-curve"
-                        d="M5 24 C 11 23, 17 14, 26 5"
-                        fill="none" stroke="oklch(1 0 0 / 0.95)"
-                        strokeWidth="1" strokeLinecap="round"/>
-                  <path className="bm-arrow"
-                        d="M22 5 L26.2 4.4 L25.6 8.6"
-                        fill="none" stroke="oklch(1 0 0 / 0.95)"
-                        strokeWidth="1" strokeLinecap="round" strokeLinejoin="round"/>
-                </svg>
-              </div>
-              <div className="name">
-                <span>Intraday Engine</span>
-                <span className="sub">v2 · live</span>
-              </div>
-            </div>
+        <div key={theme+accent} className="app-shell">
+          <NewSidebar
+            tab={tab} mode={mode}
+            setTab={setTab} setMode={setMode}
+            signals={safeSignals}
+            onSettings={() => setTweakOpen(true)}
+          />
+          <main className="main-col">
+            <NewTopbar
+              theme={theme} setTheme={setTheme}
+              userName={userName} capital={capital}
+              onTweaks={() => setTweakOpen(o => !o)}
+              onProfileClick={() => setProfileOpen(true)}
+            />
 
-            <div style={{width:1, height:22, background:'var(--line-1)', margin:'0 2px'}}/>
-
-            <MarketClock/>
-
-            <span style={{flex:1}}/>
-
-            <div className="kbd">⌘K</div>
-            <span className="muted" style={{fontSize:11.5}}>Search · signals · trades</span>
-
-            <span style={{flex:1}}/>
-
-            <div className="seg" title="engine mode">
-              <button type="button" className={mode==='live'?'on':''} onClick={()=>!on && setMode('live')} disabled={on}>LIVE</button>
-              <button type="button" className={mode==='replay'?'on':''} onClick={()=>!on && setMode('replay')} disabled={on}>REPLAY</button>
-            </div>
-
-            {mode === 'replay' && (
+            {tab === 'signals' && (
               <>
-                <div className="seg" title="replay speed">
-                  {[1,2,4].map(x => (
-                    <button type="button" key={x} className={speed===x?'on':''} onClick={()=>setSpeed(x)}>{x}x</button>
-                  ))}
-                </div>
-                <div style={{display:'flex', alignItems:'center', gap:6, fontSize:11.5, color:'var(--ink-2)'}}>
-                  <span>Days</span>
-                  <DaysInput value={replayDays} onCommit={setReplayDays} />
-                </div>
+                <LiveStripBar
+                  on={on} mode={mode}
+                  doStart={doStart} doStop={doStop}
+                  replayDays={replayDays} setReplayDays={setReplayDays}
+                  speed={speed} setSpeed={setSpeed}
+                />
+                <HeroRow trades={safeTrades} signals={safeSignals} capital={capital}/>
+                <IndexPills live={safeLive}/>
+                {activeLive && (
+                  <LiveHeroCard
+                    signal={activeLive}
+                    live={safeLive}
+                    capital={capital}
+                    onOpen={() => setInst(activeLive.inst)}
+                  />
+                )}
               </>
             )}
 
-            <button type="button" className="btn ghost" onClick={() => setTheme(theme==='dark'?'light':'dark')} title="toggle theme">
-              {theme==='dark' ? '◐' : '◗'}
-            </button>
-            <button type="button" className="btn" onClick={() => setTweakOpen(o=>!o)} title="settings">⚙ Tweaks</button>
-            {on
-              ? <button type="button" className="btn danger" onClick={doStop} title="stop engine">■ Stop</button>
-              : <button type="button" className="btn primary" onClick={doStart} title="start engine">▶ Start</button>}
-            <button type="button" className="btn ghost" onClick={doReset} title="reset state">⟲</button>
-          </div>
-
-          <TickerTape live={live}/>
-
-          {/* Risk + cost banner — visible when engine is on and metrics endpoint responds */}
-          {on && metrics && (
-            <RiskBanner
-              metrics={metrics}
-              onTrip={() => doKillswitch('trip')}
-              onReset={() => doKillswitch('reset')}
-              onStrategyChange={doStrategy}
-            />
-          )}
-
-          {/* engine status bar — always visible when engine is on */}
-          {on && (
-            <div style={{padding:'10px var(--pad-x)', background:'var(--accent-faint)', borderBottom:'1px solid var(--accent-dim)',
-              display:'flex', alignItems:'center', gap:14, fontSize:12}}>
-              <span style={{width:8, height:8, borderRadius:99, background:'var(--accent)', boxShadow:'0 0 8px var(--accent)', animation:'heart 1.4s ease-in-out infinite'}}/>
-              <span style={{color:'var(--accent)', fontWeight:600, letterSpacing:'0.08em', textTransform:'uppercase', fontSize:10.5}}>
-                Engine {mode === 'live' ? (nsePhase()==='open' ? 'LIVE · ticks' : `IDLE · ${nsePhase()}`) : `REPLAY · ${replayDays}d @ ${speed}x`}
-              </span>
-              <span style={{flex:1}}/>
-              <span className="muted mono" style={{fontSize:11}}>
-                {Object.keys(safeCandles).length}/{INST.length} inst loaded · {safeSignals.length} signal{safeSignals.length===1?'':'s'} staged · {safeLog.length} log lines
-              </span>
-            </div>
-          )}
-
-          {/* ── compact stats bar — replaces hero to save vertical space ── */}
-          {(() => {
-            const closed = safeTrades.filter(t => t && t.status && t.status !== 'OPEN');
-            const pnl = closed.reduce((a, b) => a + (Number(b.pnl) || 0), 0);
-            const wins = closed.filter(t => t.status === 'WIN').length;
-            const winRate = closed.length ? Math.round((wins / closed.length) * 100) : 0;
-            const totalCandles = Object.values(safeCandles).reduce((a,c)=> a + (Array.isArray(c) ? c.length : 0), 0);
-            const liveSigs = safeSignals.filter(s => s && s.status === 'LIVE').length;
-            const watchSigs = safeSignals.filter(s => s && (s.status === 'WATCH' || s.status === 'READY')).length;
-            const pnlColor = pnl >= 0 ? 'var(--long)' : 'var(--short)';
-            return (
-              <div className="statsbar">
-                <div className="stat">
-                  <span className="stat-label">P&amp;L</span>
-                  <span className="stat-val" style={{color: closed.length ? pnlColor : 'var(--ink-3)'}}>
-                    {closed.length === 0 ? '₹—' : (pnl >= 0 ? '+₹' : '−₹') + Math.abs(Math.round(pnl)).toLocaleString('en-IN')}
-                  </span>
-                  {closed.length > 0 && <span style={{fontSize:10, color:'var(--ink-3)'}}>{winRate}% win · {closed.length}T</span>}
-                </div>
-                <div className="divider"/>
-                <div className="stat">
-                  <span className="stat-label">Candles</span>
-                  <span className="stat-val">{totalCandles.toLocaleString('en-IN')}</span>
-                </div>
-                <div className="divider"/>
-                <div className="stat">
-                  <span className="stat-label">Signals</span>
-                  <span className="stat-val">
-                    {liveSigs > 0 && <span style={{color:'var(--accent)'}}>{liveSigs} LIVE </span>}
-                    {watchSigs > 0 && <span style={{color:'var(--ink-2)'}}>{watchSigs} watch</span>}
-                    {liveSigs === 0 && watchSigs === 0 && <span style={{color:'var(--ink-3)'}}>—</span>}
-                  </span>
-                </div>
-                <div className="divider"/>
-                <div className="stat">
-                  <span className="stat-label">Inst</span>
-                  <span className="stat-val">{Object.keys(safeCandles).length}/{INST.length}</span>
-                </div>
-                <span style={{flex:1}}/>
-                <span className="stat-label" style={{fontSize:9, opacity:0.6}}>SIGNAL ENGINE v2.6 · NOT INVESTMENT ADVICE</span>
+            {/* Risk banner stays visible across views when engine is on */}
+            {on && metrics && tab === 'signals' && (
+              <div style={{margin:'10px 0'}}>
+                <RiskBanner
+                  metrics={metrics}
+                  onTrip={() => doKillswitch('trip')}
+                  onReset={() => doKillswitch('reset')}
+                  onStrategyChange={doStrategy}
+                />
               </div>
-            );
-          })()}
+            )}
 
-          <div className="tabs" style={{marginTop:8}}>
-            {tabs.map(t => (
-              <button key={t.id} className={`tab ${tab===t.id?'on':''}`} onClick={()=>setTab(t.id)}>
-                {t.icon && <span style={{opacity:0.7, fontSize:8}}>{t.icon}</span>}
-                {t.label}
-              </button>
-            ))}
-          </div>
-
-          <div key={tab} className="reveal-enter" style={{flex:1, overflowY:'auto'}}>
-            {tab === 'signals' && <SignalsTab sel={inst} setSel={setInst} signals={safeSignals} candles={safeCandles} live={safeLive} on={on}/>}
-            {tab === 'swing'   && <SwingTab data={swingData} getServer={getServer} getAuthToken={getAuthToken} showToast={showToast}/>}
-            {tab === 'journal' && <JournalTab trades={safeTrades}/>}
-            {tab === 'stats' && <StatsTab trades={safeTrades} signals={safeSignals}/>}
-            {tab === 'calc' && <CalcTab/>}
-            {tab === 'log' && <LogTab logLines={safeLog} onClear={()=>setLogLines([])}/>}
-          </div>
-
-          {showPosMonitor && <PositionMonitor open={safeTrades.find(t => t && t.status === 'OPEN')} live={safeLive} onClose={()=>setShowPosMonitor(false)}/>}
-          {tweakOpen && <Tweaks theme={theme} setTheme={setTheme} accent={accent} setAccent={setAccent} density={density} setDensity={setDensity} serverOk={serverOk} onClose={()=>setTweakOpen(false)}/>}
-
-          {toast && (
-            <div style={{position:'fixed', bottom:28, left:'50%', transform:'translateX(-50%)', zIndex:200,
-              background:'var(--bg-elev)', backdropFilter:'blur(18px) saturate(140%)',
-              border:'1px solid var(--accent)', borderRadius:'var(--r-md)', padding:'10px 18px',
-              fontSize:12.5, color:'var(--ink-0)', boxShadow:'var(--shadow-lg), 0 0 32px var(--accent-faint)',
-              animation:'fade-up 320ms cubic-bezier(.2,.7,.2,1)'}}>
-              {toast}
+            <div key={tab+mode} className="reveal-enter" style={{flex:1, overflowY:'auto'}}>
+              {tab === 'signals' && <SignalsTab sel={inst} setSel={setInst} signals={safeSignals} candles={safeCandles} live={safeLive} on={on}/>}
+              {tab === 'swing'   && <SwingTab data={swingData} getServer={getServer} getAuthToken={getAuthToken} showToast={showToast}/>}
+              {tab === 'journal' && <JournalTab trades={safeTrades}/>}
+              {tab === 'stats' && <StatsTab trades={safeTrades} signals={safeSignals}/>}
+              {tab === 'calc' && <CalcTab/>}
+              {tab === 'log' && <LogTab logLines={safeLog} onClear={()=>setLogLines([])}/>}
             </div>
-          )}
 
-          <footer style={{padding:'6px var(--pad-x)', textAlign:'center', color:'var(--ink-3)', fontSize:10, fontFamily:'JetBrains Mono, monospace', letterSpacing:'0.06em', flexShrink:0, opacity:0.5, background:'transparent', borderTop:'1px solid var(--border)'}}>
-            SIGNAL ENGINE v2.5 · NOT INVESTMENT ADVICE
-          </footer>
+            {showPosMonitor && <PositionMonitor open={safeTrades.find(t => t && t.status === 'OPEN')} live={safeLive} onClose={()=>setShowPosMonitor(false)}/>}
+            {tweakOpen && <Tweaks theme={theme} setTheme={setTheme} accent={accent} setAccent={setAccent} density={density} setDensity={setDensity} serverOk={serverOk} onClose={()=>setTweakOpen(false)}/>}
+
+            <ProfileModal
+              open={profileOpen}
+              userName={userName} capital={capital}
+              onClose={() => setProfileOpen(false)}
+              onSave={({name, capital: cap}) => {
+                setUserName(name);
+                setCapital(cap);
+                try {
+                  localStorage.setItem('se_user_name', name);
+                  localStorage.setItem('se_capital', String(cap));
+                } catch(_) {}
+                setProfileOpen(false);
+              }}
+            />
+
+            {toast && (
+              <div style={{position:'fixed', bottom:28, left:'50%', transform:'translateX(-50%)', zIndex:200,
+                background:'var(--bg-elev)', backdropFilter:'blur(18px) saturate(140%)',
+                border:'1px solid var(--accent)', borderRadius:'var(--r-md)', padding:'10px 18px',
+                fontSize:12.5, color:'var(--ink-0)', boxShadow:'var(--shadow-lg), 0 0 32px var(--accent-faint)',
+                animation:'fade-up 320ms cubic-bezier(.2,.7,.2,1)'}}>
+                {toast}
+              </div>
+            )}
+          </main>
         </div>
       );
     }
