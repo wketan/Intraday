@@ -2043,6 +2043,9 @@
       const [bridge, setBridge] = useState(null);
       const [loading, setLoading] = useState(false);
       const [err, setErr] = useState(null);
+      // Expiry override — user can switch between weekly contracts (12 May / 19 May / etc).
+      // Empty string means "let server auto-pick (>=5 DTE)".
+      const [expiryOverride, setExpiryOverride] = useState('');
 
       const instDef = INST.find(i => i.name === displaySig.inst) || INST[0];
       const gap = instDef.gap;
@@ -2052,15 +2055,42 @@
       const atm = indexEntry ? Math.round(indexEntry / gap) * gap : null;
       const recStrike = atm;
 
+      // Reset override when signal changes
+      useEffect(() => { setExpiryOverride(''); }, [displaySig?.id]);
+
+      // Build a small list of candidate Tuesdays the user can switch between:
+      // signal-day next Tuesday + the 3 following Tuesdays. Each shown with DTE.
+      const expiryCandidates = (() => {
+        if (!displaySig?.date) return [];
+        const d = new Date(displaySig.date + 'T00:00:00');
+        const out = [];
+        // First Tuesday at-or-after signal date
+        let daysAhead = (2 - d.getDay() + 7) % 7;     // JS getDay: Tue = 2
+        if (daysAhead === 0) daysAhead = 7;
+        for (let i = 0; i < 5; i++) {
+          const exp = new Date(d.getTime() + (daysAhead + i*7) * 24*3600*1000);
+          const yyyy = exp.getFullYear();
+          const mm = String(exp.getMonth()+1).padStart(2,'0');
+          const dd = String(exp.getDate()).padStart(2,'0');
+          out.push({
+            value: `${yyyy}-${mm}-${dd}`,
+            label: `${exp.getDate()} ${exp.toLocaleDateString('en-IN',{month:'short'})} (${(daysAhead+i*7)} DTE)`,
+            dte: daysAhead + i*7,
+          });
+        }
+        return out;
+      })();
+
       useEffect(() => {
         if (!displaySig?.iso_ts || !displaySig.inst || !recStrike) {
           setBridge(null); return;
         }
         let cancelled = false;
         setLoading(true); setErr(null);
-        const url = `/api/replay-premium?symbol=${encodeURIComponent(displaySig.inst)}`
+        let url = `/api/replay-premium?symbol=${encodeURIComponent(displaySig.inst)}`
           + `&strike=${recStrike}&opt_type=${optType}`
           + `&ts=${encodeURIComponent(displaySig.iso_ts)}`;
+        if (expiryOverride) url += `&expiry=${encodeURIComponent(expiryOverride)}`;
         apiJSON(url).then(r => {
           if (cancelled) return;
           setBridge(r); setLoading(false);
@@ -2069,7 +2099,7 @@
           setErr(e.message || String(e)); setLoading(false); setBridge(null);
         });
         return () => { cancelled = true; };
-      }, [displaySig?.iso_ts, displaySig?.inst, recStrike, optType]);
+      }, [displaySig?.iso_ts, displaySig?.inst, recStrike, optType, expiryOverride]);
 
       if (!indexEntry || !recStrike) return null;
 
@@ -2132,6 +2162,30 @@
                   padding:'2px 6px', borderRadius:3, background:'var(--warn-dim)'}}>
                   Clamped — BS estimate was ₹{bsRaw} (outside NSE day range)
                 </span>
+              )}
+            </div>
+
+            {/* Expiry switcher — explicit so user can verify against any expiry */}
+            <div style={{display:'flex', alignItems:'center', gap:8, marginBottom:10, fontSize:11}}>
+              <span style={{color:'var(--ink-2)', fontFamily:'var(--mono)', fontSize:10}}>Expiry:</span>
+              <select
+                value={expiryOverride || (bridge?.expiry || '')}
+                onChange={e => setExpiryOverride(e.target.value)}
+                style={{padding:'3px 6px', fontSize:11, background:'var(--bg-2)',
+                        color:'var(--ink-1)', border:'1px solid var(--line-1)', borderRadius:4,
+                        fontFamily:'var(--mono)', cursor:'pointer'}}>
+                {expiryCandidates.map(e => (
+                  <option key={e.value} value={e.value}>{e.label}</option>
+                ))}
+              </select>
+              <span style={{fontSize:10, color:'var(--ink-3)', fontFamily:'var(--mono)'}}>
+                Querying: {bridge?.expiry || '—'}
+              </span>
+              {expiryOverride && (
+                <button type="button" onClick={() => setExpiryOverride('')}
+                  style={{fontSize:10, padding:'2px 6px', background:'transparent',
+                          color:'var(--ink-3)', border:'1px solid var(--line-1)',
+                          borderRadius:3, cursor:'pointer'}}>auto</button>
               )}
             </div>
 

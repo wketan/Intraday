@@ -185,10 +185,12 @@ def get_spot_bars(symbol: str, from_dt: datetime, to_dt: datetime,
         print(f"[data_layer] WARN: unknown spot symbol {symbol}")
         return pd.DataFrame()
 
-    # Angel's max lookback is ~30 days for 1min, longer for higher intervals
+    # Pass EXPLICIT from_dt + to_dt so Angel returns the requested historical
+    # window, not "last N days from now". This was the silent bug that made
+    # any historical lookup (replay panel, backtest_v2) return zero spot bars.
     df = angel_client.candles(inst["token"], inst["exchange"],
                               interval=angel_interval,
-                              days=(to_dt - from_dt).days + 1,
+                              from_dt=from_dt, to_dt=to_dt,
                               force_refresh=True)
     if df.empty:
         return pd.DataFrame()

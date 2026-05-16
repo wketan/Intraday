@@ -905,13 +905,26 @@ class AngelClient:
             "client_id_hint": (CONFIG.get("client_id") or "")[:4] + "***" if CONFIG.get("client_id") else None,
         }
     
-    def candles(self, token, exchange, interval="FIVE_MINUTE", days=3, force_refresh=False):
+    def candles(self, token, exchange, interval="FIVE_MINUTE", days=3, force_refresh=False,
+                from_dt=None, to_dt=None):
         """Fetch OHLCV candles. Cached for `CONFIG['candle_cache_ttl']` seconds (default 90s).
 
-        5-min candles only update every 5 minutes, so 90s caching is safe and prevents
-        the engine from hammering Angel One at every scan tick. Pass force_refresh=True
-        to bypass the cache (used by /api/historical and replay paths)."""
-        cache_key = (str(token), exchange, interval, int(days))
+        Two modes:
+          - DEFAULT (days=N): fetches the last N days ending at now. Used by the live scanner.
+          - HISTORICAL (from_dt + to_dt supplied): fetches the EXACT window. Used by
+            the backtest replay + /api/replay-premium so we get the right slice for
+            arbitrary historical timestamps. Previously this was silently broken —
+            get_spot_bars was passing days=1 and Angel returned "last 24h" instead
+            of the requested historical window.
+
+        Pass force_refresh=True to bypass cache."""
+        # Cache key incorporates from/to_dt so historical queries don't collide
+        # with live "last N days" queries for the same token.
+        if from_dt is not None and to_dt is not None:
+            cache_key = (str(token), exchange, interval,
+                         from_dt.strftime("%Y%m%d%H%M"), to_dt.strftime("%Y%m%d%H%M"))
+        else:
+            cache_key = (str(token), exchange, interval, int(days))
         ttl = int(CONFIG.get("candle_cache_ttl", 90) or 0)
         now = time.time()
         if not force_refresh and ttl > 0:
@@ -923,9 +936,15 @@ class AngelClient:
         self._candle_cache_misses += 1
         try:
             if not self.ensure(): return pd.DataFrame()
+            # ── Use explicit window if provided; otherwise rolling-N-days ──
+            if from_dt is not None and to_dt is not None:
+                fromdate = from_dt.strftime("%Y-%m-%d %H:%M")
+                todate   = to_dt.strftime("%Y-%m-%d %H:%M")
+            else:
+                fromdate = (datetime.now(IST) - timedelta(days=days)).strftime("%Y-%m-%d %H:%M")
+                todate   = datetime.now(IST).strftime("%Y-%m-%d %H:%M")
             _params = {"exchange":exchange,"symboltoken":token,"interval":interval,
-                "fromdate":(datetime.now(IST)-timedelta(days=days)).strftime("%Y-%m-%d %H:%M"),
-                "todate":datetime.now(IST).strftime("%Y-%m-%d %H:%M")}
+                "fromdate":fromdate, "todate":todate}
             import concurrent.futures as _cf2
             with _cf2.ThreadPoolExecutor(max_workers=1) as _ex2:
                 try:
@@ -4738,13 +4757,22 @@ def api_replay_premium():
         ts_s_clean = ts_s.replace("T", " ").split(".")[0].split("+")[0]
         ts = datetime.strptime(ts_s_clean[:19], "%Y-%m-%d %H:%M:%S")
 
-        # If expiry not supplied, compute next NIFTY weekly Tuesday after ts
+        # If expiry not supplied, pick the next NIFTY weekly Tuesday that is
+        # AT LEAST 5 days out from `ts`. Reason: retail traders rarely buy
+        # options with 0-4 DTE — too much gamma risk on Mon/Tue. The next-
+        # week expiry is what the user is almost certainly looking at on
+        # their broker chart. (Old logic picked nearest Tuesday which gave
+        # an "expired" or "1 DTE" contract no one was actually trading.)
         if expiry_s:
             expiry_d = datetime.strptime(expiry_s, "%Y-%m-%d").date()
         else:
             d = ts.date()
-            days_ahead = (1 - d.weekday()) % 7   # Tuesday = 1 in Python weekday
-            if days_ahead == 0 and ts.hour >= 15: days_ahead = 7
+            min_dte = int(flask_request.args.get("min_dte", 5))
+            # Walk Tuesdays forward until we find one >= min_dte days from ts
+            days_ahead = (1 - d.weekday()) % 7   # next Tuesday
+            if days_ahead == 0: days_ahead = 7   # if today is Tue, start from next
+            while days_ahead < min_dte:
+                days_ahead += 7
             expiry_d = d + timedelta(days=days_ahead)
             expiry_s = expiry_d.strftime("%Y-%m-%d")
 
