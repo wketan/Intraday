@@ -4832,6 +4832,7 @@ def api_replay_premium():
             debug["spot_probe_err"] = str(_e)[:200]
 
         # NSE day probe — does jugaad-data return this contract's daily OHLC?
+        nse_probe = None
         try:
             nse_probe = data_layer.get_nse_contract_day(symbol, float(strike), opt_type,
                                                         expiry_d, ts.date())
@@ -4869,6 +4870,18 @@ def api_replay_premium():
             "symbol": symbol, "strike": strike, "opt_type": opt_type,
             "expiry": expiry_s, "ts": ts_s_clean,
         })
+
+        # If the cascade resolved via Angel-live or cache (path that doesn't
+        # carry NSE day OHLC), promote the data from the nse_probe we already
+        # fetched above so the outcome block can classify against the day range.
+        try:
+            if nse_probe:
+                if out.get("nse_day_low")    is None: out["nse_day_low"]    = nse_probe.get("low")
+                if out.get("nse_day_high")   is None: out["nse_day_high"]   = nse_probe.get("high")
+                if out.get("nse_day_settle") is None: out["nse_day_settle"] = nse_probe.get("settle")
+                if out.get("nse_day_close")  is None: out["nse_day_close"]  = nse_probe.get("close")
+        except Exception:
+            pass
 
         # ─── Outcome estimate (real backtest the dashboard can show) ───
         # We BUY the option at `entry`. SL/T1/T2 use the same premium-pct
