@@ -1449,7 +1449,13 @@
                         )}
                       </div>
                     ) : (
-                      /* Estimated option recommendation — shown when live chain data not yet available */
+                      /* Estimated option recommendation — replaced by BridgedPremium component
+                         which calls /api/replay-premium for real NSE-bridged values.
+                         Falls back to the legacy linear formula only when the bridge fails. */
+                      <BridgedPremium displaySig={displaySig} />
+                    )}
+                    {/* (legacy inline estimator kept below in component definition for fallback) */}
+                    {false && (
                       (() => {
                         const instDef = INST.find(i => i.name === displaySig.inst) || INST[0];
                         const gap = instDef.gap;
@@ -2015,6 +2021,229 @@
                'v2 confluence — fires Slack alerts only, no real trades. Use to evaluate v2 signal quality safely.')}
           {btn('v2live', 'v2 LIVE',    {strategy:'v2', dry_run_v2:false},
                'v2 confluence — REAL trades. Only enable after backtest passes the go/no-go gates.')}
+        </div>
+      );
+    }
+
+    /**
+     * BridgedPremium — replaces the dashboard's old client-side linear formula
+     * (indexEntry × 0.0034) with a server fetch to /api/replay-premium that
+     * goes through data_layer's NSE-bridge cascade.
+     *
+     * For NIFTY 23900 PE on 11 May 2026 14:50 IST, the old formula returned ₹81.
+     * This component instead shows:
+     *   - The NSE day range (e.g., ₹162.5 - ₹295.0)
+     *   - The day's settle price (e.g., ₹248.5)
+     *   - A clamp-aware estimate inside that range
+     *   - Real IV back-solved from NSE settle (e.g., 22.4%, "nse_settle_calibrated")
+     *
+     * Falls back to the legacy linear estimate ONLY if the bridge fetch fails.
+     */
+    function BridgedPremium({ displaySig }) {
+      const [bridge, setBridge] = useState(null);
+      const [loading, setLoading] = useState(false);
+      const [err, setErr] = useState(null);
+
+      const instDef = INST.find(i => i.name === displaySig.inst) || INST[0];
+      const gap = instDef.gap;
+      const lotSize = instDef.lot;
+      const optType = displaySig.type || (displaySig.dir === 'LONG' ? 'CE' : 'PE');
+      const indexEntry = displaySig.entry;
+      const atm = indexEntry ? Math.round(indexEntry / gap) * gap : null;
+      const recStrike = atm;
+
+      useEffect(() => {
+        if (!displaySig?.iso_ts || !displaySig.inst || !recStrike) {
+          setBridge(null); return;
+        }
+        let cancelled = false;
+        setLoading(true); setErr(null);
+        const url = `/api/replay-premium?symbol=${encodeURIComponent(displaySig.inst)}`
+          + `&strike=${recStrike}&opt_type=${optType}`
+          + `&ts=${encodeURIComponent(displaySig.iso_ts)}`;
+        apiJSON(url).then(r => {
+          if (cancelled) return;
+          setBridge(r); setLoading(false);
+        }).catch(e => {
+          if (cancelled) return;
+          setErr(e.message || String(e)); setLoading(false); setBridge(null);
+        });
+        return () => { cancelled = true; };
+      }, [displaySig?.iso_ts, displaySig?.inst, recStrike, optType]);
+
+      if (!indexEntry || !recStrike) return null;
+
+      // ── Loading ──
+      if (loading) {
+        return (
+          <div style={{marginBottom:14, padding:'14px', background:'var(--bg-2)', borderRadius:8,
+                       textAlign:'center', color:'var(--ink-3)', fontSize:11.5}}>
+            <div style={{fontFamily:'var(--mono)', marginBottom:4}}>⏳ Fetching real NSE day-OHLC for {recStrike}{optType} at {displaySig.t}…</div>
+            <div style={{fontSize:10}}>One-time per signal · cached after first lookup</div>
+          </div>
+        );
+      }
+
+      // ── Bridge succeeded ──
+      const hasBridge = bridge && bridge.price != null;
+      const hasNseDay = bridge && bridge.nse_day_high != null && bridge.nse_day_low != null;
+
+      if (hasBridge) {
+        const price = Number(bridge.price);
+        const dayLow = bridge.nse_day_low; const dayHigh = bridge.nse_day_high;
+        const daySettle = bridge.nse_day_settle; const dayClose = bridge.nse_day_close;
+        const iv = bridge.iv != null ? Number(bridge.iv) : null;
+        const ivPct = iv ? (iv < 5 ? iv * 100 : iv) : null;
+        const ivSrc = bridge.iv_source || '';
+        const clamped = !!bridge.clamped;
+        const bsRaw = bridge.price_raw_bs;
+        const src = bridge.source || '';
+        const inRange = hasNseDay && price >= dayLow && price <= dayHigh;
+
+        // SL / T1 from same premium-pct mode the live engine uses
+        const sl = Math.max(Math.round(price * 0.65), 5);
+        const t1 = Math.round(price * 1.50);
+        const t2 = Math.round(price * 2.00);
+        const budget = 20000;
+        const estLots = Math.max(1, Math.min(3, Math.floor((budget * 0.5) / (price * lotSize))));
+        const estCapital = Math.round(price * lotSize * estLots);
+
+        return (
+          <div style={{marginBottom:14}}>
+            {/* Option identity + source badge */}
+            <div style={{display:'flex', alignItems:'center', gap:8, marginBottom:10, flexWrap:'wrap'}}>
+              <span style={{fontSize:12, fontWeight:700, fontFamily:'var(--mono)',
+                background: displaySig.dir==='LONG'?'var(--long-dim)':'var(--short-dim)',
+                color: displaySig.dir==='LONG'?'var(--long)':'var(--short)',
+                padding:'4px 10px', borderRadius:4}}>
+                BUY {recStrike} {optType}
+              </span>
+              <span style={{fontSize:10, fontFamily:'var(--mono)',
+                color: src.startsWith('nse_calibrated') ? 'var(--long)' : src === 'angel' ? 'var(--long)' : 'var(--warn)',
+                background: src.startsWith('nse_calibrated') ? 'var(--long-dim)' : src === 'angel' ? 'var(--long-dim)' : 'var(--warn-dim)',
+                padding:'3px 8px', borderRadius:3, fontWeight:600}}>
+                {src === 'angel' ? '● LIVE ANGEL'
+                  : src === 'nse_calibrated' ? '● NSE-CALIBRATED'
+                  : src === 'nse_calibrated_clamped' ? '⚠ NSE-CLAMPED'
+                  : '○ BS_FALLBACK'}
+              </span>
+              {clamped && (
+                <span style={{fontSize:9.5, fontFamily:'var(--mono)', color:'var(--warn)',
+                  padding:'2px 6px', borderRadius:3, background:'var(--warn-dim)'}}>
+                  Clamped — BS estimate was ₹{bsRaw} (outside NSE day range)
+                </span>
+              )}
+            </div>
+
+            {/* Premium levels */}
+            <div style={{fontSize:9, color:'var(--ink-3)', textTransform:'uppercase',
+                         letterSpacing:'0.08em', fontWeight:600, marginBottom:5}}>
+              Option premiums {src === 'angel' ? '(real, live)' : '(bridged · NSE-calibrated)'}
+            </div>
+            <div style={{display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:6, marginBottom:10}}>
+              {[
+                { label:'Entry ₹', val:price.toFixed(0), color:'var(--accent)' },
+                { label:'SL ₹', val:sl, color:'var(--short)' },
+                { label:'Target 1 ₹', val:t1, color:'var(--long)' },
+              ].map(({label,val,color}) => (
+                <div key={label} style={{background:'var(--bg-2)', borderRadius:6, padding:'7px 9px'}}>
+                  <div style={{fontSize:8.5, color:'var(--ink-3)', textTransform:'uppercase',
+                               letterSpacing:'0.07em', fontWeight:600, marginBottom:2}}>{label}</div>
+                  <div style={{fontSize:15, fontWeight:700, color, fontFamily:'var(--mono)'}}>{val}</div>
+                </div>
+              ))}
+            </div>
+
+            {/* NSE day range — the key transparency feature */}
+            {hasNseDay && (
+              <div style={{background: inRange ? 'var(--long-dim)' : 'var(--warn-dim)',
+                           borderRadius:6, padding:'8px 10px', marginBottom:8,
+                           borderLeft: '3px solid ' + (inRange ? 'var(--long)' : 'var(--warn)')}}>
+                <div style={{fontSize:9, color:'var(--ink-3)', textTransform:'uppercase',
+                             letterSpacing:'0.08em', fontWeight:600, marginBottom:5}}>
+                  NSE day range — what this option actually traded at {fmtShortDate(displaySig.date)}
+                </div>
+                <div style={{display:'flex', gap:14, flexWrap:'wrap', fontFamily:'var(--mono)', fontSize:11}}>
+                  <span><span style={{color:'var(--ink-3)'}}>Low</span> <span style={{color:'var(--short)'}}>₹{Number(dayLow).toFixed(1)}</span></span>
+                  <span><span style={{color:'var(--ink-3)'}}>High</span> <span style={{color:'var(--long)'}}>₹{Number(dayHigh).toFixed(1)}</span></span>
+                  {daySettle != null && <span><span style={{color:'var(--ink-3)'}}>Settle</span> <span style={{color:'var(--ink-1)'}}>₹{Number(daySettle).toFixed(1)}</span></span>}
+                  {dayClose  != null && <span><span style={{color:'var(--ink-3)'}}>Close</span> <span style={{color:'var(--ink-1)'}}>₹{Number(dayClose ).toFixed(1)}</span></span>}
+                </div>
+                {ivPct != null && (
+                  <div style={{marginTop:5, fontSize:10, fontFamily:'var(--mono)', color: ivSrc === 'nse_settle_calibrated' ? 'var(--long)' : 'var(--ink-3)'}}>
+                    IV {ivPct.toFixed(1)}% · {ivSrc.replace(/_/g, ' ')}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Sizing estimate */}
+            <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:6, marginBottom:10}}>
+              <div style={{background:'var(--bg-2)', borderRadius:6, padding:'7px 9px'}}>
+                <div style={{fontSize:8.5, color:'var(--ink-3)', textTransform:'uppercase', letterSpacing:'0.07em', fontWeight:600, marginBottom:2}}>Lots × {lotSize}</div>
+                <div style={{fontSize:13, fontWeight:700, fontFamily:'var(--mono)'}}>{estLots}L</div>
+              </div>
+              <div style={{background:'var(--bg-2)', borderRadius:6, padding:'7px 9px'}}>
+                <div style={{fontSize:8.5, color:'var(--ink-3)', textTransform:'uppercase', letterSpacing:'0.07em', fontWeight:600, marginBottom:2}}>Capital ~</div>
+                <div style={{fontSize:13, fontWeight:700, fontFamily:'var(--mono)'}}>₹{estCapital.toLocaleString('en-IN')}</div>
+              </div>
+            </div>
+
+            {/* Verification footnote */}
+            <div style={{fontSize:10, color:'var(--ink-3)', padding:'4px 0', lineHeight:1.5}}>
+              {src === 'angel' || src === 'cache:angel'
+                ? '✓ Real-time data from Angel One — exact exchange price.'
+                : src.startsWith('nse_calibrated')
+                  ? '⏳ NSE bridge: real day-IV from settle, clamped inside actual ₹' + Number(dayLow).toFixed(0) + '–₹' + Number(dayHigh).toFixed(0) + ' range. Open broker chart to verify exact 14:50 LTP.'
+                  : '⚠ NSE row unavailable — fell back to BS w/ default IV. Treat as rough.'}
+            </div>
+          </div>
+        );
+      }
+
+      // ── Bridge failed: fall back to legacy linear formula (clearly labelled) ──
+      const ivFactor = { NIFTY: 0.0034, BANKNIFTY: 0.0050, FINNIFTY: 0.0054 }[displaySig.inst] || 0.0040;
+      const atmDelta = 0.45;
+      const idxRisk = displaySig.sl ? Math.abs(displaySig.entry - displaySig.sl) : gap * 0.5;
+      const idxT1 = displaySig.target1 ? Math.abs(displaySig.target1 - displaySig.entry) : idxRisk * 1.5;
+      const estEntry = Math.max(Math.round(indexEntry * ivFactor), 10);
+      const estSl = Math.max(Math.round(estEntry - idxRisk * atmDelta), 5);
+      const estT1 = Math.round(estEntry + idxT1 * atmDelta);
+      const budget = 20000;
+      const estLots = Math.max(1, Math.min(3, Math.floor((budget * 0.5) / (estEntry * lotSize))));
+      const estCapital = estEntry * lotSize * estLots;
+      return (
+        <div style={{marginBottom:14}}>
+          <div style={{display:'flex', alignItems:'center', gap:8, marginBottom:10, flexWrap:'wrap'}}>
+            <span style={{fontSize:12, fontWeight:700, fontFamily:'var(--mono)',
+              background: displaySig.dir==='LONG'?'var(--long-dim)':'var(--short-dim)',
+              color: displaySig.dir==='LONG'?'var(--long)':'var(--short)',
+              padding:'4px 10px', borderRadius:4}}>
+              BUY {recStrike} {optType}
+            </span>
+            <span style={{fontSize:10, fontFamily:'var(--mono)', color:'var(--warn)',
+              background:'var(--warn-dim)', padding:'3px 8px', borderRadius:3, fontWeight:600}}>
+              ⚠ EST (NSE bridge unavailable: {err || 'no data'})
+            </span>
+          </div>
+          <div style={{fontSize:9, color:'var(--ink-3)', textTransform:'uppercase',
+                       letterSpacing:'0.08em', fontWeight:600, marginBottom:5}}>Rough estimate (no NSE data)</div>
+          <div style={{display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:6, marginBottom:10}}>
+            {[
+              { label:'Entry ₹ ~', val:estEntry, color:'var(--accent)' },
+              { label:'SL ₹ ~', val:estSl, color:'var(--short)' },
+              { label:'Target 1 ₹ ~', val:estT1, color:'var(--long)' },
+            ].map(({label,val,color}) => (
+              <div key={label} style={{background:'var(--bg-2)', borderRadius:6, padding:'7px 9px', opacity:0.7}}>
+                <div style={{fontSize:8.5, color:'var(--ink-3)', textTransform:'uppercase', letterSpacing:'0.07em', fontWeight:600, marginBottom:2}}>{label}</div>
+                <div style={{fontSize:15, fontWeight:700, color, fontFamily:'var(--mono)'}}>{val}</div>
+              </div>
+            ))}
+          </div>
+          <div style={{fontSize:10, color:'var(--warn)', padding:'4px 0', lineHeight:1.5}}>
+            ⚠ Coarse linear estimate. Server's /api/replay-premium did not return data.
+            Verify the real LTP on your broker chart before any decision.
+          </div>
         </div>
       );
     }

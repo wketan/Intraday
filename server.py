@@ -4699,6 +4699,78 @@ def api_strategy_set():
     })
 
 
+@app.route("/api/replay-premium")
+def api_replay_premium():
+    """Real-data premium lookup for the dashboard's Replay panel.
+
+    Replaces the old client-side linear formula (indexEntry × 0.0034) with
+    the same NSE-bridge cascade used by backtest_v2.py:
+      1. Cache hit (instant)
+      2. Real Angel One historical (for active contracts)
+      3. NSE daily bhavcopy + back-solved real IV + hard clamp to day range
+      4. BS-with-default-IV last resort
+
+    Returns the SAME extended dict the backtest sees, so the dashboard can
+    show: NSE day low/high/settle, real IV, clamp flag, bs_raw.
+
+    Query params:
+      symbol     — NIFTY / BANKNIFTY / FINNIFTY
+      strike     — option strike (integer)
+      opt_type   — CE or PE
+      expiry     — YYYY-MM-DD (option's expiry date)
+      ts         — YYYY-MM-DD HH:MM:SS (the moment we're querying)
+
+    Returns 200 with the dict, or 200 with {"price": null, "source": "missing"}
+    when no path could resolve. Never 500s — the dashboard handles missing
+    gracefully and falls back to its old estimate.
+    """
+    try:
+        symbol   = (flask_request.args.get("symbol") or "").upper().strip()
+        strike   = float(flask_request.args.get("strike") or 0)
+        opt_type = (flask_request.args.get("opt_type") or "").upper().strip()
+        expiry_s = flask_request.args.get("expiry") or ""
+        ts_s     = flask_request.args.get("ts") or ""
+        if not (symbol and strike and opt_type in ("CE", "PE") and ts_s):
+            return jsonify({"error": "missing params",
+                            "needed": "symbol,strike,opt_type,ts (expiry optional)"}), 400
+
+        # Accept both "YYYY-MM-DD HH:MM:SS" and ISO "YYYY-MM-DDTHH:MM:SS"
+        ts_s_clean = ts_s.replace("T", " ").split(".")[0].split("+")[0]
+        ts = datetime.strptime(ts_s_clean[:19], "%Y-%m-%d %H:%M:%S")
+
+        # If expiry not supplied, compute next NIFTY weekly Tuesday after ts
+        if expiry_s:
+            expiry_d = datetime.strptime(expiry_s, "%Y-%m-%d").date()
+        else:
+            d = ts.date()
+            days_ahead = (1 - d.weekday()) % 7   # Tuesday = 1 in Python weekday
+            if days_ahead == 0 and ts.hour >= 15: days_ahead = 7
+            expiry_d = d + timedelta(days=days_ahead)
+            expiry_s = expiry_d.strftime("%Y-%m-%d")
+
+        import data_layer
+        result = data_layer.get_option_premium_at(
+            symbol, strike, opt_type, expiry_d, ts,
+            angel_client=engine.client if engine.client and engine.client.connected else None,
+        )
+        if result is None:
+            return jsonify({
+                "price": None, "source": "missing",
+                "symbol": symbol, "strike": strike, "opt_type": opt_type,
+                "expiry": expiry_s, "ts": ts_s_clean,
+            })
+        out = dict(result)
+        out.update({
+            "symbol": symbol, "strike": strike, "opt_type": opt_type,
+            "expiry": expiry_s, "ts": ts_s_clean,
+        })
+        return jsonify(out)
+    except Exception as e:
+        import traceback
+        log.warning(f"  /api/replay-premium error: {e}")
+        return jsonify({"error": str(e), "price": None, "source": "error"}), 200
+
+
 @app.route("/api/v2-diag")
 def api_v2_diag():
     """Last 20 v2 score-card decisions per instrument.
