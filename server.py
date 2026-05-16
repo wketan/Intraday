@@ -2855,6 +2855,10 @@ class Engine:
         # OI + Volume history: rolling 12 snapshots (~6 min at 30s per fetch) per strike.
         # { name: { (strike, type): deque([{oi, volume, ltp, ts}, ...], maxlen=12) } }
         self._oi_history = {}
+        # v2 diagnostic buffer — last 20 SignalGenV2 decisions per instrument.
+        # Captures EVERY scan tick (trigger or not) so the user can see exactly
+        # what each rule scored and why it didn't fire. Read via /api/v2-diag.
+        self._v2_diag = {}   # {name: deque(maxlen=20)}
         self._regime=None
         self._last_regime_run=None
         self._last_eod_run=None
@@ -3192,6 +3196,31 @@ class Engine:
 
                     sig=self.sgen.analyze(df, weight_adj=self._weight_adj,
                                           blocked_windows=self._blocked_windows)
+
+                    # ── Capture v2 diagnostic EVERY scan (signal or not) ──
+                    # The v2 analyzer always populates SignalGenV2.last_decision
+                    # so we can see why each bar didn't fire — no more black-box silence.
+                    if strategy == "v2":
+                        try:
+                            from signal_v2 import SignalGenV2
+                            diag = dict(SignalGenV2.last_decision or {})
+                            if diag:
+                                diag["scan_at"] = datetime.now(IST).strftime("%Y-%m-%d %H:%M:%S")
+                                diag["instrument"] = name
+                                buf = self._v2_diag.setdefault(name, self._deque(maxlen=20))
+                                buf.append(diag)
+                                # Log if close-to-trigger (within 1 of threshold) so we can
+                                # spot when v2 is "almost firing" — useful for tuning.
+                                near_trigger = max(diag.get("long_score",0), diag.get("short_score",0))
+                                trig = diag.get("trigger", 3)
+                                if near_trigger >= trig - 1:
+                                    log.info(f"[v2 diag] {name} {diag.get('verdict','?')} "
+                                             f"L={diag.get('long_score','?')} S={diag.get('short_score','?')} "
+                                             f"RSI={diag.get('rsi','?')} VWAP_dev%={diag.get('vwap_dev_pct','?')} "
+                                             f"range={diag.get('range_ratio','?')}×")
+                        except Exception as e:
+                            log.warning(f"  v2 diag capture failed: {e}")
+
                     if not sig:
                         # Either too few bars OR analyzer returned None due to a blocked
                         # time window or hard time-gate (post-14:50). Track the window hits.
@@ -4659,6 +4688,32 @@ def api_strategy_set():
         "ok": True,
         "strategy":   CONFIG.get("strategy", "v1"),
         "dry_run_v2": bool(CONFIG.get("dry_run_v2", False)),
+    })
+
+
+@app.route("/api/v2-diag")
+def api_v2_diag():
+    """Last 20 v2 score-card decisions per instrument.
+
+    The v2 strategy ALWAYS records its score-card on every scan tick (even
+    when no signal fires). This endpoint exposes the buffer so the user can
+    see exactly which conditions failed on every bar.
+
+    Returns:
+        {
+          "NIFTY":     [{ts, price, long_score, short_score, long_checks, ...}],
+          "BANKNIFTY": [...],
+          "FINNIFTY":  [...],
+        }
+    """
+    out = {}
+    for name, buf in (engine._v2_diag or {}).items():
+        out[name] = list(buf)
+    return jsonify({
+        "strategy_active": CONFIG.get("strategy", "v1"),
+        "dry_run_v2":      bool(CONFIG.get("dry_run_v2", False)),
+        "decisions":       out,
+        "time":            datetime.now(IST).strftime("%H:%M:%S"),
     })
 
 
