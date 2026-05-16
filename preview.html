@@ -448,6 +448,69 @@
   .view.on { display: block; }
 
   /* ─── view: live (default) ─────────────────────────────────────────── */
+  /* ─── engine toggle (lives inside live-strip) ──────────────────────── */
+  .engine-toggle {
+    display: inline-flex; align-items: center; gap: 12px;
+    padding: 5px 6px 5px 12px;
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    border-radius: 999px;
+    cursor: pointer; font-family: inherit;
+    transition: border-color 0.2s, background 0.2s, transform 0.15s;
+  }
+  .engine-toggle:hover { transform: translateY(-1px); border-color: var(--glass-border-hi); }
+  .engine-toggle .et-info {
+    display: flex; flex-direction: column; align-items: flex-end;
+    line-height: 1.1;
+  }
+  .engine-toggle .et-label {
+    font-family: var(--font-mono); font-size: 10.5px; font-weight: 700;
+    letter-spacing: 0.12em;
+  }
+  .engine-toggle.on  .et-label { color: var(--win); }
+  .engine-toggle.off .et-label { color: var(--ink-2); }
+  .engine-toggle .et-sub {
+    font-family: var(--font-mono); font-size: 9px;
+    color: var(--ink-3); margin-top: 1px; letter-spacing: 0.04em;
+  }
+  .engine-toggle .et-switch {
+    width: 32px; height: 18px; border-radius: 999px;
+    background: var(--line-2); position: relative; flex-shrink: 0;
+    transition: background 0.3s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.3s;
+  }
+  .engine-toggle .et-switch::after {
+    content: ''; position: absolute;
+    width: 12px; height: 12px;
+    top: 3px; left: 3px; border-radius: 50%;
+    background: oklch(1 0 0 / 0.95);
+    box-shadow: 0 1px 3px oklch(0 0 0 / 0.35);
+    transition: left 0.32s cubic-bezier(0.4, 0, 0.2, 1), background 0.3s;
+  }
+  .engine-toggle.on .et-switch {
+    background: var(--win);
+    box-shadow: 0 0 0 3px var(--win-soft), 0 0 12px var(--win-glow);
+  }
+  .engine-toggle.on .et-switch::after { left: 17px; }
+  .engine-toggle.off .et-switch::after { background: oklch(0.75 0.01 60); }
+  .live-strip.engine-off .ldot {
+    background: var(--ink-3) !important; box-shadow: none !important;
+    animation: none !important;
+  }
+  .live-strip.engine-off { opacity: 0.94; }
+  .scan-meta { display: inline-flex; align-items: center; gap: 6px; }
+  .lscan-dot {
+    width: 5px; height: 5px; border-radius: 50%;
+    background: var(--win); box-shadow: 0 0 5px var(--win);
+    animation: blink-scan 1.2s ease-in-out infinite;
+  }
+  .live-strip.engine-off .lscan-dot {
+    background: var(--ink-3); box-shadow: none; animation: none;
+  }
+  @keyframes blink-scan {
+    0%, 100% { opacity: 0.4; }
+    50% { opacity: 1; }
+  }
+
   /* live status strip */
   .live-strip {
     display: flex; align-items: center; gap: 12px;
@@ -1461,6 +1524,83 @@
   .modal-actions .btn-primary,
   .modal-actions .btn-ghost { flex: 1; }
 
+  /* ─── premium load animations ──────────────────────────────────────── */
+  @keyframes fade-up {
+    0%   { opacity: 0; transform: translateY(10px); }
+    100% { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes fade-in {
+    from { opacity: 0; } to { opacity: 1; }
+  }
+  @keyframes scale-in {
+    0%   { opacity: 0; transform: scale(0.96); }
+    100% { opacity: 1; transform: scale(1); }
+  }
+  @keyframes gauge-sweep {
+    from { stroke-dashoffset: 263.9; }
+    /* 'to' value comes from JS to match real progress */
+  }
+  @keyframes draw-line {
+    from { stroke-dashoffset: var(--path-len, 1000); }
+    to   { stroke-dashoffset: 0; }
+  }
+
+  /* When a view turns on, stagger the children for a calm cascading reveal */
+  .view.on .live-strip          { animation: fade-up 0.55s cubic-bezier(0.4,0,0.2,1) backwards; animation-delay: 0.04s; }
+  .view.on .hero-row > *        { animation: fade-up 0.55s cubic-bezier(0.4,0,0.2,1) backwards; }
+  .view.on .hero-row > *:nth-child(1) { animation-delay: 0.10s; }
+  .view.on .hero-row > *:nth-child(2) { animation-delay: 0.16s; }
+  .view.on .hero-row > *:nth-child(3) { animation-delay: 0.22s; }
+  .view.on .pill-row > *        { animation: fade-up 0.55s cubic-bezier(0.4,0,0.2,1) backwards; }
+  .view.on .pill-row > *:nth-child(1) { animation-delay: 0.30s; }
+  .view.on .pill-row > *:nth-child(2) { animation-delay: 0.36s; }
+  .view.on .pill-row > *:nth-child(3) { animation-delay: 0.42s; }
+  .view.on .live-grid > *       { animation: fade-up 0.55s cubic-bezier(0.4,0,0.2,1) backwards; }
+  .view.on .live-grid > *:nth-child(1) { animation-delay: 0.50s; }
+  .view.on .live-grid > *:nth-child(2) { animation-delay: 0.56s; }
+  .view.on .history-list        { animation: fade-up 0.55s cubic-bezier(0.4,0,0.2,1) backwards; animation-delay: 0.64s; }
+  .view.on .setups-card         { animation: fade-up 0.55s cubic-bezier(0.4,0,0.2,1) backwards; animation-delay: 0.72s; }
+  .view.on .empty-view          { animation: scale-in 0.4s cubic-bezier(0.4,0,0.2,1) backwards; }
+
+  /* History rows: gentle individual stagger inside their card */
+  .view.on .history-list .live-row { animation: fade-up 0.42s cubic-bezier(0.4,0,0.2,1) backwards; }
+  .view.on .history-list .live-row:nth-child(2) { animation-delay: 0.72s; }
+  .view.on .history-list .live-row:nth-child(3) { animation-delay: 0.78s; }
+  .view.on .history-list .live-row:nth-child(4) { animation-delay: 0.84s; }
+  .view.on .history-list .live-row:nth-child(5) { animation-delay: 0.90s; }
+  .view.on .history-list .live-row:nth-child(6) { animation-delay: 0.96s; }
+
+  /* Gauge sweep — JS sets --gauge-offset before triggering */
+  .gauge-progress.anim {
+    stroke-dashoffset: 263.9;
+    transition: stroke-dashoffset 1.6s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  /* Path/area draw-in (equity curve + sparklines) */
+  .draw-line {
+    stroke-dasharray: var(--path-len, 1000);
+    stroke-dashoffset: var(--path-len, 1000);
+    transition: stroke-dashoffset 1.6s cubic-bezier(0.25, 0.1, 0.25, 1);
+  }
+  .draw-line.shown { stroke-dashoffset: 0; }
+  .draw-fill {
+    opacity: 0;
+    transition: opacity 0.9s ease-out 0.6s;
+  }
+  .draw-fill.shown { opacity: 1; }
+
+  /* Subtle hover lift on cards (premium feel) */
+  .card { transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.25s; }
+
+  /* Respect users who prefer no motion */
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.001ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.001ms !important;
+    }
+  }
+
   /* ─── preview banner ───────────────────────────────────────────────── */
   .preview-banner {
     position: fixed; top: 12px; left: 50%;
@@ -1599,17 +1739,22 @@
     <section class="view on" data-view="live">
 
       <!-- live status strip -->
-      <div class="live-strip">
+      <div class="live-strip" id="live-strip">
         <div class="ldot"></div>
         <div class="lstat">
-          <div class="lstat-1">AI engine live · scanning price action</div>
-          <div class="lstat-2">v2 · OHLC + RSI + EMA + VWAP + level breaks · IST 02:53 pm</div>
+          <div class="lstat-1" id="engine-status">AI engine live · scanning price action</div>
+          <div class="lstat-2" id="engine-sub">v2 · OHLC + RSI + EMA + VWAP + level breaks · IST 02:53 pm</div>
         </div>
         <div class="lscan">
-          <span>last scan <b>4s</b> ago</span>
-          <span>·</span>
-          <span><b>NIFTY</b> · <b>BANKNIFTY</b> · <b>FINNIFTY</b></span>
+          <span class="scan-meta"><span class="lscan-dot"></span> last scan <b>4s</b> ago</span>
         </div>
+        <button type="button" class="engine-toggle on" id="engine-toggle" aria-label="engine on/off">
+          <span class="et-info">
+            <span class="et-label" id="et-label">LIVE</span>
+            <span class="et-sub" id="et-sub">auto-off 17:00 IST</span>
+          </span>
+          <span class="et-switch" aria-hidden="true"></span>
+        </button>
       </div>
 
       <!-- hero row -->
@@ -2266,6 +2411,35 @@
     return { lots, capital: Math.round(lots * perLotCost) };
   }
 
+  // ─── count-up animation helper ───
+  const easeOutCubic = t => 1 - Math.pow(1 - t, 3);
+  function animateCount(el, from, to, duration, render) {
+    if (!el) return;
+    const start = performance.now();
+    function tick(now) {
+      const t = Math.min(1, (now - start) / duration);
+      const v = from + (to - from) * easeOutCubic(t);
+      el.innerHTML = render(v);
+      if (t < 1) requestAnimationFrame(tick);
+    }
+    requestAnimationFrame(tick);
+  }
+  // Pull the current numeric value out of an element, so subsequent updates
+  // animate from the visible number rather than 0.
+  function currentNum(el) {
+    if (!el) return 0;
+    const s = (el.textContent || '').replace(/[^\d.-]/g, '');
+    const n = parseFloat(s);
+    return isNaN(n) ? 0 : n;
+  }
+  const renderRupee = v => '<span class="currency">₹</span>+' + Math.round(v).toLocaleString('en-IN');
+  const renderRupeeShort = (v, prefix='+') => prefix + '₹' + Math.round(v).toLocaleString('en-IN');
+  const renderInt = v => Math.round(v).toLocaleString('en-IN');
+
+  // refreshSizingOnPage gets a flag — when called as "first paint" we animate
+  // from 0; on subsequent calls (capital change) we animate from the current
+  // displayed value to the new one for a smooth premium feel.
+  let firstPaintDone = false;
   function refreshSizingOnPage() {
     // Recompute SIGNALS map (so drawer picks up fresh numbers when re-opened)
     Object.keys(SIGNALS).forEach(id => {
@@ -2275,41 +2449,55 @@
       s.lots = sz.lots;
       s.lotsize = LOT_SIZES[s.inst] || s.lotsize;
       s.capital = sz.capital;
-      // Also recompute P&L scaled by new lots
-      if (s.outcomeBasePnl) {
-        s.pnl = s.outcomeBasePnl * s.lots;
+      if (s.outcomeBasePnl) s.pnl = s.outcomeBasePnl * s.lots;
+      // LIVE HERO live P&L scales with the in-flight lots too
+      if (s.kind === 'in_flight' && s.liveBasePnl != null) {
+        s.pnl = s.liveBasePnl * s.lots;
       }
     });
 
-    // LIVE HERO (sig-1) — rewrite its inline numbers
+    // LIVE HERO (sig-1) — rewrite its inline sublines + live P&L
     const sig1 = SIGNALS['sig-1'];
     if (sig1) {
       const hero = document.querySelector('.live-hero[data-sig="sig-1"]');
       if (hero) {
         const sub = hero.querySelector('.lh-sub');
         if (sub) sub.textContent = `19-MAY-2026 · 8 DTE · ${sig1.lots}L × ${sig1.lotsize} · cap ${fmtCap(sig1.capital)}`;
+        const pnlEl = hero.querySelector('.lh-pnl-num');
+        if (pnlEl) {
+          const from = firstPaintDone ? currentNum(pnlEl) : 0;
+          animateCount(pnlEl, from, sig1.pnl, 900, v => renderRupeeShort(v, '+'));
+        }
       }
     }
 
-    // Per-index P&L breakdown — show relative sizing
+    // Per-index P&L breakdown
     const breakdownPcts = { NIFTY: 0.659, BANKNIFTY: 0.282, FINNIFTY: 0.059 };
     const breakdownPnl = {};
     Object.keys(breakdownPcts).forEach(k => {
       breakdownPnl[k] = Math.round(capital * 0.085 * breakdownPcts[k]);
     });
     const bkRows = document.querySelectorAll('.pnl-bk-row');
-    if (bkRows.length === 3) {
-      bkRows[0].querySelector('.pnl-bk-val').textContent = '+' + fmtCap(breakdownPnl.NIFTY);
-      bkRows[1].querySelector('.pnl-bk-val').textContent = '+' + fmtCap(breakdownPnl.BANKNIFTY);
-      bkRows[2].querySelector('.pnl-bk-val').textContent = '+' + fmtCap(breakdownPnl.FINNIFTY);
-    }
+    const bkKeys = ['NIFTY', 'BANKNIFTY', 'FINNIFTY'];
+    bkRows.forEach((row, i) => {
+      const el = row.querySelector('.pnl-bk-val');
+      if (!el) return;
+      const from = firstPaintDone ? currentNum(el) : 0;
+      animateCount(el, from, breakdownPnl[bkKeys[i]], 900, v => renderRupeeShort(v, '+'));
+    });
+
     const totalDaily = Object.values(breakdownPnl).reduce((a,b) => a+b, 0);
     const pnlNum = document.querySelector('.hero-pnl-num');
-    if (pnlNum) pnlNum.innerHTML = '<span class="currency">₹</span>+' + totalDaily.toLocaleString('en-IN');
+    if (pnlNum) {
+      const from = firstPaintDone ? currentNum(pnlNum) : 0;
+      animateCount(pnlNum, from, totalDaily, 1100, renderRupee);
+    }
 
-    // User chip display
+    // User chip
     const capDisplay = document.getElementById('cap-display');
     if (capDisplay) capDisplay.textContent = fmtCapShort(capital) + ' cap';
+
+    firstPaintDone = true;
   }
 
   // ─── modal wiring (profile + capital) ───
@@ -2365,6 +2553,138 @@
     });
   });
 
+  // ─── engine on/off toggle with auto-schedule (08:45 – 17:00 IST) ───
+  // Three states: AUTO (default, schedule-driven), MANUAL_ON (override on),
+  // MANUAL_OFF (override off). User click cycles AUTO → MANUAL_OFF (if currently
+  // on) or AUTO → MANUAL_ON (if currently off), and clicking again restores AUTO.
+  const ENGINE_KEY = 'preview-engine-mode';
+  const engineToggle = document.getElementById('engine-toggle');
+  const liveStrip = document.getElementById('live-strip');
+  const etLabel = document.getElementById('et-label');
+  const etSub = document.getElementById('et-sub');
+  const engineStatus = document.getElementById('engine-status');
+  const engineSub = document.getElementById('engine-sub');
+
+  let engineMode = 'auto';
+  try {
+    const sv = localStorage.getItem(ENGINE_KEY);
+    if (sv === 'manual_on' || sv === 'manual_off' || sv === 'auto') engineMode = sv;
+  } catch(_) {}
+
+  function isAutoActive(now = new Date()) {
+    // IST = UTC+5:30. We compute the IST hour:minute from UTC so this works
+    // for any client time zone.
+    const utcM = now.getUTCHours() * 60 + now.getUTCMinutes();
+    const istM = (utcM + 330) % 1440;
+    const istH = Math.floor(istM / 60);
+    const istMin = istM % 60;
+    const open  = 8 * 60 + 45;  // 08:45
+    const close = 17 * 60;       // 17:00
+    return istM >= open && istM < close;
+  }
+  function fmtIstTime(mins) {
+    const h = Math.floor(mins / 60);
+    const m = mins % 60;
+    const h12 = ((h + 11) % 12) + 1;
+    return `${String(h12).padStart(2,'0')}:${String(m).padStart(2,'0')} ${h < 12 ? 'am' : 'pm'}`;
+  }
+  function fmtIstNow() {
+    const now = new Date();
+    const utcM = now.getUTCHours() * 60 + now.getUTCMinutes();
+    const istM = (utcM + 330) % 1440;
+    return fmtIstTime(istM);
+  }
+
+  function applyEngineState() {
+    const autoOn = isAutoActive();
+    let isOn;
+    if (engineMode === 'manual_on')  isOn = true;
+    else if (engineMode === 'manual_off') isOn = false;
+    else isOn = autoOn;
+
+    engineToggle.classList.toggle('on', isOn);
+    engineToggle.classList.toggle('off', !isOn);
+    liveStrip.classList.toggle('engine-off', !isOn);
+    etLabel.textContent = isOn ? 'LIVE' : 'OFF';
+
+    let sub = '';
+    if (engineMode === 'auto') {
+      sub = isOn ? 'auto-off 17:00 IST' : 'auto-on 08:45 IST';
+    } else if (engineMode === 'manual_on') {
+      sub = 'manual override';
+    } else {
+      sub = 'paused · click to resume';
+    }
+    etSub.textContent = sub;
+
+    if (engineStatus) {
+      engineStatus.textContent = isOn ? 'AI engine live · scanning price action' : 'Engine paused · awaiting next session';
+    }
+    if (engineSub) {
+      engineSub.textContent = isOn
+        ? `v2 · OHLC + RSI + EMA + VWAP + level breaks · IST ${fmtIstNow()}`
+        : `v2 strategy · resumes at next open · IST ${fmtIstNow()}`;
+    }
+  }
+
+  engineToggle.addEventListener('click', () => {
+    const autoOn = isAutoActive();
+    const currentlyOn = engineToggle.classList.contains('on');
+    if (engineMode === 'auto') {
+      engineMode = currentlyOn ? 'manual_off' : 'manual_on';
+    } else if ((engineMode === 'manual_off' && !autoOn) || (engineMode === 'manual_on' && autoOn)) {
+      engineMode = 'auto';
+    } else {
+      engineMode = currentlyOn ? 'manual_off' : 'manual_on';
+    }
+    try { localStorage.setItem(ENGINE_KEY, engineMode); } catch(_) {}
+    applyEngineState();
+  });
+
+  applyEngineState();
+  // Re-evaluate every 30s so the auto-schedule flips state at the open/close.
+  setInterval(applyEngineState, 30_000);
+
+  // ─── chart entrance animations ────────────────────────────────────
+  // Gauge: sweep from full circle to actual progress
+  const gaugeProgress = document.querySelector('.gauge-progress');
+  if (gaugeProgress) {
+    const finalOffset = gaugeProgress.getAttribute('stroke-dashoffset') || '47.5';
+    gaugeProgress.setAttribute('stroke-dashoffset', '263.9');
+    requestAnimationFrame(() => {
+      gaugeProgress.classList.add('anim');
+      requestAnimationFrame(() => {
+        gaugeProgress.setAttribute('stroke-dashoffset', finalOffset);
+      });
+    });
+  }
+
+  // Equity curve + sparklines: stroke-draw
+  function animatePath(line, fill, delay = 0) {
+    if (!line) return;
+    try {
+      const len = line.getTotalLength();
+      line.style.setProperty('--path-len', len);
+      line.classList.add('draw-line');
+      if (fill) fill.classList.add('draw-fill');
+      setTimeout(() => {
+        line.classList.add('shown');
+        if (fill) fill.classList.add('shown');
+      }, delay);
+    } catch(_) {}
+  }
+  // Equity curve has two polylines (line + area)
+  const equityPolylines = document.querySelectorAll('.equity-svg polyline');
+  if (equityPolylines.length >= 2) animatePath(equityPolylines[0], equityPolylines[1], 500);
+
+  // Sparklines inside the pill row + P&L spark
+  document.querySelectorAll('.pill-spark polyline:first-of-type').forEach((p, i) => {
+    const fill = p.parentElement.querySelectorAll('polyline')[1];
+    animatePath(p, fill, 400 + i * 80);
+  });
+  const pnlSparkLines = document.querySelectorAll('.pnl-spark polyline');
+  if (pnlSparkLines.length >= 2) animatePath(pnlSparkLines[0], pnlSparkLines[1], 350);
+
   // ─── signal detail drawer ──────────────────────────────────────────
   // Signal data — in the real app this comes from the engine's DB +
   // /api/signals/outcomes. Here we mock 8 entries that match the rows.
@@ -2375,7 +2695,10 @@
       entry: 235, sl: 153, t1: 352, t2: 470,
       lots: 1, lotsize: 75, capital: 17625,
       label: '⊙ In flight · live position',
-      pnl: 1890,   // current live P&L
+      pnl: 1890,
+      // For live (in-flight) signals: per-lot live P&L so we can re-scale
+      // when capital change recomputes the lots.
+      liveBasePnl: 1890 / 1,
       best: null, close: null, worst: null,
       note: 'Position open. LTP ₹260 · entered 4 min ago · auto-exits at SL ₹153 or T1 ₹352.',
       conf: [['EMA + RSI','RSI 31'], ['SuperTrend','bear'], ['PDH / PDL','level break']],
