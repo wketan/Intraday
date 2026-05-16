@@ -2312,17 +2312,6 @@
     if (capDisplay) capDisplay.textContent = fmtCapShort(capital) + ' cap';
   }
 
-  // Stash original per-share P&L on each signal so we can scale by new lots
-  Object.keys(SIGNALS).forEach(id => {
-    const s = SIGNALS[id];
-    if (s.entry && s.pnl != null && s.lots) {
-      s.outcomeBasePnl = s.pnl / s.lots;
-    }
-  });
-
-  // initial paint
-  refreshSizingOnPage();
-
   // ─── modal wiring (profile + capital) ───
   const capModal         = document.getElementById('cap-modal');
   const capModalBackdrop = document.getElementById('cap-modal-backdrop');
@@ -2492,6 +2481,17 @@
       expiry: '13-MAY-2026', dte: 4,
     },
   };
+
+  // Stash original per-share P&L on each signal so we can scale by new lots,
+  // then run the initial sizing paint. Must happen AFTER SIGNALS is declared
+  // because `const` has a temporal dead zone.
+  Object.keys(SIGNALS).forEach(id => {
+    const s = SIGNALS[id];
+    if (s.entry && s.pnl != null && s.lots) {
+      s.outcomeBasePnl = s.pnl / s.lots;
+    }
+  });
+  refreshSizingOnPage();
 
   const drawer = document.getElementById('drawer');
   const drawerBackdrop = document.getElementById('drawer-backdrop');
