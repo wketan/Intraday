@@ -818,18 +818,21 @@
     }
     .h-eb { font-family: var(--mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.14em; color: var(--ink-3); margin-bottom: 6px; position: relative; }
     .h-big {
+      display: block;
       font-weight: 700; font-size: 38px; line-height: 1; letter-spacing: -0.04em;
-      font-variant-numeric: tabular-nums; margin-bottom: 6px; position: relative;
-      display: inline-flex; align-items: baseline; gap: 0;
-      text-align: left;
+      font-variant-numeric: tabular-nums; margin: 0 0 6px; padding: 0;
+      position: relative; text-align: left;
+      /* The Inter / SF rupee glyph has a slight left bearing — push left
+         by 2px so the visible left edge of "₹" aligns with the eyebrow's
+         "R" of REPLAY P&L. */
+      margin-left: -2px;
     }
     .h-big.win  { color: var(--long);  text-shadow: 0 0 32px var(--win-glow); }
     .h-big.loss { color: var(--short); text-shadow: 0 0 32px var(--loss-glow); }
     .h-big .currency {
-      font-size: inherit; opacity: 1; font-weight: inherit;
-      line-height: inherit; letter-spacing: inherit;
-      margin: 0; padding: 0;
-      vertical-align: baseline;
+      display: inline;
+      font: inherit; opacity: 1;
+      margin: 0 1px 0 0; padding: 0;
     }
     .h-foot { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--ink-2); position: relative; }
     .pct-pill {
@@ -876,10 +879,13 @@
       font-variant-numeric: tabular-nums;
     }
     .streak-big span { font-size: 16px; opacity: 0.6; margin-left: 3px; vertical-align: 10px; font-weight: 600; }
-    .streak-dots { display: flex; gap: 5px; margin-top: 10px; }
-    .streak-dot { flex: 1; height: 4px; border-radius: 999px; background: var(--line-1); }
-    .streak-dot.win  { background: var(--long);  box-shadow: 0 0 8px var(--win-glow); }
-    .streak-dot.loss { background: var(--short); box-shadow: 0 0 8px var(--loss-glow); }
+    .streak-dots { display: flex; gap: 6px; margin-top: 12px; align-items: center; }
+    .streak-dot {
+      width: 7px; height: 7px; border-radius: 50%;
+      background: var(--line-2); flex-shrink: 0;
+    }
+    .streak-dot.win  { background: var(--long);  box-shadow: 0 0 5px var(--win-glow); }
+    .streak-dot.loss { background: var(--short); box-shadow: 0 0 5px var(--loss-glow); }
     .streak-foot { margin-top: 8px; font-size: 11px; color: var(--ink-2); font-family: var(--mono); }
 
     /* ── index pills ─────────────────────────────────────────────────── */
@@ -942,6 +948,34 @@
       transition: transform 0.15s;
     }
     .lh-cta:hover { transform: translateY(-1px); }
+
+    /* AI confluence block at the bottom of the LIVE HERO */
+    .lh-ai {
+      margin-top: 10px; padding: 10px 12px;
+      background: oklch(0 0 0 / 0.20);
+      border: 1px solid var(--line-1);
+      border-radius: 10px;
+    }
+    [data-theme="light"] .lh-ai { background: oklch(1 0 0 / 0.55); }
+    .lh-ai-eb {
+      display: flex; align-items: center; gap: 6px;
+      font-family: var(--mono); font-size: 9.5px; font-weight: 600;
+      color: var(--ink-3); letter-spacing: 0.14em; text-transform: uppercase;
+      margin-bottom: 6px;
+    }
+    .lh-ai-eb svg { width: 12px; height: 12px; color: var(--accent); }
+    .lh-ai-eb span { color: var(--ink-1); }
+    .lh-ai-body {
+      font-size: 12px; color: var(--ink-1); line-height: 1.5;
+      letter-spacing: -0.005em;
+    }
+    .lh-ai-strats { margin-top: 8px; display: flex; gap: 4px; flex-wrap: wrap; }
+    .lh-ai-strat {
+      font-family: var(--mono); font-size: 9.5px; font-weight: 600;
+      padding: 2px 8px; border-radius: 999px;
+      background: var(--accent-dim); color: var(--accent);
+      letter-spacing: 0.04em; text-transform: uppercase;
+    }
 
     /* ── view tab fallback (Backtest/Calc/etc placeholders) ────────── */
     .empty-view {
@@ -1024,6 +1058,9 @@
 
     /* hide the old tab bar inside the new shell — sidebar replaces it */
     .app-shell .tabs { display: none !important; }
+    /* Kill inst-row's extra vertical padding so the gap from LIVE HERO to
+       the inst-row matches the 10px gap between other rows. */
+    .app-shell .inst-row { padding-top: 0; }
   </style>
 </head>
 <body>
@@ -3694,26 +3731,55 @@ function SwingTab({ data, getServer, getAuthToken, showToast }) {
       );
     }
 
-    function LiveHeroCard({ signal, live, capital, mode, onOpen }) {
+    function LiveHeroCard({ signal, simulatedTrade, live, capital, mode, onOpen }) {
       if (!signal) return null;
       const instLive = (live || {})[signal.inst] || {};
       const entry = Number(signal.entry || 0);
       const sl = Number(signal.sl || 0);
       const t1 = Number(signal.target1 || 0);
       const t2 = Number(signal.target2 || 0);
-      const ltp = instLive.ltp ?? entry;
       const status = signal.status || (mode === 'replay' ? 'REPLAY' : 'LIVE');
-      const isReplay = status === 'REPLAY';
-      const pillLabel = isReplay ? 'REPLAY · Backtest signal' : (status === 'WATCH' ? 'WATCH · pre-entry' : 'LIVE · In flight');
+      const isReplay = status === 'REPLAY' || mode === 'replay';
       const lotSize = ({NIFTY:75, BANKNIFTY:30, FINNIFTY:65})[signal.inst] || 75;
+
+      // In replay we use a simulated-outcome P&L (already computed in
+      // App from forward candle walk). Live mode uses the live LTP.
+      let pnl, pct, pnlIsWin, pillLabel, simStatus, exitPrice = null;
+      if (isReplay && simulatedTrade) {
+        // simulatedTrade.pnl is computed at ~0.5 delta × lot_size × points.
+        // Scale to user's capital sizing (1-3 lots based on capital).
+        const baseLots = 1;
+        const budget = (capital || 50000) * 0.5;
+        // Use a notional option premium ≈ 1% of spot index for sizing math
+        const premiumEst = Math.max(1, entry * 0.01);
+        const lots = Math.max(1, Math.min(3, Math.floor(budget / (premiumEst * lotSize))));
+        pnl = Math.round((simulatedTrade.pnl / baseLots) * lots);
+        const indexPoints = simulatedTrade.exitPrice - entry;
+        pct = entry ? ((indexPoints / entry) * 100) * (signal.dir === 'LONG' ? 1 : -1) : 0;
+        pnlIsWin = pnl >= 0;
+        simStatus = simulatedTrade.status; // WIN / LOSS / OPEN
+        exitPrice = simulatedTrade.exitPrice;
+        pillLabel = simStatus === 'WIN'  ? 'REPLAY · Target hit'
+                  : simStatus === 'LOSS' ? 'REPLAY · Stop loss hit'
+                  : simStatus === 'OPEN' ? 'REPLAY · Open at end'
+                  : 'REPLAY · Backtest signal';
+      } else {
+        const ltp = instLive.ltp ?? entry;
+        const budget = (capital || 50000) * 0.5;
+        const perLotCost = entry * lotSize;
+        const lots = Math.max(1, Math.min(3, perLotCost ? Math.floor(budget / perLotCost) : 1));
+        const contracts = lots * lotSize;
+        pnl = Math.round((ltp - entry) * contracts);
+        pct = entry ? ((ltp - entry) / entry * 100) : 0;
+        pnlIsWin = pnl >= 0;
+        pillLabel = status === 'WATCH' ? 'WATCH · pre-entry' : 'LIVE · In flight';
+      }
+
       const budget = (capital || 50000) * 0.5;
       const perLotCost = entry * lotSize;
       const lots = Math.max(1, Math.min(3, perLotCost ? Math.floor(budget / perLotCost) : 1));
       const cap = Math.round(perLotCost * lots);
-      const contracts = lots * lotSize;
-      const pnl = Math.round((ltp - entry) * contracts);
-      const pct = entry ? ((ltp - entry) / entry * 100) : 0;
-      const pnlIsWin = pnl >= 0;
+      const ltp = instLive.ltp ?? entry;
       return (
         <div className="live-hero" onClick={onOpen}>
           <div className="lh-status">
@@ -3737,13 +3803,42 @@ function SwingTab({ data, getServer, getAuthToken, showToast }) {
           <div className="lh-row">
             <span className="lvl-inline"><span className="lvl-k">Entry</span><b>₹{Math.round(entry)}</b></span>
             <span className="sep">→</span>
-            <span className="lvl-inline ltp"><span className="lvl-k">LTP</span><b>₹{Math.round(ltp)}</b></span>
+            {exitPrice != null
+              ? <span className={`lvl-inline ${simStatus==='WIN'?'t1':simStatus==='LOSS'?'sl':''}`}>
+                  <span className="lvl-k">Exit ({simStatus})</span><b>₹{Math.round(exitPrice)}</b>
+                </span>
+              : <span className="lvl-inline ltp"><span className="lvl-k">LTP</span><b>₹{Math.round(ltp)}</b></span>}
             <span className="sep">·</span>
             <span className="lvl-inline sl"><span className="lvl-k">SL</span><b>₹{Math.round(sl)}</b></span>
             <span className="lvl-inline t1"><span className="lvl-k">T1</span><b>₹{Math.round(t1)}</b></span>
             <span className="lvl-inline t2"><span className="lvl-k">T2</span><b>₹{Math.round(t2)}</b></span>
             <button type="button" className="lh-cta">Details →</button>
           </div>
+          {/* AI summary — narrative + indicator readout, restored from the
+              signal's reasons / strategies. Helps the user understand "why
+              should I take this trade?" without leaving the card. */}
+          {(signal.reasons || signal.strategies) && (
+            <div className="lh-ai">
+              <div className="lh-ai-eb">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+                  <path d="M12 2a4 4 0 0 0-4 4v2H6a3 3 0 0 0-3 3v3a3 3 0 0 0 3 3h2v2a4 4 0 0 0 4 4 4 4 0 0 0 4-4v-2h2a3 3 0 0 0 3-3v-3a3 3 0 0 0-3-3h-2V6a4 4 0 0 0-4-4z"/>
+                </svg>
+                <span>AI confluence read</span>
+              </div>
+              <div className="lh-ai-body">
+                {Array.isArray(signal.reasons) && signal.reasons.length > 0
+                  ? signal.reasons.slice(0, 3).join(' · ')
+                  : 'Confluence-based setup detected on this bar — see Details for full breakdown.'}
+              </div>
+              {Array.isArray(signal.strategies) && signal.strategies.length > 0 && (
+                <div className="lh-ai-strats">
+                  {signal.strategies.map((s, i) => (
+                    <span key={i} className="lh-ai-strat">{typeof s === 'string' ? s : (s.name || s.label || JSON.stringify(s).slice(0, 12))}</span>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       );
     }
@@ -4610,6 +4705,7 @@ function SwingTab({ data, getServer, getAuthToken, showToast }) {
                 {activeLive && (
                   <LiveHeroCard
                     signal={activeLive}
+                    simulatedTrade={simulatedTrades.find(t => t && t.id === activeLive.id) || null}
                     live={safeLive}
                     capital={capital}
                     mode={mode}
