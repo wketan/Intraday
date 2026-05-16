@@ -383,9 +383,13 @@
     border-radius: 999px;
     cursor: pointer;
     box-shadow: var(--glass-shadow);
-    transition: transform 0.15s;
+    transition: transform 0.15s, border-color 0.15s;
+    /* button reset */
+    font-family: inherit; font-size: inherit; color: inherit;
+    outline: none;
   }
-  .userchip:hover { transform: translateY(-1px); }
+  .userchip:hover { transform: translateY(-1px); border-color: var(--glass-border-hi); }
+  .userchip:focus-visible { border-color: var(--accent); box-shadow: var(--glass-shadow), 0 0 0 3px var(--accent-soft); }
   .userchip .avatar {
     width: 30px; height: 30px; border-radius: 50%;
     background:
@@ -398,30 +402,15 @@
     background: var(--bg-base); border-radius: 50%;
     background-image: linear-gradient(140deg, var(--accent), var(--accent-2));
   }
-  .userchip .name { font-size: 12.5px; font-weight: 600; color: var(--ink-0); letter-spacing: -0.01em; }
-  .userchip .sub  { font-size: 10px; color: var(--ink-2); margin-top: 1px; font-family: var(--font-mono); }
-  .userchip [data-edit] {
-    outline: none; cursor: text;
-    border-radius: 3px; padding: 0 2px; margin: 0 -2px;
-    transition: background 0.15s;
-  }
-  .userchip [data-edit]:focus {
-    background: var(--accent-soft);
-    box-shadow: 0 0 0 1.5px var(--accent);
-  }
+  .userchip .name { font-size: 12.5px; font-weight: 600; color: var(--ink-0); letter-spacing: -0.01em; text-align: left; }
+  .userchip .sub  { font-size: 10px; color: var(--ink-2); margin-top: 1px; font-family: var(--font-mono); text-align: left; }
   .userchip-text { display: flex; flex-direction: column; min-width: 0; }
-  .userchip .cap-btn {
-    display: inline-flex; align-items: center; gap: 4px;
-    background: transparent; border: 0; cursor: pointer; padding: 0;
-    font-family: var(--font-mono); color: var(--ink-2); font-size: 10px;
-    transition: color 0.15s;
+  .userchip .chip-pencil {
+    width: 13px; height: 13px; flex-shrink: 0;
+    color: var(--ink-3); opacity: 0; margin-left: 4px;
+    transition: opacity 0.15s, color 0.15s;
   }
-  .userchip .cap-btn svg {
-    width: 11px; height: 11px; color: var(--ink-3); opacity: 0;
-    transition: opacity 0.15s;
-  }
-  .userchip .cap-btn:hover { color: var(--accent); }
-  .userchip .cap-btn:hover svg { opacity: 1; color: var(--accent); }
+  .userchip:hover .chip-pencil { opacity: 1; color: var(--accent); }
 
   /* ─── glass card ───────────────────────────────────────────────────── */
   .card {
@@ -525,7 +514,7 @@
     margin-bottom: 6px; position: relative;
     font-variant-numeric: tabular-nums;
   }
-  .hero-pnl-num .currency { font-size: 20px; vertical-align: 8px; opacity: 0.7; margin-right: 2px; font-weight: 600; }
+  .hero-pnl-num .currency { font-size: inherit; opacity: 1; margin-right: 1px; font-weight: inherit; vertical-align: baseline; }
   .hero-pnl-foot {
     display: flex; align-items: center; gap: 10px;
     font-size: 12px; color: var(--ink-2);
@@ -1407,6 +1396,18 @@
     color: var(--ink-0); margin-bottom: 4px;
   }
   .modal-desc { font-size: 12px; color: var(--ink-2); margin-bottom: 18px; line-height: 1.5; }
+  .modal-label {
+    display: block;
+    font-family: var(--font-mono); font-size: 9.5px; font-weight: 600;
+    color: var(--ink-3); letter-spacing: 0.14em; text-transform: uppercase;
+    margin-bottom: 6px; margin-top: 0;
+  }
+  .modal-input-wrap + .modal-label { margin-top: 14px; }
+  .modal-input-wrap.simple { padding: 0 14px; }
+  .modal-input.small {
+    font-size: 16px; font-weight: 500; padding: 11px 0;
+    letter-spacing: -0.005em;
+  }
   .modal-input-wrap {
     display: flex; align-items: center;
     background: oklch(0 0 0 / 0.30);
@@ -1582,16 +1583,14 @@
         <span class="badge-dot"></span>
       </div>
 
-      <div class="userchip" id="userchip" title="click name to rename · click capital to change">
+      <button type="button" class="userchip" id="userchip" title="click to edit profile + capital">
         <div class="avatar"></div>
         <div class="userchip-text">
-          <div class="name" data-edit="user-name">Ketan W.</div>
-          <button type="button" class="sub cap-btn" id="cap-btn">
-            <span id="cap-display">₹50,000 cap</span>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
-          </button>
+          <div class="name" id="chip-name">Ketan W.</div>
+          <div class="sub" id="cap-display">₹50,000 cap</div>
         </div>
-      </div>
+        <svg class="chip-pencil" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+      </button>
     </div>
 
     <!-- ============================================================== -->
@@ -2057,12 +2056,19 @@
   </main>
 </div>
 
-<!-- ─── capital modal ─── -->
+<!-- ─── profile + capital modal ─── -->
 <div class="modal-backdrop" id="cap-modal-backdrop"></div>
 <div class="modal" id="cap-modal" role="dialog" aria-labelledby="cap-modal-title">
-  <div class="modal-eyebrow">Trading capital</div>
-  <div class="modal-title" id="cap-modal-title">Set your budget</div>
-  <div class="modal-desc">All trade sizing scales to this amount. Each signal uses ~50% per trade with SL capped at 3% of capital.</div>
+  <div class="modal-eyebrow">Profile</div>
+  <div class="modal-title" id="cap-modal-title">Your trading setup</div>
+  <div class="modal-desc">Sizing scales to your capital — 50% per trade, 1–3 lots, SL capped at 3% of capital.</div>
+
+  <label class="modal-label">Your name</label>
+  <div class="modal-input-wrap simple">
+    <input type="text" id="name-input" class="modal-input small" placeholder="Ketan W." maxlength="40"/>
+  </div>
+
+  <label class="modal-label">Trading capital</label>
   <div class="modal-input-wrap">
     <span class="pre">₹</span>
     <input type="number" id="cap-input" class="modal-input" inputmode="numeric" min="5000" max="10000000" step="1000" placeholder="50000"/>
@@ -2075,11 +2081,11 @@
     <button type="button" data-cap="500000">₹5L</button>
   </div>
   <div class="modal-helper">
-    Saved instantly — the live signal, per-index breakdown, and every trade detail recalculates based on this number.
+    Save instantly — the live signal, per-index breakdown and every trade detail recalculates from this number.
   </div>
   <div class="modal-actions">
     <button type="button" class="btn-ghost" id="cap-cancel">Cancel</button>
-    <button type="button" class="btn-primary" id="cap-save">Save capital</button>
+    <button type="button" class="btn-primary" id="cap-save">Save changes</button>
   </div>
 </div>
 
@@ -2224,29 +2230,21 @@
     if (saved === 'light' || saved === 'dark') root.dataset.theme = saved;
   } catch(_) {}
 
-  // ─── editable user-name (inline) ───
-  document.querySelectorAll('.userchip [data-edit]').forEach(el => {
-    const key = `preview-${el.dataset.edit}`;
-    try { const v = localStorage.getItem(key); if (v) el.textContent = v; } catch(_) {}
-    el.contentEditable = 'true';
-    el.spellcheck = false;
-    el.addEventListener('keydown', e => {
-      if (e.key === 'Enter') { e.preventDefault(); el.blur(); }
-    });
-    el.addEventListener('blur', () => {
-      const v = el.textContent.replace(/\s+/g, ' ').trim();
-      el.textContent = v || el.dataset.edit;
-      try { localStorage.setItem(key, el.textContent); } catch(_) {}
-    });
-  });
-
-  // ─── capital state + modal ───
-  const CAP_KEY = 'preview-capital';
+  // ─── profile state (name + capital) ───
+  const CAP_KEY  = 'preview-capital';
+  const NAME_KEY = 'preview-user-name';
   let capital = 50000;
+  let userName = 'Ketan W.';
   try {
-    const saved = parseInt(localStorage.getItem(CAP_KEY), 10);
-    if (!isNaN(saved) && saved >= 5000) capital = saved;
+    const sv = parseInt(localStorage.getItem(CAP_KEY), 10);
+    if (!isNaN(sv) && sv >= 5000) capital = sv;
+    const nm = localStorage.getItem(NAME_KEY);
+    if (nm && nm.trim()) userName = nm.trim();
   } catch(_) {}
+
+  // paint stored name into the chip
+  const chipNameEl = document.getElementById('chip-name');
+  if (chipNameEl) chipNameEl.textContent = userName;
 
   const fmtCap = n => '₹' + Math.round(n).toLocaleString('en-IN');
   const fmtCapShort = n => {
@@ -2325,42 +2323,52 @@
   // initial paint
   refreshSizingOnPage();
 
-  // Modal wiring
-  const capModal = document.getElementById('cap-modal');
+  // ─── modal wiring (profile + capital) ───
+  const capModal         = document.getElementById('cap-modal');
   const capModalBackdrop = document.getElementById('cap-modal-backdrop');
-  const capInput = document.getElementById('cap-input');
-  const capBtn = document.getElementById('cap-btn');
+  const capInput         = document.getElementById('cap-input');
+  const nameInput        = document.getElementById('name-input');
+  const userchipEl       = document.getElementById('userchip');
 
-  function openCapModal() {
+  function openProfileModal() {
     capInput.value = capital;
+    nameInput.value = userName;
     capModal.classList.add('on');
     capModalBackdrop.classList.add('on');
-    setTimeout(() => { capInput.focus(); capInput.select(); }, 50);
+    setTimeout(() => { capInput.focus(); capInput.select(); }, 60);
   }
-  function closeCapModal() {
+  function closeProfileModal() {
     capModal.classList.remove('on');
     capModalBackdrop.classList.remove('on');
   }
-  function saveCapital() {
+  function saveProfile() {
     const v = parseInt(capInput.value, 10);
-    if (isNaN(v) || v < 5000) {
-      capInput.focus();
-      return;
-    }
+    if (isNaN(v) || v < 5000) { capInput.focus(); capInput.select(); return; }
+    const nm = (nameInput.value || '').replace(/\s+/g, ' ').trim();
     capital = v;
-    try { localStorage.setItem(CAP_KEY, String(capital)); } catch(_) {}
+    if (nm) userName = nm;
+    try {
+      localStorage.setItem(CAP_KEY, String(capital));
+      localStorage.setItem(NAME_KEY, userName);
+    } catch(_) {}
+    if (chipNameEl) chipNameEl.textContent = userName;
     refreshSizingOnPage();
-    closeCapModal();
+    closeProfileModal();
   }
 
-  capBtn.addEventListener('click', openCapModal);
-  document.getElementById('cap-cancel').addEventListener('click', closeCapModal);
-  document.getElementById('cap-save').addEventListener('click', saveCapital);
-  capModalBackdrop.addEventListener('click', closeCapModal);
-  capInput.addEventListener('keydown', e => {
-    if (e.key === 'Enter') { e.preventDefault(); saveCapital(); }
-    if (e.key === 'Escape') { e.preventDefault(); closeCapModal(); }
-  });
+  // single-click on the whole chip opens the modal
+  userchipEl.addEventListener('click', openProfileModal);
+  document.getElementById('cap-cancel').addEventListener('click', closeProfileModal);
+  document.getElementById('cap-save').addEventListener('click', saveProfile);
+  capModalBackdrop.addEventListener('click', closeProfileModal);
+
+  const modalKeyHandler = e => {
+    if (e.key === 'Enter')  { e.preventDefault(); saveProfile(); }
+    if (e.key === 'Escape') { e.preventDefault(); closeProfileModal(); }
+  };
+  capInput.addEventListener('keydown', modalKeyHandler);
+  nameInput.addEventListener('keydown', modalKeyHandler);
+
   document.querySelectorAll('.modal-quick button[data-cap]').forEach(b => {
     b.addEventListener('click', () => {
       capInput.value = b.dataset.cap;
