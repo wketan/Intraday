@@ -218,14 +218,23 @@
     background: oklch(0 0 0 / 0.20);
     backdrop-filter: blur(8px);
   }
-  .nav-item .live-dot {
-    margin-left: auto; width: 7px; height: 7px; border-radius: 50%;
-    background: var(--win); box-shadow: 0 0 10px var(--win);
+  .nav-item .badge.live-badge {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 2px 9px 2px 8px;
+    background: oklch(0.78 0.20 22 / 0.16);
+    color: oklch(0.78 0.20 22);
+    border-color: oklch(0.78 0.20 22 / 0.35);
+    font-weight: 700;
+  }
+  .nav-item .live-dot-mini {
+    width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0;
+    background: oklch(0.78 0.20 22);
+    box-shadow: 0 0 8px oklch(0.78 0.20 22);
     animation: livepulse 1.6s ease-in-out infinite;
   }
   @keyframes livepulse {
-    0%, 100% { transform: scale(1); opacity: 1; }
-    50% { transform: scale(1.4); opacity: 0.6; }
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50%      { opacity: 0.55; transform: scale(1.30); }
   }
 
   .help-widget {
@@ -272,12 +281,12 @@
   .help-widget button:hover { transform: translateY(-1px); }
 
   /* ─── main ─────────────────────────────────────────────────────────── */
-  .main { padding: 22px 28px 50px; min-width: 0; }
+  .main { padding: 18px 22px 40px; min-width: 0; }
 
   /* ─── top bar ──────────────────────────────────────────────────────── */
   .topbar {
-    display: flex; align-items: center; gap: 14px;
-    margin-bottom: 24px;
+    display: flex; align-items: center; gap: 12px;
+    margin-bottom: 18px;
   }
   .search {
     flex: 1; max-width: 480px;
@@ -400,13 +409,19 @@
     background: var(--accent-soft);
     box-shadow: 0 0 0 1.5px var(--accent);
   }
-  .userchip .pencil {
-    width: 13px; height: 13px; flex-shrink: 0;
-    color: var(--ink-3); opacity: 0; margin-left: 2px;
-    transition: opacity 0.15s, color 0.15s;
-  }
-  .userchip:hover .pencil { opacity: 1; color: var(--accent); }
   .userchip-text { display: flex; flex-direction: column; min-width: 0; }
+  .userchip .cap-btn {
+    display: inline-flex; align-items: center; gap: 4px;
+    background: transparent; border: 0; cursor: pointer; padding: 0;
+    font-family: var(--font-mono); color: var(--ink-2); font-size: 10px;
+    transition: color 0.15s;
+  }
+  .userchip .cap-btn svg {
+    width: 11px; height: 11px; color: var(--ink-3); opacity: 0;
+    transition: opacity 0.15s;
+  }
+  .userchip .cap-btn:hover { color: var(--accent); }
+  .userchip .cap-btn:hover svg { opacity: 1; color: var(--accent); }
 
   /* ─── glass card ───────────────────────────────────────────────────── */
   .card {
@@ -446,9 +461,9 @@
   /* ─── view: live (default) ─────────────────────────────────────────── */
   /* live status strip */
   .live-strip {
-    display: flex; align-items: center; gap: 14px;
-    padding: 12px 18px;
-    margin-bottom: 14px;
+    display: flex; align-items: center; gap: 12px;
+    padding: 9px 14px;
+    margin-bottom: 10px;
     background: var(--glass-bg);
     border: 1px solid var(--glass-border);
     border-top-color: var(--glass-border-hi);
@@ -484,11 +499,11 @@
   .hero-row {
     display: grid;
     grid-template-columns: 1.35fr 1.7fr 0.95fr;
-    gap: 14px;
-    margin-bottom: 14px;
+    gap: 10px;
+    margin-bottom: 10px;
   }
   .hero-pnl {
-    padding: 24px 26px;
+    padding: 16px 18px;
     position: relative; overflow: hidden;
   }
   .hero-pnl::before {
@@ -499,34 +514,34 @@
   }
   .hero-pnl-eyebrow {
     font-family: var(--font-mono);
-    font-size: 10px; text-transform: uppercase; letter-spacing: 0.16em;
-    color: var(--ink-3); margin-bottom: 10px; position: relative;
+    font-size: 10px; text-transform: uppercase; letter-spacing: 0.14em;
+    color: var(--ink-3); margin-bottom: 6px; position: relative;
   }
   .hero-pnl-num {
     font-family: var(--font-sans);
-    font-weight: 700; font-size: 50px; line-height: 1; letter-spacing: -0.045em;
+    font-weight: 700; font-size: 38px; line-height: 1; letter-spacing: -0.04em;
     color: var(--win);
-    text-shadow: 0 0 40px var(--win-glow);
-    margin-bottom: 10px; position: relative;
+    text-shadow: 0 0 32px var(--win-glow);
+    margin-bottom: 6px; position: relative;
     font-variant-numeric: tabular-nums;
   }
-  .hero-pnl-num .currency { font-size: 26px; vertical-align: 10px; opacity: 0.7; margin-right: 2px; font-weight: 600; }
+  .hero-pnl-num .currency { font-size: 20px; vertical-align: 8px; opacity: 0.7; margin-right: 2px; font-weight: 600; }
   .hero-pnl-foot {
     display: flex; align-items: center; gap: 10px;
     font-size: 12px; color: var(--ink-2);
     position: relative;
   }
   /* intraday spark + breakdown inside P&L card */
-  .pnl-spark { display: block; width: 100%; height: 60px; margin-top: 14px; }
+  .pnl-spark { display: block; width: 100%; height: 44px; margin-top: 10px; }
   .pnl-spark-axis {
     display: flex; justify-content: space-between;
     font-family: var(--font-mono); font-size: 9px; color: var(--ink-3);
-    margin-top: 4px; margin-bottom: 12px;
+    margin-top: 3px; margin-bottom: 9px;
     letter-spacing: 0.04em;
   }
   .pnl-breakdown {
     display: grid; grid-template-columns: 1fr 1fr 1fr;
-    gap: 10px; padding-top: 12px;
+    gap: 8px; padding-top: 9px;
     border-top: 1px dashed var(--line-1);
   }
   .pnl-bk-row {
@@ -556,14 +571,14 @@
   .pct-pill.win  { background: var(--win-soft);  color: var(--win); border-color: transparent; }
   .pct-pill.loss { background: var(--loss-soft); color: var(--loss); border-color: transparent; }
 
-  /* win-rate gauge — proper sizing this time */
+  /* win-rate gauge */
   .hero-gauge {
-    padding: 20px 24px;
-    display: flex; align-items: center; gap: 20px;
+    padding: 14px 18px;
+    display: flex; align-items: center; gap: 16px;
   }
   .gauge-container {
     position: relative;
-    width: 170px; height: 170px;
+    width: 140px; height: 140px;
     flex-shrink: 0;
   }
   .gauge-svg {
@@ -582,11 +597,11 @@
   }
   .gauge-num {
     font-family: var(--font-sans);
-    font-weight: 700; font-size: 34px; line-height: 1;
+    font-weight: 700; font-size: 28px; line-height: 1;
     letter-spacing: -0.04em; color: var(--ink-0);
     font-variant-numeric: tabular-nums;
   }
-  .gauge-num .pct { font-size: 16px; color: var(--ink-2); margin-left: 1px; vertical-align: 6px; font-weight: 600; }
+  .gauge-num .pct { font-size: 14px; color: var(--ink-2); margin-left: 1px; vertical-align: 5px; font-weight: 600; }
   .gauge-lbl {
     font-family: var(--font-mono);
     font-size: 9px; text-transform: uppercase; letter-spacing: 0.16em;
@@ -595,14 +610,14 @@
   .gauge-stats { flex: 1; min-width: 0; }
   .gauge-row {
     display: flex; justify-content: space-between; align-items: baseline;
-    padding: 8px 0;
+    padding: 5px 0;
     border-bottom: 1px dashed var(--line-0);
   }
   .gauge-row:last-child { border-bottom: 0; }
-  .gauge-rl { font-size: 11.5px; color: var(--ink-2); }
+  .gauge-rl { font-size: 11px; color: var(--ink-2); }
   .gauge-rv {
     font-family: var(--font-mono);
-    font-weight: 600; font-size: 13.5px; color: var(--ink-0);
+    font-weight: 600; font-size: 12.5px; color: var(--ink-0);
   }
   .gauge-rv.win  { color: var(--win); }
   .gauge-rv.loss { color: var(--loss); }
@@ -610,7 +625,7 @@
 
   /* streak */
   .hero-streak {
-    padding: 22px 22px 20px;
+    padding: 14px 16px;
     position: relative; overflow: hidden;
     background:
       linear-gradient(140deg, var(--win-soft), transparent 70%),
@@ -618,43 +633,43 @@
   }
   .hero-streak-eb {
     font-family: var(--font-mono);
-    font-size: 10px; text-transform: uppercase; letter-spacing: 0.16em;
-    color: var(--ink-3); margin-bottom: 12px;
+    font-size: 10px; text-transform: uppercase; letter-spacing: 0.14em;
+    color: var(--ink-3); margin-bottom: 8px;
   }
   .hero-streak-num {
     font-family: var(--font-sans);
-    font-weight: 700; font-size: 58px; line-height: 0.9;
-    letter-spacing: -0.05em; color: var(--win);
-    text-shadow: 0 0 28px var(--win-glow);
+    font-weight: 700; font-size: 44px; line-height: 0.9;
+    letter-spacing: -0.04em; color: var(--win);
+    text-shadow: 0 0 22px var(--win-glow);
     font-variant-numeric: tabular-nums;
   }
-  .hero-streak-num span { font-size: 20px; opacity: 0.6; margin-left: 3px; vertical-align: 14px; font-weight: 600; }
-  .streak-dots { display: flex; gap: 6px; margin-top: 14px; }
+  .hero-streak-num span { font-size: 16px; opacity: 0.6; margin-left: 3px; vertical-align: 10px; font-weight: 600; }
+  .streak-dots { display: flex; gap: 5px; margin-top: 10px; }
   .streak-dot {
-    flex: 1; height: 5px; border-radius: 999px;
+    flex: 1; height: 4px; border-radius: 999px;
     background: var(--line-1);
   }
   .streak-dot.win  { background: var(--win);  box-shadow: 0 0 8px var(--win-glow); }
   .streak-dot.loss { background: var(--loss); box-shadow: 0 0 8px var(--loss-glow); }
   .hero-streak-foot {
-    margin-top: 12px; font-size: 11.5px; color: var(--ink-2);
+    margin-top: 8px; font-size: 11px; color: var(--ink-2);
     font-family: var(--font-mono);
   }
 
   /* index pills row */
-  .pill-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 14px; }
-  .pill { padding: 16px 18px; display: flex; align-items: center; gap: 16px; }
+  .pill-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 10px; }
+  .pill { padding: 12px 14px; display: flex; align-items: center; gap: 14px; }
   .pill-name {
     font-family: var(--font-sans); font-size: 12px; font-weight: 600;
     color: var(--ink-2); letter-spacing: 0.02em; text-transform: uppercase;
   }
   .pill-price {
     font-family: var(--font-mono); font-weight: 600;
-    font-size: 19px; color: var(--ink-0); margin-top: 2px;
+    font-size: 17px; color: var(--ink-0); margin-top: 2px;
     letter-spacing: -0.02em;
   }
-  .pill-pill { margin-top: 7px; }
-  .pill-spark { margin-left: auto; width: 90px; height: 40px; flex-shrink: 0; }
+  .pill-pill { margin-top: 5px; }
+  .pill-spark { margin-left: auto; width: 80px; height: 34px; flex-shrink: 0; }
 
   /* ─── LIVE HERO · compact attention-grabbing in-flight card ────────── */
   .live-hero {
@@ -798,20 +813,20 @@
 
   /* ─── live signals card ────────────────────────────────────────────── */
   .live-grid {
-    display: grid; grid-template-columns: 1.6fr 1fr; gap: 14px;
-    margin-bottom: 14px;
+    display: grid; grid-template-columns: 1.6fr 1fr; gap: 10px;
+    margin-bottom: 10px;
   }
-  .live-card { padding: 20px 22px; }
+  .live-card { padding: 14px 16px; }
 
   .live-row {
     display: grid;
-    grid-template-columns: 4px auto 1fr auto auto 16px;
-    gap: 14px; align-items: center;
-    padding: 14px 14px 14px 12px;
+    grid-template-columns: 3px auto 1fr auto auto 14px;
+    gap: 12px; align-items: center;
+    padding: 10px 12px 10px 10px;
     background: oklch(1 0 0 / 0.025);
     border: 1px solid var(--line-1);
-    border-radius: 13px;
-    margin-bottom: 8px;
+    border-radius: 11px;
+    margin-bottom: 6px;
     transition: transform 0.15s, border-color 0.15s, background 0.15s;
     cursor: pointer;
   }
@@ -839,10 +854,10 @@
   .live-bar.warn { background: var(--warn); }
 
   .live-tag {
-    width: 42px; height: 42px;
-    border-radius: 11px;
+    width: 34px; height: 34px;
+    border-radius: 9px;
     display: flex; align-items: center; justify-content: center;
-    font-family: var(--font-sans); font-weight: 700; font-size: 13px;
+    font-family: var(--font-sans); font-weight: 700; font-size: 11.5px;
     border: 1px solid;
     letter-spacing: 0;
   }
@@ -917,19 +932,19 @@
   }
 
   /* equity curve */
-  .equity-card { padding: 20px 22px; }
-  .equity-svg { width: 100%; height: 180px; display: block; }
+  .equity-card { padding: 14px 16px; }
+  .equity-svg { width: 100%; height: 130px; display: block; }
   .equity-axis {
     display: flex; justify-content: space-between; margin-top: 8px;
     font-family: var(--font-mono); font-size: 9.5px; color: var(--ink-3);
   }
 
   /* top setups */
-  .setups-card { padding: 18px 22px; margin-top: 14px; }
+  .setups-card { padding: 14px 16px; margin-top: 10px; }
   .setup-row {
     display: grid; grid-template-columns: auto 1fr auto;
-    gap: 14px; align-items: center;
-    padding: 12px 2px;
+    gap: 12px; align-items: center;
+    padding: 8px 2px;
     border-bottom: 1px dashed var(--line-0);
   }
   .setup-row:last-child { border-bottom: 0; }
@@ -1350,6 +1365,101 @@
     .drawer { width: 100vw; }
   }
 
+  /* ─── capital modal ────────────────────────────────────────────────── */
+  .modal-backdrop {
+    position: fixed; inset: 0; z-index: 1000;
+    background: oklch(0 0 0 / 0.55);
+    backdrop-filter: blur(8px);
+    opacity: 0; pointer-events: none;
+    transition: opacity 0.22s ease;
+  }
+  .modal-backdrop.on { opacity: 1; pointer-events: auto; }
+  .modal {
+    position: fixed; top: 50%; left: 50%;
+    transform: translate(-50%, -48%) scale(0.96);
+    width: 380px; max-width: calc(100vw - 32px);
+    z-index: 1001;
+    background:
+      linear-gradient(160deg, oklch(0.13 0.014 35 / 0.92), oklch(0.10 0.014 35 / 0.88));
+    backdrop-filter: blur(40px) saturate(180%);
+    border: 1px solid var(--glass-border-hi);
+    border-radius: 18px;
+    padding: 22px 24px 20px;
+    box-shadow: 0 30px 80px oklch(0 0 0 / 0.55);
+    opacity: 0; pointer-events: none;
+    transition: opacity 0.22s ease, transform 0.32s cubic-bezier(0.4,0,0.2,1);
+  }
+  :root[data-theme="light"] .modal {
+    background: linear-gradient(160deg, oklch(1 0 0 / 0.88), oklch(0.99 0.005 70 / 0.82));
+    border-color: var(--line-2);
+  }
+  .modal.on {
+    opacity: 1; pointer-events: auto;
+    transform: translate(-50%, -50%) scale(1);
+  }
+  .modal-eyebrow {
+    font-family: var(--font-mono); font-size: 9.5px; font-weight: 600;
+    color: var(--ink-3); letter-spacing: 0.14em; text-transform: uppercase;
+    margin-bottom: 6px;
+  }
+  .modal-title {
+    font-size: 19px; font-weight: 700; letter-spacing: -0.022em;
+    color: var(--ink-0); margin-bottom: 4px;
+  }
+  .modal-desc { font-size: 12px; color: var(--ink-2); margin-bottom: 18px; line-height: 1.5; }
+  .modal-input-wrap {
+    display: flex; align-items: center;
+    background: oklch(0 0 0 / 0.30);
+    border: 1px solid var(--line-2);
+    border-radius: 11px;
+    padding: 0 14px 0 16px;
+    transition: border-color 0.15s, box-shadow 0.15s;
+  }
+  :root[data-theme="light"] .modal-input-wrap { background: oklch(1 0 0 / 0.60); }
+  .modal-input-wrap:focus-within {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-soft);
+  }
+  .modal-input-wrap .pre {
+    font-family: var(--font-sans); font-size: 20px; font-weight: 600;
+    color: var(--ink-2); margin-right: 2px;
+  }
+  .modal-input {
+    flex: 1; background: transparent; border: 0; outline: 0;
+    color: var(--ink-0); font-family: var(--font-sans);
+    font-size: 24px; font-weight: 700; letter-spacing: -0.025em;
+    font-variant-numeric: tabular-nums;
+    padding: 14px 0; min-width: 0;
+  }
+  .modal-input::-webkit-outer-spin-button,
+  .modal-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+  .modal-quick {
+    display: flex; gap: 6px; margin-top: 10px; flex-wrap: wrap;
+  }
+  .modal-quick button {
+    padding: 6px 12px; border-radius: 7px;
+    background: var(--glass-bg); border: 1px solid var(--glass-border);
+    color: var(--ink-1); cursor: pointer;
+    font-family: var(--font-mono); font-size: 11px; font-weight: 600;
+    transition: all 0.15s;
+  }
+  .modal-quick button:hover {
+    color: var(--ink-0); border-color: var(--accent); background: var(--accent-soft);
+  }
+  .modal-helper {
+    font-size: 11px; color: var(--ink-3); line-height: 1.5;
+    margin-top: 14px;
+    padding: 10px 12px;
+    background: var(--accent-soft);
+    border-radius: 9px;
+    border-left: 2px solid var(--accent);
+  }
+  .modal-actions {
+    display: flex; gap: 8px; margin-top: 18px;
+  }
+  .modal-actions .btn-primary,
+  .modal-actions .btn-ghost { flex: 1; }
+
   /* ─── preview banner ───────────────────────────────────────────────── */
   .preview-banner {
     position: fixed; top: 12px; left: 50%;
@@ -1395,9 +1505,7 @@
         <svg viewBox="0 0 24 24"><path d="M3 12h4l3-9 4 18 3-9h4"/></svg>
       </span>
       Live signals
-      <span class="badge" style="background: oklch(0.78 0.20 22 / 0.20); color: oklch(0.78 0.20 22); border-color: oklch(0.78 0.20 22 / 0.40); padding-left: 18px; position: relative;">
-        <span class="live-dot" style="position: absolute; left: 7px; top: 50%; transform: translateY(-50%); margin: 0;"></span>1
-      </span>
+      <span class="badge live-badge"><span class="live-dot-mini"></span><span>1</span></span>
     </div>
     <div class="nav-item" data-view="backtest">
       <span class="ico">
@@ -1474,13 +1582,15 @@
         <span class="badge-dot"></span>
       </div>
 
-      <div class="userchip" id="userchip" title="click to edit">
+      <div class="userchip" id="userchip" title="click name to rename · click capital to change">
         <div class="avatar"></div>
         <div class="userchip-text">
           <div class="name" data-edit="user-name">Ketan W.</div>
-          <div class="sub"  data-edit="user-cap">₹50,000 cap</div>
+          <button type="button" class="sub cap-btn" id="cap-btn">
+            <span id="cap-display">₹50,000 cap</span>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+          </button>
         </div>
-        <svg class="pencil" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
       </div>
     </div>
 
@@ -1947,6 +2057,32 @@
   </main>
 </div>
 
+<!-- ─── capital modal ─── -->
+<div class="modal-backdrop" id="cap-modal-backdrop"></div>
+<div class="modal" id="cap-modal" role="dialog" aria-labelledby="cap-modal-title">
+  <div class="modal-eyebrow">Trading capital</div>
+  <div class="modal-title" id="cap-modal-title">Set your budget</div>
+  <div class="modal-desc">All trade sizing scales to this amount. Each signal uses ~50% per trade with SL capped at 3% of capital.</div>
+  <div class="modal-input-wrap">
+    <span class="pre">₹</span>
+    <input type="number" id="cap-input" class="modal-input" inputmode="numeric" min="5000" max="10000000" step="1000" placeholder="50000"/>
+  </div>
+  <div class="modal-quick">
+    <button type="button" data-cap="10000">₹10K</button>
+    <button type="button" data-cap="20000">₹20K</button>
+    <button type="button" data-cap="50000">₹50K</button>
+    <button type="button" data-cap="100000">₹1L</button>
+    <button type="button" data-cap="500000">₹5L</button>
+  </div>
+  <div class="modal-helper">
+    Saved instantly — the live signal, per-index breakdown, and every trade detail recalculates based on this number.
+  </div>
+  <div class="modal-actions">
+    <button type="button" class="btn-ghost" id="cap-cancel">Cancel</button>
+    <button type="button" class="btn-primary" id="cap-save">Save capital</button>
+  </div>
+</div>
+
 <!-- ─── signal detail drawer (slides in from right) ─── -->
 <div class="drawer-backdrop" id="drawer-backdrop"></div>
 <aside class="drawer" id="drawer">
@@ -2088,7 +2224,7 @@
     if (saved === 'light' || saved === 'dark') root.dataset.theme = saved;
   } catch(_) {}
 
-  // ─── editable user chip ───
+  // ─── editable user-name (inline) ───
   document.querySelectorAll('.userchip [data-edit]').forEach(el => {
     const key = `preview-${el.dataset.edit}`;
     try { const v = localStorage.getItem(key); if (v) el.textContent = v; } catch(_) {}
@@ -2103,9 +2239,133 @@
       try { localStorage.setItem(key, el.textContent); } catch(_) {}
     });
   });
-  // Don't trigger the chip's onclick when editing
-  document.getElementById('userchip').addEventListener('mousedown', e => {
-    if (e.target.matches('[data-edit]')) e.stopPropagation();
+
+  // ─── capital state + modal ───
+  const CAP_KEY = 'preview-capital';
+  let capital = 50000;
+  try {
+    const saved = parseInt(localStorage.getItem(CAP_KEY), 10);
+    if (!isNaN(saved) && saved >= 5000) capital = saved;
+  } catch(_) {}
+
+  const fmtCap = n => '₹' + Math.round(n).toLocaleString('en-IN');
+  const fmtCapShort = n => {
+    if (n >= 100000) return '₹' + (n / 100000).toFixed(n % 100000 === 0 ? 0 : 1) + 'L';
+    if (n >=   1000) return '₹' + (n / 1000).toFixed(n % 1000 === 0 ? 0 : 1) + 'K';
+    return '₹' + n;
+  };
+
+  // Per-instrument lot sizes — matches the dashboard INST table
+  const LOT_SIZES = { NIFTY: 75, BANKNIFTY: 30, FINNIFTY: 65 };
+
+  function sizingFor(entry, lotSize, cap) {
+    if (!entry || !lotSize || !cap) return { lots: 1, capital: 0 };
+    // Use 50% of capital per trade, cap at 3 lots, ensure at least 1 lot fits
+    const budget = cap * 0.50;
+    const perLotCost = entry * lotSize;
+    let lots = Math.floor(budget / perLotCost);
+    lots = Math.max(1, Math.min(3, lots));
+    return { lots, capital: Math.round(lots * perLotCost) };
+  }
+
+  function refreshSizingOnPage() {
+    // Recompute SIGNALS map (so drawer picks up fresh numbers when re-opened)
+    Object.keys(SIGNALS).forEach(id => {
+      const s = SIGNALS[id];
+      if (!s.entry) return;
+      const sz = sizingFor(s.entry, LOT_SIZES[s.inst] || s.lotsize, capital);
+      s.lots = sz.lots;
+      s.lotsize = LOT_SIZES[s.inst] || s.lotsize;
+      s.capital = sz.capital;
+      // Also recompute P&L scaled by new lots
+      if (s.outcomeBasePnl) {
+        s.pnl = s.outcomeBasePnl * s.lots;
+      }
+    });
+
+    // LIVE HERO (sig-1) — rewrite its inline numbers
+    const sig1 = SIGNALS['sig-1'];
+    if (sig1) {
+      const hero = document.querySelector('.live-hero[data-sig="sig-1"]');
+      if (hero) {
+        const sub = hero.querySelector('.lh-sub');
+        if (sub) sub.textContent = `19-MAY-2026 · 8 DTE · ${sig1.lots}L × ${sig1.lotsize} · cap ${fmtCap(sig1.capital)}`;
+      }
+    }
+
+    // Per-index P&L breakdown — show relative sizing
+    const breakdownPcts = { NIFTY: 0.659, BANKNIFTY: 0.282, FINNIFTY: 0.059 };
+    const breakdownPnl = {};
+    Object.keys(breakdownPcts).forEach(k => {
+      breakdownPnl[k] = Math.round(capital * 0.085 * breakdownPcts[k]);
+    });
+    const bkRows = document.querySelectorAll('.pnl-bk-row');
+    if (bkRows.length === 3) {
+      bkRows[0].querySelector('.pnl-bk-val').textContent = '+' + fmtCap(breakdownPnl.NIFTY);
+      bkRows[1].querySelector('.pnl-bk-val').textContent = '+' + fmtCap(breakdownPnl.BANKNIFTY);
+      bkRows[2].querySelector('.pnl-bk-val').textContent = '+' + fmtCap(breakdownPnl.FINNIFTY);
+    }
+    const totalDaily = Object.values(breakdownPnl).reduce((a,b) => a+b, 0);
+    const pnlNum = document.querySelector('.hero-pnl-num');
+    if (pnlNum) pnlNum.innerHTML = '<span class="currency">₹</span>+' + totalDaily.toLocaleString('en-IN');
+
+    // User chip display
+    const capDisplay = document.getElementById('cap-display');
+    if (capDisplay) capDisplay.textContent = fmtCapShort(capital) + ' cap';
+  }
+
+  // Stash original per-share P&L on each signal so we can scale by new lots
+  Object.keys(SIGNALS).forEach(id => {
+    const s = SIGNALS[id];
+    if (s.entry && s.pnl != null && s.lots) {
+      s.outcomeBasePnl = s.pnl / s.lots;
+    }
+  });
+
+  // initial paint
+  refreshSizingOnPage();
+
+  // Modal wiring
+  const capModal = document.getElementById('cap-modal');
+  const capModalBackdrop = document.getElementById('cap-modal-backdrop');
+  const capInput = document.getElementById('cap-input');
+  const capBtn = document.getElementById('cap-btn');
+
+  function openCapModal() {
+    capInput.value = capital;
+    capModal.classList.add('on');
+    capModalBackdrop.classList.add('on');
+    setTimeout(() => { capInput.focus(); capInput.select(); }, 50);
+  }
+  function closeCapModal() {
+    capModal.classList.remove('on');
+    capModalBackdrop.classList.remove('on');
+  }
+  function saveCapital() {
+    const v = parseInt(capInput.value, 10);
+    if (isNaN(v) || v < 5000) {
+      capInput.focus();
+      return;
+    }
+    capital = v;
+    try { localStorage.setItem(CAP_KEY, String(capital)); } catch(_) {}
+    refreshSizingOnPage();
+    closeCapModal();
+  }
+
+  capBtn.addEventListener('click', openCapModal);
+  document.getElementById('cap-cancel').addEventListener('click', closeCapModal);
+  document.getElementById('cap-save').addEventListener('click', saveCapital);
+  capModalBackdrop.addEventListener('click', closeCapModal);
+  capInput.addEventListener('keydown', e => {
+    if (e.key === 'Enter') { e.preventDefault(); saveCapital(); }
+    if (e.key === 'Escape') { e.preventDefault(); closeCapModal(); }
+  });
+  document.querySelectorAll('.modal-quick button[data-cap]').forEach(b => {
+    b.addEventListener('click', () => {
+      capInput.value = b.dataset.cap;
+      capInput.focus();
+    });
   });
 
   // ─── signal detail drawer ──────────────────────────────────────────
@@ -2343,7 +2603,11 @@
   });
   drawerClose.addEventListener('click', closeDrawer);
   drawerBackdrop.addEventListener('click', closeDrawer);
-  document.addEventListener('keydown', e => { if (e.key === 'Escape') closeDrawer(); });
+  document.addEventListener('keydown', e => {
+    if (e.key !== 'Escape') return;
+    if (capModal.classList.contains('on')) closeCapModal();
+    else closeDrawer();
+  });
 </script>
 
 </body>
