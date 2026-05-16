@@ -2026,6 +2026,33 @@
     }
 
     /**
+     * DaysInput — typeable number field with draft buffer.
+     * Plain `parseInt(e.target.value) || 5` snaps back to 5 when the field is
+     * momentarily empty/invalid mid-keystroke, which kills typing. The buffer
+     * stays as a free-form string while editing; commit happens on blur/Enter
+     * (with clamp to [1, 30]).
+     */
+    function DaysInput({ value, onCommit }) {
+      const [draft, setDraft] = useState(String(value));
+      useEffect(() => { setDraft(String(value)); }, [value]);
+      const commit = () => {
+        const n = parseInt(draft, 10);
+        const clamped = isNaN(n) ? 5 : Math.max(1, Math.min(30, n));
+        setDraft(String(clamped));
+        if (clamped !== value) onCommit(clamped);
+      };
+      return (
+        <input type="number" min="1" max="30" value={draft}
+          onChange={e => setDraft(e.target.value)}
+          onBlur={commit}
+          onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); }}
+          style={{width:52, background:'var(--bg-2)', border:'1px solid var(--line-1)',
+                  color:'var(--ink-0)', borderRadius:4, padding:'4px 6px',
+                  fontFamily:'JetBrains Mono, monospace', fontSize:11.5}}/>
+      );
+    }
+
+    /*
      * BridgedPremium — replaces the dashboard's old client-side linear formula
      * (indexEntry × 0.0034) with a server fetch to /api/replay-premium that
      * goes through data_layer's NSE-bridge cascade.
@@ -3583,8 +3610,7 @@ function App() {
                 </div>
                 <div style={{display:'flex', alignItems:'center', gap:6, fontSize:11.5, color:'var(--ink-2)'}}>
                   <span>Days</span>
-                  <input type="number" min="1" max="30" value={replayDays} onChange={e=>setReplayDays(parseInt(e.target.value)||5)}
-                    style={{width:46, background:'var(--bg-2)', border:'1px solid var(--line-1)', color:'var(--ink-0)', borderRadius:4, padding:'4px 6px', fontFamily:'JetBrains Mono, monospace', fontSize:11.5}}/>
+                  <DaysInput value={replayDays} onCommit={setReplayDays} />
                 </div>
               </>
             )}
