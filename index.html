@@ -856,6 +856,32 @@
       return <span className={cls}>{s}₹{Math.abs(n).toLocaleString('en-IN')}</span>;
     }
 
+    // Format a YYYY-MM-DD or ISO datetime into "27th May 2026" style.
+    // Returns "" for null/empty.  Used in signal rows + Replay panel header
+    // so users can read the date at a glance and verify against external charts.
+    function fmtPrettyDate(input) {
+      if (!input) return '';
+      const d = typeof input === 'string' ? new Date(input.length === 10 ? input + 'T00:00:00' : input) : input;
+      if (isNaN(d.getTime())) return String(input);
+      const day = d.getDate();
+      const month = d.toLocaleDateString('en-IN', { month: 'long' });
+      const year = d.getFullYear();
+      const suffix = (day % 10 === 1 && day !== 11) ? 'st'
+                   : (day % 10 === 2 && day !== 12) ? 'nd'
+                   : (day % 10 === 3 && day !== 13) ? 'rd' : 'th';
+      return `${day}${suffix} ${month} ${year}`;
+    }
+
+    // Short variant for compact rows: "27 May" — no year, no suffix.
+    function fmtShortDate(input) {
+      if (!input) return '';
+      const d = typeof input === 'string' ? new Date(input.length === 10 ? input + 'T00:00:00' : input) : input;
+      if (isNaN(d.getTime())) return String(input);
+      const day = d.getDate();
+      const month = d.toLocaleDateString('en-IN', { month: 'short' });
+      return `${day} ${month}`;
+    }
+
     function MarketClock() {
       const [now, setNow] = useState(new Date());
       useEffect(() => { const id = setInterval(() => setNow(new Date()), 1000); return () => clearInterval(id); }, []);
@@ -1040,6 +1066,7 @@
                     </div>
                   ) : sigArr.slice(0, 50).map((s, i) => {
                     const isSelected = displaySig && s.id === displaySig.id;
+                    const shortDate = s.date ? fmtShortDate(s.date) : '';
                     return (
                       <div key={s.id || i}
                         onClick={() => setSelectedSig(s)}
@@ -1048,10 +1075,22 @@
                           background: isSelected ? 'var(--accent-faint)' : 'transparent',
                           borderLeft: isSelected ? '2px solid var(--accent)' : '2px solid transparent',
                           transition:'background 120ms'}}>
-                        <span className="dim mono" style={{minWidth:52, fontSize:10, flexShrink:0}}>{s.t}</span>
+                        {/* Stacked date+time so the user can tell at a glance WHICH DAY
+                            this signal fired — critical when reviewing 10 days of backtest results. */}
+                        <span className="mono" style={{minWidth:82, fontSize:10, flexShrink:0, lineHeight:1.2, display:'flex', flexDirection:'column'}}>
+                          {shortDate
+                            ? <span style={{color:'var(--ink-1)', fontWeight:600}}>{shortDate}</span>
+                            : <span style={{color:'var(--ink-3)'}}>—</span>}
+                          <span style={{color:'var(--ink-3)'}}>{s.t}</span>
+                        </span>
                         <span className="dim mono" style={{minWidth:68, fontSize:10, color:'var(--ink-2)', flexShrink:0}}>{s.inst}</span>
                         <span className={`chip ${s.dir==='LONG'?'long':'short'}`}>{s.dir} {s.type||''}</span>
                         <span className="num dim" style={{fontSize:11, flexShrink:0}}>{s.strike}</span>
+                        {s.spotAtSignal != null && (
+                          <span className="dim mono" style={{fontSize:10, color:'var(--ink-3)'}}>
+                            @ ₹{Number(s.spotAtSignal).toLocaleString('en-IN', {maximumFractionDigits:0})}
+                          </span>
+                        )}
                         <span style={{flex:1}}/>
                         {s.rr != null && <span className="dim mono" style={{fontSize:10}}>R:R {Number(s.rr).toFixed(1)}</span>}
                         <span className="muted" style={{fontSize:11, width:30, textAlign:'right'}}>{s.confidence}%</span>
@@ -1079,8 +1118,27 @@
                     <button type="button" className="btn ghost" style={{fontSize:10, padding:'2px 8px'}}
                       onClick={() => setSelectedSig(null)}>← latest</button>
                   )}
-                  <span className="muted mono" style={{fontSize:11, marginLeft:6}}>
-                    {displaySig ? displaySig.t : (on ? 'scanning…' : 'idle')}
+                  {/* Full pretty date + time so the user can verify against any external chart.
+                      Format example: "9th May 2026 · Fri · 10:50 am" */}
+                  <span className="mono" style={{fontSize:11, marginLeft:6, color:'var(--ink-1)',
+                                                  display:'flex', alignItems:'center', gap:6}}>
+                    {displaySig
+                      ? <>
+                          {displaySig.date && <span style={{fontWeight:600}}>{fmtPrettyDate(displaySig.date)}</span>}
+                          {displaySig.weekday && <span style={{color:'var(--ink-3)'}}>· {displaySig.weekday}</span>}
+                          <span style={{color:'var(--ink-2)'}}>· {displaySig.t || '—'}</span>
+                          {displaySig.iso_ts && (
+                            <button type="button" title="Copy full timestamp (paste into your broker chart's Goto-date)"
+                              onClick={(e) => { e.stopPropagation();
+                                navigator.clipboard?.writeText(displaySig.iso_ts).then(
+                                  () => { const t=e.currentTarget; if(t){t.textContent='✓';setTimeout(()=>{t.textContent='⧉';},900);} }
+                                ); }}
+                              style={{marginLeft:4, fontSize:11, padding:'1px 6px', borderRadius:3,
+                                      border:'1px solid var(--line-1)', background:'var(--bg-2)',
+                                      color:'var(--ink-2)', cursor:'pointer'}}>⧉</button>
+                          )}
+                        </>
+                      : (on ? <span className="muted">scanning…</span> : <span className="muted">idle</span>)}
                   </span>
                 </div>
 
@@ -2815,6 +2873,15 @@ function App() {
                   premium: (opt && opt.ltp) || null,
                   confidence: (sig.confidence_ai_adj != null ? sig.confidence_ai_adj : sig.confidence) || 0,
                   t: a.time || '',
+                  // Full chrono so the user can verify against any external chart:
+                  // - date: "2026-05-09" (YYYY-MM-DD)
+                  // - weekday: "Fri"
+                  // - iso_ts: "2026-05-09 12:35:00"  ← copy-paste into TradingView's Goto-date
+                  date: a.date || '',
+                  weekday: a.weekday || '',
+                  iso_ts: a.iso_ts || (a.date && a.time ? `${a.date} ${a.time}` : a.time || ''),
+                  // Spot-at-signal — so user can sanity-check against the chart's price at that moment
+                  spotAtSignal: sig.price || sig.entry || null,
                   status: 'LIVE',
                   reasons: sig.reasons || [],
                   strategies: [],
@@ -3015,9 +3082,17 @@ function App() {
                 replayAnalyzedAt.current[name] = { idx, dir: sig.direction };
                 if (cooldownOk) {
                   const lastC = visible[visible.length - 1];
-                  const t = lastC.time
-                    ? new Date(lastC.time).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })
+                  // Preserve the bar's REAL date+time so the user can verify
+                  // against any external chart at that exact moment.
+                  const barDate = lastC.time ? new Date(lastC.time) : null;
+                  const t = barDate
+                    ? barDate.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })
                     : `bar ${idx}`;
+                  const date = barDate ? barDate.toISOString().slice(0,10) : '';      // 2026-05-09
+                  const weekday = barDate ? barDate.toLocaleDateString('en-IN', {weekday:'short'}) : '';
+                  const iso_ts = barDate
+                    ? `${date} ${barDate.toTimeString().slice(0,8)}`
+                    : t;
                   const sigId = `REPLAY-${name}-${idx}`;
                   setSignals(prev => {
                     if (prev.some(s => s.id === sigId)) return prev;
@@ -3026,6 +3101,7 @@ function App() {
                       id: sigId, inst: name, dir: sig.direction,
                       type: sig.option?.type || (sig.direction === 'LONG' ? 'CE' : 'PE'),
                       strike: sig.option?.strike, confidence: sig.confidence, t,
+                      date, weekday, iso_ts, spotAtSignal: sig.entry || null,
                       status: 'REPLAY', reasons: sig.reasons || [], strategies: sig.strategies || [],
                       entry: sig.entry, sl: sig.sl, target1: sig.target1,
                       target2: sig.target2, rr: sig.rr, risk: sig.risk,

@@ -3533,8 +3533,16 @@ class Engine:
                         adj = int((ai_result or {}).get("confidence_adj") or 0)
                         sig["confidence_ai_adj"] = max(0, min(100, sig["confidence"] + adj))
 
-                        self.alerts.insert(0,{"id":int(time.time()*1000),"time":datetime.now(IST).strftime("%H:%M:%S"),
-                            "instrument":name,"signal":sig,"option":opt,"timing":timing,"ai":ai_result})
+                        _now_ist = datetime.now(IST)
+                        self.alerts.insert(0,{
+                            "id": int(time.time()*1000),
+                            "time": _now_ist.strftime("%H:%M:%S"),
+                            "date": _now_ist.strftime("%Y-%m-%d"),
+                            "iso_ts": _now_ist.strftime("%Y-%m-%d %H:%M:%S"),
+                            "weekday": _now_ist.strftime("%a"),       # "Mon", "Tue", …
+                            "instrument": name, "signal": sig, "option": opt,
+                            "timing": timing, "ai": ai_result,
+                        })
                         self.alerts=self.alerts[:100]
                         save_signal(name,sig,opt,ai=ai_result)
                         self.metrics["signals_alerted"] += 1
