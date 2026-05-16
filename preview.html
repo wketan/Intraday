@@ -1,536 +1,806 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>ProveWay · design preview</title>
+<title>Intraday Engine · design preview v2</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
-  :root {
-    /* ── canvas ── */
-    --bg-base:    oklch(0.090 0.010 40);
-    --bg-surface: oklch(0.140 0.014 35 / 0.62);
-    --bg-elev:    oklch(0.180 0.015 35 / 0.78);
-    --bg-deep:    oklch(0.072 0.008 40);
-    /* ── ink ── */
-    --ink-0: oklch(0.985 0.006 60);
-    --ink-1: oklch(0.760 0.012 60);
-    --ink-2: oklch(0.560 0.012 60);
-    --ink-3: oklch(0.420 0.010 60);
-    /* ── lines ── */
+  /* ─── design tokens · rich-pastel palette ───────────────────────────── */
+  :root[data-theme="dark"] {
+    --bg-base:    oklch(0.100 0.012 35);
+    --bg-deeper:  oklch(0.075 0.010 35);
+    --ink-0: oklch(0.985 0.006 80);
+    --ink-1: oklch(0.800 0.014 60);
+    --ink-2: oklch(0.600 0.014 60);
+    --ink-3: oklch(0.450 0.012 60);
     --line-0: oklch(1 0 0 / 0.05);
-    --line-1: oklch(1 0 0 / 0.09);
-    --line-2: oklch(1 0 0 / 0.14);
-    /* ── semantics ── */
-    --win:        oklch(0.80 0.18 150);
-    --win-dim:    oklch(0.80 0.18 150 / 0.16);
-    --win-glow:   oklch(0.80 0.18 150 / 0.35);
-    --loss:       oklch(0.69 0.22 24);
-    --loss-dim:   oklch(0.69 0.22 24 / 0.16);
-    --loss-glow:  oklch(0.69 0.22 24 / 0.35);
-    --warn:       oklch(0.82 0.17 78);
-    --warn-dim:   oklch(0.82 0.17 78 / 0.16);
-    /* ── brand accent (aurora) ── */
-    --accent:     oklch(0.75 0.17 50);
-    --accent-2:   oklch(0.65 0.20 35);
-    --accent-dim: oklch(0.75 0.17 50 / 0.18);
-    /* ── shadows ── */
-    --shadow-card: 0 1px 0 oklch(1 0 0 / 0.04) inset,
-                   0 0 0 1px var(--line-1),
-                   0 8px 30px oklch(0 0 0 / 0.50);
-    --shadow-hi:   0 1px 0 oklch(1 0 0 / 0.06) inset,
-                   0 0 0 1px var(--line-2),
-                   0 14px 40px oklch(0 0 0 / 0.65);
+    --line-1: oklch(1 0 0 / 0.10);
+    --line-2: oklch(1 0 0 / 0.16);
+    --glass-bg:    linear-gradient(140deg, oklch(1 0 0 / 0.07), oklch(1 0 0 / 0.018));
+    --glass-bg-hi: linear-gradient(140deg, oklch(1 0 0 / 0.11), oklch(1 0 0 / 0.030));
+    --glass-border:    oklch(1 0 0 / 0.11);
+    --glass-border-hi: oklch(1 0 0 / 0.18);
+    --glass-shadow:
+      inset 0 1px 0 oklch(1 0 0 / 0.10),
+      0 1px 2px oklch(0 0 0 / 0.30),
+      0 16px 40px oklch(0 0 0 / 0.55);
+    /* rich pastels — saturation soft, lightness lifted */
+    --win:       oklch(0.86 0.13 152);   /* sage mint */
+    --win-soft:  oklch(0.86 0.13 152 / 0.16);
+    --win-glow:  oklch(0.86 0.13 152 / 0.35);
+    --loss:      oklch(0.76 0.14 22);    /* dusty rose-coral */
+    --loss-soft: oklch(0.76 0.14 22 / 0.16);
+    --loss-glow: oklch(0.76 0.14 22 / 0.35);
+    --warn:      oklch(0.86 0.11 80);    /* warm cream */
+    --warn-soft: oklch(0.86 0.11 80 / 0.18);
+    --accent:    oklch(0.83 0.12 55);    /* peach */
+    --accent-2:  oklch(0.74 0.14 35);    /* apricot */
+    --accent-soft: oklch(0.83 0.12 55 / 0.20);
+    --lilac:     oklch(0.80 0.10 295);   /* periwinkle accent */
+    --lilac-soft:oklch(0.80 0.10 295 / 0.18);
+  }
+  :root[data-theme="light"] {
+    --bg-base:    oklch(0.975 0.008 75);
+    --bg-deeper:  oklch(0.955 0.010 75);
+    --ink-0: oklch(0.18 0.020 35);
+    --ink-1: oklch(0.36 0.018 35);
+    --ink-2: oklch(0.52 0.016 35);
+    --ink-3: oklch(0.66 0.012 35);
+    --line-0: oklch(0 0 0 / 0.04);
+    --line-1: oklch(0 0 0 / 0.08);
+    --line-2: oklch(0 0 0 / 0.14);
+    --glass-bg:    linear-gradient(140deg, oklch(1 0 0 / 0.65), oklch(1 0 0 / 0.42));
+    --glass-bg-hi: linear-gradient(140deg, oklch(1 0 0 / 0.78), oklch(1 0 0 / 0.50));
+    --glass-border:    oklch(1 0 0 / 0.55);
+    --glass-border-hi: oklch(1 0 0 / 0.75);
+    --glass-shadow:
+      inset 0 1px 0 oklch(1 0 0 / 0.60),
+      0 1px 2px oklch(0 0 0 / 0.04),
+      0 16px 40px oklch(0 0 0 / 0.10);
+    --win:       oklch(0.62 0.13 152);
+    --win-soft:  oklch(0.62 0.13 152 / 0.16);
+    --win-glow:  oklch(0.62 0.13 152 / 0.30);
+    --loss:      oklch(0.62 0.16 25);
+    --loss-soft: oklch(0.62 0.16 25 / 0.16);
+    --loss-glow: oklch(0.62 0.16 25 / 0.30);
+    --warn:      oklch(0.68 0.14 78);
+    --warn-soft: oklch(0.68 0.14 78 / 0.18);
+    --accent:    oklch(0.68 0.13 55);
+    --accent-2:  oklch(0.60 0.16 35);
+    --accent-soft: oklch(0.68 0.13 55 / 0.18);
+    --lilac:     oklch(0.62 0.13 295);
+    --lilac-soft:oklch(0.62 0.13 295 / 0.16);
   }
 
   * { box-sizing: border-box; }
-  html, body { margin:0; padding:0; }
+  html, body { margin: 0; padding: 0; min-height: 100vh; }
   body {
     font-family: 'Inter', system-ui, sans-serif;
     background: var(--bg-base);
     color: var(--ink-0);
-    min-height: 100vh;
     overflow-x: hidden;
-    letter-spacing: -0.005em;
+    letter-spacing: -0.006em;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }
 
-  /* ── Aurora background ── */
-  .aurora {
-    position: fixed; inset: 0; z-index: 0; pointer-events: none;
-    background:
-      radial-gradient(900px 700px at 90% -10%, oklch(0.78 0.20 45 / 0.55), transparent 60%),
-      radial-gradient(600px 500px at 105% 35%, oklch(0.66 0.22 30 / 0.40), transparent 60%),
-      radial-gradient(800px 600px at -10% 100%, oklch(0.50 0.18 30 / 0.22), transparent 65%);
-    filter: saturate(1.05);
+  /* ─── decorative canvas ─────────────────────────────────────────────── */
+  .canvas {
+    position: fixed; inset: 0; z-index: 0; pointer-events: none; overflow: hidden;
+  }
+  .blob {
+    position: absolute; border-radius: 50%; filter: blur(80px);
+    opacity: 0.85;
+  }
+  .blob-1 { width: 720px; height: 720px; top: -220px; right: -160px;
+            background: radial-gradient(circle, oklch(0.84 0.14 55 / 0.50), transparent 70%); }   /* peach */
+  .blob-2 { width: 620px; height: 620px; top: 28%; right: -200px;
+            background: radial-gradient(circle, oklch(0.78 0.13 22 / 0.38), transparent 70%); }   /* dusty rose */
+  .blob-3 { width: 540px; height: 540px; bottom: -140px; left: -100px;
+            background: radial-gradient(circle, oklch(0.80 0.12 295 / 0.32), transparent 70%); }  /* periwinkle */
+  .blob-4 { width: 420px; height: 420px; top: 38%; left: 16%;
+            background: radial-gradient(circle, oklch(0.84 0.11 152 / 0.22), transparent 70%); }  /* sage */
+  :root[data-theme="light"] .blob { opacity: 0.60; }
+  :root[data-theme="light"] .blob-1 { background: radial-gradient(circle, oklch(0.88 0.10 55 / 0.55), transparent 70%); }
+  :root[data-theme="light"] .blob-2 { background: radial-gradient(circle, oklch(0.88 0.09 22 / 0.45), transparent 70%); }
+  :root[data-theme="light"] .blob-3 { background: radial-gradient(circle, oklch(0.90 0.08 295 / 0.40), transparent 70%); }
+  :root[data-theme="light"] .blob-4 { background: radial-gradient(circle, oklch(0.92 0.08 152 / 0.35), transparent 70%); }
+
+  .dotgrid {
+    position: fixed; inset: 0; z-index: 1; pointer-events: none;
+    background-image: radial-gradient(oklch(1 0 0 / 0.06) 1px, transparent 1px);
+    background-size: 28px 28px;
+    mask-image: radial-gradient(ellipse at center, black 30%, transparent 80%);
+  }
+  :root[data-theme="light"] .dotgrid {
+    background-image: radial-gradient(oklch(0 0 0 / 0.06) 1px, transparent 1px);
   }
   .grain {
-    position: fixed; inset: 0; z-index: 1; pointer-events: none; opacity: 0.04;
-    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+    position: fixed; inset: 0; z-index: 1; pointer-events: none; opacity: 0.025;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='250' height='250'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
   }
 
-  /* ── App shell ── */
+  /* ─── app shell ─────────────────────────────────────────────────────── */
   .app {
     position: relative; z-index: 2;
     display: grid;
-    grid-template-columns: 240px 1fr;
-    gap: 0;
+    grid-template-columns: 256px 1fr;
     min-height: 100vh;
   }
 
-  /* ── Sidebar ── */
+  /* ─── sidebar ───────────────────────────────────────────────────────── */
   .sidebar {
-    padding: 22px 18px 18px;
-    border-right: 1px solid var(--line-0);
-    background: linear-gradient(180deg, oklch(0.08 0.008 40 / 0.45), oklch(0.06 0.008 40 / 0.30));
-    backdrop-filter: blur(20px);
+    padding: 22px 16px 18px;
     display: flex; flex-direction: column;
+    border-right: 1px solid var(--line-0);
   }
   .brand {
-    display: flex; align-items: center; gap: 10px;
-    margin-bottom: 28px; padding: 4px 6px;
+    display: flex; align-items: center; gap: 11px;
+    padding: 4px 6px; margin-bottom: 30px;
   }
   .brand-mark {
-    width: 28px; height: 28px;
-    background: conic-gradient(from 210deg, var(--accent), var(--accent-2), var(--accent));
-    border-radius: 8px;
-    box-shadow: 0 4px 16px oklch(0.70 0.20 45 / 0.50);
+    width: 32px; height: 32px; flex-shrink: 0;
     position: relative;
+    border-radius: 9px;
+    background: conic-gradient(from 220deg, var(--accent) 0deg, var(--accent-2) 130deg, var(--accent) 360deg);
+    box-shadow: 0 4px 18px oklch(0.65 0.22 35 / 0.55);
   }
   .brand-mark::after {
-    content:''; position:absolute; inset:6px;
-    background: var(--bg-deep); border-radius: 4px;
+    content: ''; position: absolute; inset: 7px;
+    background: var(--bg-base); border-radius: 4px;
+  }
+  .brand-mark::before {
+    content: ''; position: absolute; inset: 11px;
+    background: var(--accent); border-radius: 2px;
+    box-shadow: 0 0 8px var(--accent);
   }
   .brand-name {
-    font-family: 'Outfit', sans-serif; font-weight: 700; font-size: 17px;
-    letter-spacing: -0.02em;
+    font-family: 'Instrument Serif', serif;
+    font-weight: 400; font-size: 19px;
+    letter-spacing: -0.01em;
   }
+  .brand-tag {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px; color: var(--ink-3);
+    letter-spacing: 0.14em; text-transform: uppercase;
+    margin-top: 1px;
+  }
+
   .nav-section {
     font-family: 'JetBrains Mono', monospace;
-    font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.10em;
-    color: var(--ink-3); padding: 14px 8px 8px; font-weight: 600;
+    font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.14em;
+    color: var(--ink-3); padding: 16px 10px 8px; font-weight: 500;
   }
   .nav-item {
-    display: flex; align-items: center; gap: 11px;
-    padding: 9px 10px; border-radius: 8px; cursor: pointer;
+    display: flex; align-items: center; gap: 12px;
+    padding: 10px 11px; border-radius: 10px; cursor: pointer;
     color: var(--ink-1); font-size: 13.5px; font-weight: 500;
-    margin-bottom: 1px;
-    transition: all 0.15s;
+    margin-bottom: 2px;
+    position: relative;
+    transition: color 0.15s, background 0.15s;
   }
-  .nav-item:hover { background: var(--line-0); color: var(--ink-0); }
+  .nav-item:hover { color: var(--ink-0); background: var(--line-0); }
   .nav-item.on {
-    background: linear-gradient(95deg, var(--accent-dim), transparent);
     color: var(--ink-0);
-    box-shadow: inset 2px 0 0 var(--accent);
+    background: linear-gradient(95deg, var(--accent-soft) 0%, transparent 80%);
+  }
+  .nav-item.on::before {
+    content: ''; position: absolute; left: 0; top: 8px; bottom: 8px;
+    width: 2.5px; border-radius: 4px;
+    background: linear-gradient(180deg, var(--accent), var(--accent-2));
+    box-shadow: 0 0 10px var(--accent);
   }
   .nav-item .ico {
-    width: 16px; height: 16px;
+    width: 18px; height: 18px; flex-shrink: 0;
     display: flex; align-items: center; justify-content: center;
     opacity: 0.85;
   }
+  .nav-item .ico svg { width: 100%; height: 100%; stroke: currentColor; fill: none; stroke-width: 1.7; }
   .nav-item .badge {
-    margin-left: auto; font-family: 'JetBrains Mono', monospace; font-size: 10px;
-    background: var(--line-1); color: var(--ink-2);
-    padding: 2px 6px; border-radius: 999px;
+    margin-left: auto;
+    font-family: 'JetBrains Mono', monospace; font-size: 10px;
+    color: var(--ink-2);
+    padding: 2px 8px; border-radius: 999px;
+    border: 1px solid var(--line-1);
+    background: oklch(0 0 0 / 0.20);
+    backdrop-filter: blur(8px);
   }
+  .nav-item .live-dot {
+    margin-left: auto; width: 7px; height: 7px; border-radius: 50%;
+    background: var(--win); box-shadow: 0 0 10px var(--win);
+    animation: livepulse 1.6s ease-in-out infinite;
+  }
+  @keyframes livepulse {
+    0%, 100% { transform: scale(1); opacity: 1; }
+    50% { transform: scale(1.4); opacity: 0.6; }
+  }
+
   .help-widget {
     margin-top: auto;
-    background: linear-gradient(140deg, oklch(0.70 0.18 45 / 0.18), oklch(0.50 0.20 30 / 0.10));
-    border: 1px solid oklch(0.70 0.18 45 / 0.22);
-    border-radius: 14px;
-    padding: 14px;
-    text-align: center;
     position: relative;
+    background: linear-gradient(140deg, oklch(0.70 0.20 45 / 0.22), oklch(0.50 0.22 25 / 0.10));
+    border: 1px solid oklch(0.70 0.20 45 / 0.30);
+    border-radius: 14px;
+    padding: 16px 14px 14px;
+    text-align: center;
+    overflow: hidden;
+  }
+  .help-widget::before {
+    content: ''; position: absolute; inset: 0;
+    background: radial-gradient(circle at 50% 0%, oklch(0.85 0.20 50 / 0.30), transparent 70%);
+    pointer-events: none;
   }
   .help-widget .help-icon {
-    width: 36px; height: 36px; margin: -28px auto 8px;
-    background: var(--bg-deep);
-    border: 1px solid oklch(0.70 0.18 45 / 0.40);
+    width: 38px; height: 38px; margin: 0 auto 8px;
+    background: var(--bg-deeper);
+    border: 1px solid oklch(0.70 0.18 45 / 0.45);
     border-radius: 50%;
     display: flex; align-items: center; justify-content: center;
-    color: var(--accent); font-size: 16px;
+    color: var(--accent);
+    box-shadow: 0 0 16px oklch(0.65 0.22 45 / 0.40);
+    position: relative; z-index: 2;
   }
   .help-widget h4 {
-    margin: 0 0 4px;
-    font-family: 'Outfit', sans-serif; font-weight: 600; font-size: 14px;
+    margin: 0 0 4px; position: relative; z-index: 2;
+    font-family: 'Instrument Serif', serif; font-weight: 400; font-size: 16px;
   }
-  .help-widget p { margin: 0 0 10px; font-size: 11px; color: var(--ink-2); line-height: 1.45; }
+  .help-widget p { margin: 0 0 12px; font-size: 11.5px; color: var(--ink-2); line-height: 1.45; position: relative; z-index: 2; }
   .help-widget button {
     background: linear-gradient(95deg, var(--accent), var(--accent-2));
     color: oklch(0.15 0.02 35);
     border: 0; border-radius: 8px;
-    padding: 7px 14px; font-family: 'Inter', sans-serif;
-    font-weight: 600; font-size: 11.5px; cursor: pointer;
-    box-shadow: 0 4px 14px oklch(0.65 0.20 35 / 0.40);
+    padding: 8px 14px; font-family: 'Inter', sans-serif;
+    font-weight: 600; font-size: 12px; cursor: pointer;
+    box-shadow: 0 6px 18px oklch(0.65 0.22 35 / 0.45);
+    position: relative; z-index: 2;
+    transition: transform 0.15s;
   }
+  .help-widget button:hover { transform: translateY(-1px); }
 
-  /* ── Main column ── */
-  .main {
-    padding: 22px 26px 40px;
-    overflow-x: hidden;
-  }
+  /* ─── main ─────────────────────────────────────────────────────────── */
+  .main { padding: 22px 28px 50px; min-width: 0; }
 
-  /* ── Top bar ── */
+  /* ─── top bar ──────────────────────────────────────────────────────── */
   .topbar {
     display: flex; align-items: center; gap: 14px;
-    margin-bottom: 22px;
+    margin-bottom: 24px;
   }
   .search {
-    flex: 1; max-width: 460px;
-    display: flex; align-items: center; gap: 10px;
-    background: var(--bg-surface);
-    border: 1px solid var(--line-1);
-    backdrop-filter: blur(20px);
+    flex: 1; max-width: 480px;
+    display: flex; align-items: center; gap: 12px;
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    backdrop-filter: blur(30px) saturate(180%);
+    -webkit-backdrop-filter: blur(30px) saturate(180%);
     border-radius: 12px;
-    padding: 10px 14px;
-    color: var(--ink-2);
-    font-size: 13px;
+    padding: 11px 16px;
+    box-shadow: var(--glass-shadow);
   }
+  .search svg { width: 16px; height: 16px; stroke: var(--ink-2); fill: none; stroke-width: 2; }
   .search input {
     background: transparent; border: 0; color: var(--ink-0);
     font-family: inherit; font-size: 13px; outline: none; width: 100%;
   }
   .search input::placeholder { color: var(--ink-3); }
+  .search kbd {
+    font-family: 'JetBrains Mono', monospace; font-size: 9.5px;
+    background: var(--line-1); color: var(--ink-2);
+    padding: 2px 7px; border-radius: 5px;
+    border: 1px solid var(--line-2);
+  }
   .topbar-spacer { flex: 1; }
-  .iconbtn {
-    width: 38px; height: 38px;
-    background: var(--bg-surface);
-    border: 1px solid var(--line-1);
-    backdrop-filter: blur(20px);
-    border-radius: 10px;
-    color: var(--ink-1); cursor: pointer;
-    display: flex; align-items: center; justify-content: center;
-    font-size: 14px;
-    transition: all 0.15s;
-  }
-  .iconbtn:hover { color: var(--ink-0); border-color: var(--line-2); }
-  .iconbtn.dot::after {
-    content: ''; position: absolute;
-    width: 7px; height: 7px; border-radius: 50%;
-    background: var(--accent);
-    box-shadow: 0 0 8px var(--accent);
-    margin-top: -16px; margin-left: 10px;
-  }
-  .userchip {
-    display: flex; align-items: center; gap: 10px;
-    padding: 6px 14px 6px 6px;
-    background: var(--bg-surface);
-    border: 1px solid var(--line-1);
-    backdrop-filter: blur(20px);
+
+  /* ─── theme toggle (sliding pill) ──────────────────────────────────── */
+  .theme-toggle {
+    position: relative;
+    width: 64px; height: 32px;
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
     border-radius: 999px;
     cursor: pointer;
+    backdrop-filter: blur(20px) saturate(180%);
+    overflow: hidden;
+    box-shadow: var(--glass-shadow);
   }
-  .userchip .avatar {
-    width: 28px; height: 28px; border-radius: 50%;
-    background: conic-gradient(from 0deg, var(--win), var(--accent), var(--loss), var(--accent), var(--win));
-    box-shadow: 0 0 0 2px var(--bg-base);
+  .theme-toggle .thumb {
+    position: absolute; top: 3px; left: 3px;
+    width: 24px; height: 24px;
+    background: linear-gradient(140deg, var(--accent), var(--accent-2));
+    border-radius: 50%;
+    box-shadow: 0 2px 8px oklch(0 0 0 / 0.40), inset 0 1px 0 oklch(1 0 0 / 0.30);
+    transition: left 0.35s cubic-bezier(0.65, 0, 0.35, 1);
+    z-index: 2;
   }
-  .userchip .name { font-size: 12.5px; font-weight: 600; }
-  .userchip .role { font-size: 10px; color: var(--ink-2); margin-top: 1px; }
+  :root[data-theme="light"] .theme-toggle .thumb {
+    left: 35px;
+    background: linear-gradient(140deg, oklch(0.95 0.05 80), oklch(0.80 0.12 60));
+  }
+  .theme-toggle .ico-sun, .theme-toggle .ico-moon {
+    position: absolute; top: 50%; transform: translateY(-50%);
+    width: 14px; height: 14px;
+    stroke: var(--ink-2); fill: none; stroke-width: 2;
+    transition: opacity 0.3s;
+  }
+  .theme-toggle .ico-sun { left: 9px; }
+  .theme-toggle .ico-moon { right: 9px; }
+  :root[data-theme="dark"] .theme-toggle .ico-sun  { opacity: 0.40; }
+  :root[data-theme="dark"] .theme-toggle .ico-moon { opacity: 1; color: var(--ink-0); }
+  :root[data-theme="light"] .theme-toggle .ico-sun  { opacity: 1; color: var(--accent); }
+  :root[data-theme="light"] .theme-toggle .ico-moon { opacity: 0.40; }
 
-  /* ── Card primitive ── */
+  .iconbtn {
+    width: 38px; height: 38px;
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    backdrop-filter: blur(30px) saturate(180%);
+    -webkit-backdrop-filter: blur(30px) saturate(180%);
+    border-radius: 11px;
+    color: var(--ink-1); cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    position: relative;
+    transition: color 0.15s, border-color 0.15s, transform 0.15s;
+    box-shadow: var(--glass-shadow);
+  }
+  .iconbtn svg { width: 17px; height: 17px; stroke: currentColor; fill: none; stroke-width: 1.7; }
+  .iconbtn:hover { color: var(--ink-0); border-color: var(--glass-border-hi); transform: translateY(-1px); }
+  .iconbtn .badge-dot {
+    position: absolute; top: 8px; right: 9px;
+    width: 7px; height: 7px; border-radius: 50%;
+    background: var(--accent);
+    box-shadow: 0 0 10px var(--accent);
+  }
+
+  .userchip {
+    display: flex; align-items: center; gap: 11px;
+    padding: 5px 14px 5px 5px;
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    backdrop-filter: blur(30px) saturate(180%);
+    -webkit-backdrop-filter: blur(30px) saturate(180%);
+    border-radius: 999px;
+    cursor: pointer;
+    box-shadow: var(--glass-shadow);
+    transition: transform 0.15s;
+  }
+  .userchip:hover { transform: translateY(-1px); }
+  .userchip .avatar {
+    width: 30px; height: 30px; border-radius: 50%;
+    background:
+      conic-gradient(from 0deg, var(--win), var(--accent), var(--loss), var(--accent), var(--win));
+    box-shadow: 0 0 0 2px var(--bg-base);
+    position: relative;
+  }
+  .userchip .avatar::after {
+    content: ''; position: absolute; inset: 3px;
+    background: var(--bg-base); border-radius: 50%;
+    background-image: linear-gradient(140deg, var(--accent), var(--accent-2));
+  }
+  .userchip .name { font-size: 12.5px; font-weight: 600; color: var(--ink-0); }
+  .userchip .sub  { font-size: 10px; color: var(--ink-2); margin-top: 1px; font-family: 'JetBrains Mono', monospace; }
+
+  /* ─── glass card ───────────────────────────────────────────────────── */
   .card {
-    background: var(--bg-surface);
-    border: 1px solid var(--line-1);
-    backdrop-filter: blur(28px);
-    -webkit-backdrop-filter: blur(28px);
-    border-radius: 16px;
-    box-shadow: var(--shadow-card);
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    border-top-color: var(--glass-border-hi);
+    backdrop-filter: blur(40px) saturate(180%);
+    -webkit-backdrop-filter: blur(40px) saturate(180%);
+    border-radius: 18px;
+    box-shadow: var(--glass-shadow);
     position: relative;
     overflow: hidden;
   }
-  .card-hi { box-shadow: var(--shadow-hi); }
-  .card-pad { padding: 20px 22px; }
+  .card-hi {
+    background: var(--glass-bg-hi);
+    border-color: var(--glass-border-hi);
+  }
   .card-head {
-    display: flex; align-items: center; justify-content: space-between;
-    margin-bottom: 14px;
+    display: flex; align-items: flex-start; justify-content: space-between;
+    margin-bottom: 18px;
   }
   .card-title {
-    font-family: 'Outfit', sans-serif; font-weight: 600; font-size: 14px;
-    letter-spacing: -0.005em;
+    font-family: 'Instrument Serif', serif; font-weight: 400; font-size: 19px;
+    letter-spacing: -0.01em; color: var(--ink-0);
+    line-height: 1;
   }
   .card-sub {
-    font-size: 11px; color: var(--ink-3);
-    font-family: 'JetBrains Mono', monospace; letter-spacing: 0.04em;
-    text-transform: uppercase;
+    font-size: 10.5px; color: var(--ink-3);
+    font-family: 'JetBrains Mono', monospace; letter-spacing: 0.08em;
+    text-transform: uppercase; margin-top: 6px;
   }
 
-  /* ── Hero row ── */
+  /* ─── views (sidebar nav switches these) ───────────────────────────── */
+  .view { display: none; }
+  .view.on { display: block; }
+
+  /* ─── view: live (default) ─────────────────────────────────────────── */
+  /* live status strip */
+  .live-strip {
+    display: flex; align-items: center; gap: 14px;
+    padding: 12px 18px;
+    margin-bottom: 14px;
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    border-top-color: var(--glass-border-hi);
+    backdrop-filter: blur(30px) saturate(180%);
+    border-radius: 14px;
+    box-shadow: var(--glass-shadow);
+  }
+  .live-strip .ldot {
+    width: 9px; height: 9px; border-radius: 50%;
+    background: var(--win); box-shadow: 0 0 12px var(--win);
+    animation: livepulse 1.6s ease-in-out infinite;
+  }
+  .live-strip .lstat {
+    display: flex; flex-direction: column;
+  }
+  .live-strip .lstat-1 {
+    font-family: 'Instrument Serif', serif; font-size: 16px;
+    color: var(--ink-0);
+  }
+  .live-strip .lstat-2 {
+    font-family: 'JetBrains Mono', monospace; font-size: 10.5px;
+    color: var(--ink-2); letter-spacing: 0.06em; margin-top: 1px;
+  }
+  .live-strip .lscan {
+    margin-left: auto;
+    display: flex; align-items: center; gap: 16px;
+    font-family: 'JetBrains Mono', monospace; font-size: 11.5px;
+    color: var(--ink-2);
+  }
+  .live-strip .lscan b { color: var(--ink-0); font-weight: 600; }
+
+  /* hero row */
   .hero-row {
     display: grid;
-    grid-template-columns: 1.4fr 1.6fr 0.9fr;
+    grid-template-columns: 1.35fr 1.7fr 0.95fr;
     gap: 14px;
     margin-bottom: 14px;
   }
-  .hero-stat {
-    padding: 22px 24px;
+  .hero-pnl {
+    padding: 24px 26px;
+    position: relative; overflow: hidden;
   }
-  .hero-eyebrow {
+  .hero-pnl::before {
+    content: ''; position: absolute; top: -40%; right: -10%; width: 60%; height: 200%;
+    background: radial-gradient(circle, var(--win-glow), transparent 60%);
+    pointer-events: none;
+    filter: blur(30px);
+  }
+  .hero-pnl-eyebrow {
     font-family: 'JetBrains Mono', monospace;
-    font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.12em;
-    color: var(--ink-3); margin-bottom: 8px;
+    font-size: 10px; text-transform: uppercase; letter-spacing: 0.16em;
+    color: var(--ink-3); margin-bottom: 10px; position: relative;
   }
-  .hero-big {
-    font-family: 'Outfit', sans-serif;
-    font-weight: 600; font-size: 44px; line-height: 1; letter-spacing: -0.025em;
-    margin-bottom: 8px;
+  .hero-pnl-num {
+    font-family: 'Instrument Serif', serif;
+    font-weight: 400; font-size: 60px; line-height: 1; letter-spacing: -0.03em;
+    color: var(--win);
+    text-shadow: 0 0 40px var(--win-glow);
+    margin-bottom: 12px; position: relative;
   }
-  .hero-big.win { color: var(--win); text-shadow: 0 0 24px var(--win-glow); }
-  .hero-big.loss { color: var(--loss); text-shadow: 0 0 24px var(--loss-glow); }
-  .hero-foot {
-    display: flex; align-items: center; gap: 8px;
+  .hero-pnl-num .currency { font-size: 30px; vertical-align: 12px; opacity: 0.7; margin-right: 2px; }
+  .hero-pnl-foot {
+    display: flex; align-items: center; gap: 10px;
     font-size: 12px; color: var(--ink-2);
+    position: relative;
   }
   .pct-pill {
     display: inline-flex; align-items: center; gap: 4px;
-    padding: 3px 9px; border-radius: 999px;
+    padding: 3px 10px; border-radius: 999px;
     font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 600;
+    border: 1px solid currentColor;
   }
-  .pct-pill.win { background: var(--win-dim); color: var(--win); }
-  .pct-pill.loss { background: var(--loss-dim); color: var(--loss); }
+  .pct-pill.win  { background: var(--win-soft);  color: var(--win); border-color: transparent; }
+  .pct-pill.loss { background: var(--loss-soft); color: var(--loss); border-color: transparent; }
 
-  /* ── Win-rate gauge ── */
-  .gauge-wrap {
-    display: flex; align-items: center; gap: 22px;
-    padding: 18px 22px;
+  /* win-rate gauge — proper sizing this time */
+  .hero-gauge {
+    padding: 20px 24px;
+    display: flex; align-items: center; gap: 20px;
+  }
+  .gauge-container {
+    position: relative;
+    width: 170px; height: 170px;
+    flex-shrink: 0;
   }
   .gauge-svg {
-    width: 175px; height: 175px;
-    filter: drop-shadow(0 0 24px var(--win-glow));
+    width: 100%; height: 100%;
+    filter: drop-shadow(0 0 20px var(--win-glow));
   }
-  .gauge-track { fill: none; stroke: var(--line-1); stroke-width: 16; }
+  .gauge-track    { fill: none; stroke: var(--line-1); stroke-width: 11; }
   .gauge-progress {
-    fill: none; stroke-width: 16; stroke-linecap: round;
+    fill: none; stroke-width: 11; stroke-linecap: round;
     transform: rotate(-90deg); transform-origin: center;
   }
   .gauge-center {
-    font-family: 'Outfit', sans-serif; font-weight: 700;
-    font-size: 32px; fill: var(--ink-0); text-anchor: middle;
-    letter-spacing: -0.02em;
+    position: absolute; inset: 0;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    pointer-events: none;
   }
-  .gauge-label {
-    font-family: 'JetBrains Mono', monospace; font-size: 9.5px;
-    fill: var(--ink-3); text-anchor: middle; text-transform: uppercase; letter-spacing: 0.10em;
+  .gauge-num {
+    font-family: 'Instrument Serif', serif;
+    font-weight: 400; font-size: 38px; line-height: 1;
+    letter-spacing: -0.03em; color: var(--ink-0);
   }
-  .gauge-stats { flex: 1; }
-  .gauge-stat-row {
+  .gauge-num .pct { font-size: 18px; color: var(--ink-2); margin-left: 1px; vertical-align: 8px; }
+  .gauge-lbl {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px; text-transform: uppercase; letter-spacing: 0.16em;
+    color: var(--ink-3); margin-top: 6px;
+  }
+  .gauge-stats { flex: 1; min-width: 0; }
+  .gauge-row {
     display: flex; justify-content: space-between; align-items: baseline;
-    padding: 7px 0; border-bottom: 1px dashed var(--line-0);
+    padding: 8px 0;
+    border-bottom: 1px dashed var(--line-0);
   }
-  .gauge-stat-row:last-child { border-bottom: 0; }
-  .gauge-stat-label { font-size: 11px; color: var(--ink-2); }
-  .gauge-stat-val { font-family: 'JetBrains Mono', monospace; font-size: 13.5px; font-weight: 600; }
+  .gauge-row:last-child { border-bottom: 0; }
+  .gauge-rl { font-size: 11.5px; color: var(--ink-2); }
+  .gauge-rv {
+    font-family: 'JetBrains Mono', monospace;
+    font-weight: 600; font-size: 13.5px; color: var(--ink-0);
+  }
+  .gauge-rv.win  { color: var(--win); }
+  .gauge-rv.loss { color: var(--loss); }
+  .gauge-rv.warn { color: var(--warn); }
 
-  /* ── Streak card ── */
-  .streak-card {
-    padding: 22px;
-    display: flex; flex-direction: column; gap: 12px;
+  /* streak */
+  .hero-streak {
+    padding: 22px 22px 20px;
+    position: relative; overflow: hidden;
     background:
-      linear-gradient(140deg, oklch(0.80 0.18 150 / 0.18), oklch(0.80 0.18 150 / 0.04)),
-      var(--bg-surface);
+      linear-gradient(140deg, var(--win-soft), transparent 70%),
+      var(--glass-bg);
   }
-  .streak-num {
-    font-family: 'Outfit', sans-serif; font-weight: 600;
-    font-size: 56px; line-height: 0.9; color: var(--win);
-    letter-spacing: -0.03em;
-    text-shadow: 0 0 30px var(--win-glow);
+  .hero-streak-eb {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px; text-transform: uppercase; letter-spacing: 0.16em;
+    color: var(--ink-3); margin-bottom: 12px;
   }
-  .streak-dots {
-    display: flex; gap: 5px; margin-top: 4px;
+  .hero-streak-num {
+    font-family: 'Instrument Serif', serif;
+    font-weight: 400; font-size: 70px; line-height: 0.9;
+    letter-spacing: -0.04em; color: var(--win);
+    text-shadow: 0 0 28px var(--win-glow);
   }
+  .hero-streak-num span { font-size: 24px; opacity: 0.6; margin-left: 2px; vertical-align: 18px; }
+  .streak-dots { display: flex; gap: 6px; margin-top: 14px; }
   .streak-dot {
-    width: 18px; height: 5px; border-radius: 999px;
+    flex: 1; height: 5px; border-radius: 999px;
     background: var(--line-1);
   }
-  .streak-dot.win { background: var(--win); box-shadow: 0 0 8px var(--win-glow); }
-  .streak-dot.loss { background: var(--loss); }
+  .streak-dot.win  { background: var(--win);  box-shadow: 0 0 8px var(--win-glow); }
+  .streak-dot.loss { background: var(--loss); box-shadow: 0 0 8px var(--loss-glow); }
+  .hero-streak-foot {
+    margin-top: 12px; font-size: 11.5px; color: var(--ink-2);
+    font-family: 'JetBrains Mono', monospace;
+  }
 
-  /* ── Index pills row ── */
-  .pill-row {
-    display: grid; grid-template-columns: repeat(3, 1fr);
-    gap: 12px; margin-bottom: 14px;
-  }
-  .pill {
-    padding: 16px 18px;
-    display: flex; align-items: center; gap: 16px;
-  }
+  /* index pills row */
+  .pill-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 14px; }
+  .pill { padding: 16px 18px; display: flex; align-items: center; gap: 16px; }
   .pill-name {
-    font-family: 'Outfit', sans-serif; font-weight: 600; font-size: 13px;
-    color: var(--ink-1); letter-spacing: 0;
+    font-family: 'Instrument Serif', serif; font-size: 14px;
+    color: var(--ink-1);
   }
   .pill-price {
     font-family: 'JetBrains Mono', monospace; font-weight: 600;
     font-size: 19px; color: var(--ink-0); margin-top: 2px;
     letter-spacing: -0.02em;
   }
-  .pill-spark {
-    margin-left: auto; width: 90px; height: 36px; flex-shrink: 0;
-  }
-  .pill-pill {
-    margin-top: 6px;
-  }
+  .pill-pill { margin-top: 7px; }
+  .pill-spark { margin-left: auto; width: 90px; height: 40px; flex-shrink: 0; }
 
-  /* ── Two-column body ── */
-  .body-grid {
-    display: grid; grid-template-columns: 1.55fr 1fr; gap: 14px;
+  /* ─── live signals card ────────────────────────────────────────────── */
+  .live-grid {
+    display: grid; grid-template-columns: 1.6fr 1fr; gap: 14px;
+    margin-bottom: 14px;
   }
-  .body-grid > .stack { display: flex; flex-direction: column; gap: 14px; }
+  .live-card { padding: 20px 22px; }
 
-  /* ── Signals feed ── */
-  .feed { padding: 20px 22px; }
-  .feed-tabs {
-    display: flex; gap: 6px;
-    background: var(--bg-deep);
-    padding: 4px; border-radius: 999px;
-    border: 1px solid var(--line-1);
-  }
-  .feed-tab {
-    font-size: 11.5px; padding: 6px 14px;
-    border-radius: 999px; color: var(--ink-2);
-    cursor: pointer; font-weight: 500;
-    transition: all 0.15s;
-  }
-  .feed-tab.on {
-    background: linear-gradient(95deg, var(--accent), var(--accent-2));
-    color: oklch(0.15 0.02 35); font-weight: 600;
-    box-shadow: 0 4px 14px oklch(0.65 0.20 35 / 0.40);
-  }
-  .signal-list {
-    display: flex; flex-direction: column;
-    gap: 8px; margin-top: 14px;
-  }
-  .signal-row {
+  .live-row {
     display: grid;
     grid-template-columns: 4px auto 1fr auto auto;
     gap: 14px; align-items: center;
     padding: 14px 16px 14px 12px;
-    background: var(--bg-elev);
-    border: 1px solid var(--line-0);
-    border-radius: 12px;
-    transition: all 0.15s;
+    background: oklch(1 0 0 / 0.025);
+    border: 1px solid var(--line-1);
+    border-radius: 13px;
+    margin-bottom: 8px;
+    transition: transform 0.15s, border-color 0.15s, background 0.15s;
     cursor: pointer;
   }
-  .signal-row:hover {
-    border-color: var(--line-1);
+  :root[data-theme="light"] .live-row { background: oklch(0 0 0 / 0.02); }
+  .live-row:hover {
     transform: translateY(-1px);
-    box-shadow: 0 6px 20px oklch(0 0 0 / 0.30);
+    border-color: var(--glass-border-hi);
+    background: oklch(1 0 0 / 0.04);
   }
-  .signal-bar {
+  :root[data-theme="light"] .live-row:hover { background: oklch(0 0 0 / 0.04); }
+  .live-row.firing {
+    animation: firing-glow 2s ease-in-out infinite;
+  }
+  @keyframes firing-glow {
+    0%, 100% { box-shadow: 0 0 0 0 transparent; }
+    50% { box-shadow: 0 0 0 1px var(--accent), 0 8px 26px var(--accent-soft); }
+  }
+  .live-bar {
     width: 4px; align-self: stretch; border-radius: 4px;
+    background: var(--accent);
+    box-shadow: 0 0 10px var(--accent);
   }
-  .signal-bar.win  { background: var(--win); box-shadow: 0 0 10px var(--win-glow); }
-  .signal-bar.loss { background: var(--loss); box-shadow: 0 0 10px var(--loss-glow); }
-  .signal-bar.warn { background: var(--warn); }
-  .signal-icon {
-    width: 38px; height: 38px;
-    border-radius: 10px;
+  .live-bar.win  { background: var(--win); box-shadow: 0 0 10px var(--win-glow); }
+  .live-bar.loss { background: var(--loss); box-shadow: 0 0 10px var(--loss-glow); }
+  .live-bar.warn { background: var(--warn); }
+
+  .live-tag {
+    width: 42px; height: 42px;
+    border-radius: 11px;
     display: flex; align-items: center; justify-content: center;
-    font-family: 'Outfit', sans-serif; font-weight: 700; font-size: 13px;
-    color: var(--ink-0);
+    font-family: 'Instrument Serif', serif; font-weight: 400; font-size: 15px;
+    border: 1px solid;
   }
-  .signal-icon.long  { background: linear-gradient(140deg, oklch(0.80 0.18 150 / 0.30), oklch(0.50 0.20 150 / 0.18)); color: var(--win); border: 1px solid var(--win-dim); }
-  .signal-icon.short { background: linear-gradient(140deg, oklch(0.69 0.22 24 / 0.30), oklch(0.50 0.22 24 / 0.18));  color: var(--loss); border: 1px solid var(--loss-dim); }
-  .signal-meta { min-width: 0; }
-  .signal-title {
-    font-family: 'Outfit', sans-serif; font-weight: 600; font-size: 14px;
-    color: var(--ink-0); margin-bottom: 2px;
+  .live-tag.long  { color: var(--win); background: var(--win-soft);  border-color: var(--win-soft); }
+  .live-tag.short { color: var(--loss); background: var(--loss-soft); border-color: var(--loss-soft); }
+
+  .live-meta { min-width: 0; }
+  .live-title {
+    font-family: 'Instrument Serif', serif; font-size: 16px;
+    color: var(--ink-0); line-height: 1.15; margin-bottom: 3px;
   }
-  .signal-sub {
+  .live-sub {
     font-family: 'JetBrains Mono', monospace; font-size: 11px;
-    color: var(--ink-2);
+    color: var(--ink-2); letter-spacing: 0.02em;
   }
-  .signal-chip {
+  .live-chip {
     display: inline-flex; align-items: center; gap: 5px;
     font-family: 'JetBrains Mono', monospace;
     font-size: 10.5px; font-weight: 600;
-    padding: 4px 10px; border-radius: 999px; letter-spacing: 0.04em;
+    padding: 4px 11px; border-radius: 999px; letter-spacing: 0.04em;
     text-transform: uppercase;
   }
-  .signal-chip.win  { background: var(--win-dim); color: var(--win); }
-  .signal-chip.loss { background: var(--loss-dim); color: var(--loss); }
-  .signal-chip.warn { background: var(--warn-dim); color: var(--warn); }
-  .signal-pnl {
-    font-family: 'Outfit', sans-serif; font-weight: 700;
-    font-size: 17px; letter-spacing: -0.02em;
-    text-align: right;
-    min-width: 96px;
+  .live-chip.win    { background: var(--win-soft);  color: var(--win); }
+  .live-chip.loss   { background: var(--loss-soft); color: var(--loss); }
+  .live-chip.warn   { background: var(--warn-soft); color: var(--warn); }
+  .live-chip.active {
+    background: var(--accent-soft); color: var(--accent);
   }
-  .signal-pnl.win  { color: var(--win); }
-  .signal-pnl.loss { color: var(--loss); }
-  .signal-pnl.warn { color: var(--warn); }
-  .signal-pnl .lots { font-size: 9.5px; color: var(--ink-3); font-family: 'JetBrains Mono', monospace; font-weight: 500; display: block; margin-top: 2px; }
+  .live-chip.active .dot {
+    width: 6px; height: 6px; border-radius: 50%; background: var(--accent);
+    animation: livepulse 1.4s ease-in-out infinite;
+    box-shadow: 0 0 6px var(--accent);
+  }
 
-  /* ── Equity curve ── */
-  .equity { padding: 18px 22px; }
+  .live-pnl {
+    font-family: 'Instrument Serif', serif;
+    font-size: 22px; letter-spacing: -0.025em;
+    text-align: right; min-width: 110px;
+    color: var(--ink-0); line-height: 1;
+  }
+  .live-pnl.win  { color: var(--win); }
+  .live-pnl.loss { color: var(--loss); }
+  .live-pnl.warn { color: var(--warn); }
+  .live-pnl .lots {
+    display: block; margin-top: 4px;
+    font-family: 'JetBrains Mono', monospace; font-weight: 500;
+    font-size: 10px; color: var(--ink-3); letter-spacing: 0.02em;
+  }
+
+  /* tabs (segmented) */
+  .seg {
+    display: inline-flex; gap: 4px;
+    padding: 4px;
+    background: oklch(0 0 0 / 0.25);
+    border: 1px solid var(--line-1);
+    border-radius: 999px;
+    backdrop-filter: blur(20px);
+  }
+  :root[data-theme="light"] .seg { background: oklch(0 0 0 / 0.05); }
+  .seg-btn {
+    padding: 6px 14px; border-radius: 999px;
+    font-size: 11.5px; font-weight: 500;
+    color: var(--ink-2); cursor: pointer;
+    transition: all 0.15s;
+  }
+  .seg-btn.on {
+    background: linear-gradient(95deg, var(--accent), var(--accent-2));
+    color: oklch(0.15 0.02 35); font-weight: 600;
+    box-shadow: 0 4px 14px oklch(0.65 0.22 35 / 0.40);
+  }
+
+  /* equity curve */
+  .equity-card { padding: 20px 22px; }
   .equity-svg { width: 100%; height: 180px; display: block; }
+  .equity-axis {
+    display: flex; justify-content: space-between; margin-top: 8px;
+    font-family: 'JetBrains Mono', monospace; font-size: 9.5px; color: var(--ink-3);
+  }
 
-  /* ── Top setups ── */
-  .setups { padding: 18px 20px; }
+  /* top setups */
+  .setups-card { padding: 18px 22px; margin-top: 14px; }
   .setup-row {
     display: grid; grid-template-columns: auto 1fr auto;
-    gap: 12px; align-items: center;
-    padding: 11px 4px;
+    gap: 14px; align-items: center;
+    padding: 12px 2px;
     border-bottom: 1px dashed var(--line-0);
   }
   .setup-row:last-child { border-bottom: 0; }
-  .setup-icon {
-    width: 30px; height: 30px; border-radius: 9px;
-    background: linear-gradient(140deg, var(--accent-dim), transparent);
+  .setup-mark {
+    width: 32px; height: 32px; border-radius: 10px;
+    background: linear-gradient(140deg, var(--accent-soft), transparent);
     border: 1px solid var(--line-1);
     display: flex; align-items: center; justify-content: center;
-    color: var(--accent); font-weight: 700; font-size: 12px;
-    font-family: 'Outfit', sans-serif;
+    color: var(--accent); font-weight: 600; font-size: 11.5px;
+    font-family: 'JetBrains Mono', monospace;
   }
-  .setup-name { font-family: 'Outfit', sans-serif; font-weight: 600; font-size: 13px; }
+  .setup-name {
+    font-family: 'Instrument Serif', serif; font-size: 14.5px;
+    color: var(--ink-0);
+  }
   .setup-sub { font-size: 11px; color: var(--ink-3); font-family: 'JetBrains Mono', monospace; margin-top: 1px; }
   .setup-pnl {
-    font-family: 'JetBrains Mono', monospace; font-weight: 600; font-size: 13px;
-    text-align: right;
+    font-family: 'Instrument Serif', serif; font-size: 16px;
+    text-align: right; letter-spacing: -0.02em;
   }
   .setup-pnl.win  { color: var(--win); }
   .setup-pnl.loss { color: var(--loss); }
 
-  /* ── Footer credit ── */
-  .creditline {
-    margin-top: 28px; text-align: center;
-    color: var(--ink-3); font-size: 11px;
-    font-family: 'JetBrains Mono', monospace; letter-spacing: 0.04em;
+  /* ─── placeholder views ────────────────────────────────────────────── */
+  .empty-view {
+    padding: 80px 40px; text-align: center;
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    border-radius: 18px;
+    backdrop-filter: blur(40px) saturate(180%);
+    box-shadow: var(--glass-shadow);
   }
-
-  /* ── Subtle animations ── */
-  @keyframes pulse-glow {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.65; }
+  .empty-view h2 {
+    font-family: 'Instrument Serif', serif; font-weight: 400;
+    font-size: 32px; margin: 0 0 10px; color: var(--ink-0);
   }
-  .pulse { animation: pulse-glow 2.2s ease-in-out infinite; }
-
-  @keyframes shimmer {
-    0% { background-position: -120% 0; }
-    100% { background-position: 220% 0; }
+  .empty-view p {
+    font-size: 13px; color: var(--ink-2); max-width: 460px; margin: 0 auto;
+    line-height: 1.55;
   }
+  .empty-view .icon-large {
+    width: 56px; height: 56px; margin: 0 auto 22px;
+    border-radius: 16px;
+    background: linear-gradient(140deg, var(--accent-soft), transparent);
+    border: 1px solid var(--line-1);
+    display: flex; align-items: center; justify-content: center;
+    color: var(--accent);
+  }
+  .empty-view .icon-large svg { width: 26px; height: 26px; stroke: currentColor; fill: none; stroke-width: 1.6; }
 
-  /* ── Preview banner ── */
+  /* ─── preview banner ───────────────────────────────────────────────── */
   .preview-banner {
-    position: fixed; top: 14px; left: 50%;
+    position: fixed; top: 12px; left: 50%;
     transform: translateX(-50%);
-    background: linear-gradient(95deg, oklch(0.85 0.18 80), oklch(0.78 0.20 60));
+    background: linear-gradient(95deg, var(--accent), var(--accent-2));
     color: oklch(0.18 0.04 60);
-    padding: 6px 16px; border-radius: 999px;
+    padding: 6px 18px; border-radius: 999px;
     font-family: 'JetBrains Mono', monospace; font-size: 10.5px;
-    font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase;
+    font-weight: 600; letter-spacing: 0.10em; text-transform: uppercase;
     z-index: 100;
-    box-shadow: 0 6px 24px oklch(0.70 0.20 60 / 0.40);
+    box-shadow: 0 8px 28px oklch(0.65 0.22 35 / 0.45);
   }
 </style>
 </head>
 <body>
 
-<div class="preview-banner">◐ design preview · mock data only</div>
+<div class="preview-banner">design preview · click any sidebar item</div>
 
-<div class="aurora"></div>
+<div class="canvas">
+  <div class="blob blob-1"></div>
+  <div class="blob blob-2"></div>
+  <div class="blob blob-3"></div>
+  <div class="blob blob-4"></div>
+</div>
+<div class="dotgrid"></div>
 <div class="grain"></div>
 
 <div class="app">
@@ -539,41 +809,69 @@
   <aside class="sidebar">
     <div class="brand">
       <div class="brand-mark"></div>
-      <div class="brand-name">ProveWay</div>
+      <div>
+        <div class="brand-name">Intraday Engine</div>
+        <div class="brand-tag">v2 · live</div>
+      </div>
     </div>
 
     <div class="nav-section">Trading</div>
-    <div class="nav-item on">
-      <span class="ico">●</span> Live engine
-      <span class="badge">on</span>
+    <div class="nav-item on" data-view="live">
+      <span class="ico">
+        <svg viewBox="0 0 24 24"><path d="M3 12h4l3-9 4 18 3-9h4"/></svg>
+      </span>
+      Live signals
+      <span class="live-dot"></span>
     </div>
-    <div class="nav-item">
-      <span class="ico">◧</span> Backtest
+    <div class="nav-item" data-view="backtest">
+      <span class="ico">
+        <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M9 4v16"/></svg>
+      </span>
+      Backtest
     </div>
-    <div class="nav-item">
-      <span class="ico">≡</span> Journal
+    <div class="nav-item" data-view="journal">
+      <span class="ico">
+        <svg viewBox="0 0 24 24"><path d="M4 4h12a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H4z"/><path d="M4 4v18"/><path d="M8 8h8M8 12h8M8 16h6"/></svg>
+      </span>
+      Journal
       <span class="badge">17</span>
     </div>
-    <div class="nav-item">
-      <span class="ico">∑</span> Stats
+    <div class="nav-item" data-view="stats">
+      <span class="ico">
+        <svg viewBox="0 0 24 24"><path d="M3 21V8M9 21V3M15 21v-9M21 21v-6"/></svg>
+      </span>
+      Stats
     </div>
 
     <div class="nav-section">Tools</div>
-    <div class="nav-item">
-      <span class="ico">⌗</span> Calculator
+    <div class="nav-item" data-view="calc">
+      <span class="ico">
+        <svg viewBox="0 0 24 24"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M8 7h8M8 11h.01M12 11h.01M16 11h.01M8 15h.01M12 15h.01M16 15h.01M8 19h8"/></svg>
+      </span>
+      Calculator
     </div>
-    <div class="nav-item">
-      <span class="ico">⊟</span> Audit logs
+    <div class="nav-item" data-view="logs">
+      <span class="ico">
+        <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M9 13h6M9 17h4"/></svg>
+      </span>
+      Audit logs
     </div>
-    <div class="nav-item">
-      <span class="ico">⚙</span> Settings
+
+    <div class="nav-section">System</div>
+    <div class="nav-item" data-view="settings">
+      <span class="ico">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09a1.65 1.65 0 0 0-1.08-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09a1.65 1.65 0 0 0 1.51-1.08 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+      </span>
+      Settings
     </div>
 
     <div class="help-widget">
-      <div class="help-icon">?</div>
+      <div class="help-icon">
+        <svg width="18" height="18" viewBox="0 0 24 24" stroke="currentColor" fill="none" stroke-width="1.8"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+      </div>
       <h4>Need help?</h4>
-      <p>Check the strategy docs or open a ticket. We'll respond within an hour.</p>
-      <button type="button">Contact us</button>
+      <p>Strategy docs, alerts setup, brokerage costs. One-tap to chat with us.</p>
+      <button type="button">Open docs</button>
     </div>
   </aside>
 
@@ -583,323 +881,447 @@
     <!-- top bar -->
     <div class="topbar">
       <div class="search">
-        <span>⌕</span>
+        <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
         <input placeholder="Search by date, strike, or instrument…"/>
+        <kbd>⌘ K</kbd>
       </div>
       <div class="topbar-spacer"></div>
-      <div class="iconbtn" title="theme">◐</div>
-      <div class="iconbtn dot" title="alerts">🔔</div>
+
+      <button type="button" class="theme-toggle" id="themeToggle" aria-label="toggle theme">
+        <svg class="ico-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
+        <svg class="ico-moon" viewBox="0 0 24 24"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+        <span class="thumb"></span>
+      </button>
+
+      <div class="iconbtn" title="alerts">
+        <svg viewBox="0 0 24 24"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+        <span class="badge-dot"></span>
+      </div>
+
       <div class="userchip">
         <div class="avatar"></div>
         <div>
           <div class="name">Ketan W.</div>
-          <div class="role">₹50,000 capital</div>
+          <div class="sub">₹50,000 cap</div>
         </div>
       </div>
     </div>
 
-    <!-- ─── HERO ROW ─── -->
-    <div class="hero-row">
-      <!-- Today's P&L -->
-      <div class="card card-hi hero-stat">
-        <div class="hero-eyebrow">Today's P&amp;L</div>
-        <div class="hero-big win">+₹4,250</div>
-        <div class="hero-foot">
-          <span class="pct-pill win">▲ +8.5%</span>
-          <span>of ₹50,000 capital</span>
-        </div>
-      </div>
-      <!-- Win-rate gauge -->
-      <div class="card gauge-wrap">
-        <svg class="gauge-svg" viewBox="0 0 100 100">
-          <defs>
-            <linearGradient id="g-win" x1="0%" y1="0%" x2="100%" y2="100%">
-              <stop offset="0%" stop-color="oklch(0.80 0.18 150)"/>
-              <stop offset="100%" stop-color="oklch(0.68 0.22 110)"/>
-            </linearGradient>
-          </defs>
-          <circle cx="50" cy="50" r="40" class="gauge-track"/>
-          <circle cx="50" cy="50" r="40" class="gauge-progress"
-                  stroke="url(#g-win)"
-                  stroke-dasharray="251.3"
-                  stroke-dashoffset="45"/>
-          <text x="50" y="48" class="gauge-center">82%</text>
-          <text x="50" y="64" class="gauge-label">win rate</text>
-        </svg>
-        <div class="gauge-stats">
-          <div class="gauge-stat-row">
-            <span class="gauge-stat-label">Wins</span>
-            <span class="gauge-stat-val" style="color: var(--win)">14</span>
-          </div>
-          <div class="gauge-stat-row">
-            <span class="gauge-stat-label">Losses</span>
-            <span class="gauge-stat-val" style="color: var(--loss)">2</span>
-          </div>
-          <div class="gauge-stat-row">
-            <span class="gauge-stat-label">Whipsaws</span>
-            <span class="gauge-stat-val" style="color: var(--warn)">1</span>
-          </div>
-          <div class="gauge-stat-row">
-            <span class="gauge-stat-label">Avg R:R</span>
-            <span class="gauge-stat-val">1 : 1.8</span>
-          </div>
-        </div>
-      </div>
-      <!-- Streak -->
-      <div class="card streak-card">
-        <div class="hero-eyebrow">Current streak</div>
-        <div class="streak-num">4<span style="font-size: 22px; opacity: 0.6; margin-left: 2px;">w</span></div>
-        <div class="streak-dots">
-          <div class="streak-dot loss"></div>
-          <div class="streak-dot win"></div>
-          <div class="streak-dot win"></div>
-          <div class="streak-dot win"></div>
-          <div class="streak-dot win"></div>
-        </div>
-        <div style="font-size: 11px; color: var(--ink-2); margin-top: 4px;">Best: 7 · session high</div>
-      </div>
-    </div>
+    <!-- ============================================================== -->
+    <!-- VIEW: LIVE  (default)                                            -->
+    <!-- ============================================================== -->
+    <section class="view on" data-view="live">
 
-    <!-- ─── INDEX PILLS ─── -->
-    <div class="pill-row">
-      <div class="card pill">
-        <div>
-          <div class="pill-name">NIFTY 50</div>
-          <div class="pill-price">23,855.20</div>
-          <div class="pill-pill"><span class="pct-pill win">▲ +0.42%</span></div>
+      <!-- live status strip -->
+      <div class="live-strip">
+        <div class="ldot"></div>
+        <div class="lstat">
+          <div class="lstat-1">Engine live · scanning</div>
+          <div class="lstat-2">v2 · 3-of-4 confluence · IST 02:53 pm</div>
         </div>
-        <svg class="pill-spark" viewBox="0 0 90 36" preserveAspectRatio="none">
-          <polyline points="0,28 12,22 24,24 36,18 48,14 60,16 72,8 90,4"
-                    fill="none" stroke="oklch(0.80 0.18 150)" stroke-width="1.8"/>
-          <polyline points="0,28 12,22 24,24 36,18 48,14 60,16 72,8 90,4 90,36 0,36"
-                    fill="oklch(0.80 0.18 150 / 0.12)" stroke="none"/>
-        </svg>
-      </div>
-      <div class="card pill">
-        <div>
-          <div class="pill-name">BANK NIFTY</div>
-          <div class="pill-price">51,012.80</div>
-          <div class="pill-pill"><span class="pct-pill loss">▼ −0.18%</span></div>
+        <div class="lscan">
+          <span>last scan <b>4s</b> ago</span>
+          <span>·</span>
+          <span><b>NIFTY</b> · <b>BANKNIFTY</b> · <b>FINNIFTY</b></span>
         </div>
-        <svg class="pill-spark" viewBox="0 0 90 36" preserveAspectRatio="none">
-          <polyline points="0,10 12,12 24,8 36,16 48,18 60,22 72,20 90,28"
-                    fill="none" stroke="oklch(0.69 0.22 24)" stroke-width="1.8"/>
-          <polyline points="0,10 12,12 24,8 36,16 48,18 60,22 72,20 90,28 90,36 0,36"
-                    fill="oklch(0.69 0.22 24 / 0.12)" stroke="none"/>
-        </svg>
       </div>
-      <div class="card pill">
-        <div>
-          <div class="pill-name">FIN NIFTY</div>
-          <div class="pill-price">24,180.35</div>
-          <div class="pill-pill"><span class="pct-pill win">▲ +0.11%</span></div>
-        </div>
-        <svg class="pill-spark" viewBox="0 0 90 36" preserveAspectRatio="none">
-          <polyline points="0,22 12,18 24,20 36,18 48,16 60,18 72,14 90,12"
-                    fill="none" stroke="oklch(0.80 0.18 150)" stroke-width="1.8"/>
-          <polyline points="0,22 12,18 24,20 36,18 48,16 60,18 72,14 90,12 90,36 0,36"
-                    fill="oklch(0.80 0.18 150 / 0.12)" stroke="none"/>
-        </svg>
-      </div>
-    </div>
 
-    <!-- ─── BODY GRID ─── -->
-    <div class="body-grid">
+      <!-- hero row -->
+      <div class="hero-row">
+        <!-- today's P&L -->
+        <div class="card card-hi hero-pnl">
+          <div class="hero-pnl-eyebrow">Today's P&amp;L</div>
+          <div class="hero-pnl-num"><span class="currency">₹</span>+4,250</div>
+          <div class="hero-pnl-foot">
+            <span class="pct-pill win">▲ +8.5%</span>
+            <span>realized · 3 closed trades</span>
+          </div>
+        </div>
+        <!-- win-rate gauge -->
+        <div class="card hero-gauge">
+          <div class="gauge-container">
+            <svg class="gauge-svg" viewBox="0 0 100 100">
+              <defs>
+                <linearGradient id="g-win" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%"   stop-color="oklch(0.86 0.13 152)"/>
+                  <stop offset="100%" stop-color="oklch(0.78 0.13 120)"/>
+                </linearGradient>
+              </defs>
+              <circle cx="50" cy="50" r="42" class="gauge-track"/>
+              <circle cx="50" cy="50" r="42" class="gauge-progress"
+                      stroke="url(#g-win)"
+                      stroke-dasharray="263.9"
+                      stroke-dashoffset="47.5"/>
+            </svg>
+            <div class="gauge-center">
+              <div class="gauge-num">82<span class="pct">%</span></div>
+              <div class="gauge-lbl">win rate</div>
+            </div>
+          </div>
+          <div class="gauge-stats">
+            <div class="gauge-row"><span class="gauge-rl">Wins</span> <span class="gauge-rv win">14</span></div>
+            <div class="gauge-row"><span class="gauge-rl">Losses</span> <span class="gauge-rv loss">2</span></div>
+            <div class="gauge-row"><span class="gauge-rl">Whipsaws</span> <span class="gauge-rv warn">1</span></div>
+            <div class="gauge-row"><span class="gauge-rl">Avg R:R</span> <span class="gauge-rv">1 : 1.8</span></div>
+          </div>
+        </div>
+        <!-- streak -->
+        <div class="card hero-streak">
+          <div class="hero-streak-eb">Current streak</div>
+          <div class="hero-streak-num">4<span>W</span></div>
+          <div class="streak-dots">
+            <div class="streak-dot loss"></div>
+            <div class="streak-dot win"></div>
+            <div class="streak-dot win"></div>
+            <div class="streak-dot win"></div>
+            <div class="streak-dot win"></div>
+          </div>
+          <div class="hero-streak-foot">Session best: 7</div>
+        </div>
+      </div>
 
-      <!-- Signals feed -->
-      <section class="card feed">
-        <div class="card-head">
+      <!-- index pills -->
+      <div class="pill-row">
+        <div class="card pill">
           <div>
-            <div class="card-title">Signals feed</div>
-            <div class="card-sub" style="margin-top: 3px;">Live + recent · click any row</div>
+            <div class="pill-name">NIFTY 50</div>
+            <div class="pill-price">23,855.20</div>
+            <div class="pill-pill"><span class="pct-pill win">▲ +0.42%</span></div>
           </div>
-          <div class="feed-tabs">
-            <div class="feed-tab on">All</div>
-            <div class="feed-tab">Wins</div>
-            <div class="feed-tab">Losses</div>
-            <div class="feed-tab">Open</div>
-          </div>
+          <svg class="pill-spark" viewBox="0 0 90 40" preserveAspectRatio="none">
+            <polyline points="0,32 12,26 24,28 36,20 48,16 60,18 72,9 90,4" fill="none" stroke="oklch(0.86 0.13 152)" stroke-width="2"/>
+            <polyline points="0,32 12,26 24,28 36,20 48,16 60,18 72,9 90,4 90,40 0,40" fill="oklch(0.86 0.13 152 / 0.16)" stroke="none"/>
+          </svg>
         </div>
-
-        <div class="signal-list">
-
-          <!-- WIN -->
-          <div class="signal-row">
-            <div class="signal-bar win"></div>
-            <div class="signal-icon short">PE</div>
-            <div class="signal-meta">
-              <div class="signal-title">NIFTY 23,900 PE · short</div>
-              <div class="signal-sub">11th May 2026 · Mon · 02:50 pm · 1L × 75</div>
-            </div>
-            <div><span class="signal-chip win">✓ Target 1 hit</span></div>
-            <div class="signal-pnl win">+₹2,325 <span class="lots">+50% on entry ₹235</span></div>
+        <div class="card pill">
+          <div>
+            <div class="pill-name">BANK NIFTY</div>
+            <div class="pill-price">51,012.80</div>
+            <div class="pill-pill"><span class="pct-pill loss">▼ −0.18%</span></div>
           </div>
-
-          <!-- LOSS -->
-          <div class="signal-row">
-            <div class="signal-bar loss"></div>
-            <div class="signal-icon long">CE</div>
-            <div class="signal-meta">
-              <div class="signal-title">BANKNIFTY 51,000 CE · long</div>
-              <div class="signal-sub">11th May 2026 · Mon · 11:20 am · 1L × 30</div>
-            </div>
-            <div><span class="signal-chip loss">✗ SL hit</span></div>
-            <div class="signal-pnl loss">−₹1,500 <span class="lots">−35% on entry ₹142</span></div>
-          </div>
-
-          <!-- WIN -->
-          <div class="signal-row">
-            <div class="signal-bar win"></div>
-            <div class="signal-icon long">CE</div>
-            <div class="signal-meta">
-              <div class="signal-title">FINNIFTY 24,200 CE · long</div>
-              <div class="signal-sub">10th May 2026 · Sun · 01:45 pm · 1L × 65</div>
-            </div>
-            <div><span class="signal-chip win">✓ Closed in profit</span></div>
-            <div class="signal-pnl win">+₹890 <span class="lots">+12% on entry ₹108</span></div>
-          </div>
-
-          <!-- WHIPSAW -->
-          <div class="signal-row">
-            <div class="signal-bar warn"></div>
-            <div class="signal-icon long">CE</div>
-            <div class="signal-meta">
-              <div class="signal-title">NIFTY 23,800 CE · long</div>
-              <div class="signal-sub">10th May 2026 · Sun · 10:15 am · 1L × 75</div>
-            </div>
-            <div><span class="signal-chip warn">⚠ Whipsaw</span></div>
-            <div class="signal-pnl warn">±₹0 <span class="lots">SL + T1 both touched</span></div>
-          </div>
-
-          <!-- WIN big -->
-          <div class="signal-row">
-            <div class="signal-bar win"></div>
-            <div class="signal-icon long">CE</div>
-            <div class="signal-meta">
-              <div class="signal-title">NIFTY 23,700 CE · long</div>
-              <div class="signal-sub">9th May 2026 · Sat · 02:00 pm · 2L × 75</div>
-            </div>
-            <div><span class="signal-chip win">🎯 Target 2 hit</span></div>
-            <div class="signal-pnl win">+₹3,750 <span class="lots">+100% on entry ₹125</span></div>
-          </div>
-
-          <!-- LOSS -->
-          <div class="signal-row">
-            <div class="signal-bar loss"></div>
-            <div class="signal-icon short">PE</div>
-            <div class="signal-meta">
-              <div class="signal-title">BANKNIFTY 51,200 PE · short</div>
-              <div class="signal-sub">9th May 2026 · Sat · 11:50 am · 1L × 30</div>
-            </div>
-            <div><span class="signal-chip loss">✗ SL hit</span></div>
-            <div class="signal-pnl loss">−₹980 <span class="lots">−35% on entry ₹93</span></div>
-          </div>
-
+          <svg class="pill-spark" viewBox="0 0 90 40" preserveAspectRatio="none">
+            <polyline points="0,10 12,12 24,8 36,16 48,18 60,22 72,24 90,30" fill="none" stroke="oklch(0.76 0.14 22)" stroke-width="2"/>
+            <polyline points="0,10 12,12 24,8 36,16 48,18 60,22 72,24 90,30 90,40 0,40" fill="oklch(0.76 0.14 22 / 0.16)" stroke="none"/>
+          </svg>
         </div>
-      </section>
+        <div class="card pill">
+          <div>
+            <div class="pill-name">FIN NIFTY</div>
+            <div class="pill-price">24,180.35</div>
+            <div class="pill-pill"><span class="pct-pill win">▲ +0.11%</span></div>
+          </div>
+          <svg class="pill-spark" viewBox="0 0 90 40" preserveAspectRatio="none">
+            <polyline points="0,24 12,20 24,22 36,18 48,16 60,18 72,14 90,12" fill="none" stroke="oklch(0.86 0.13 152)" stroke-width="2"/>
+            <polyline points="0,24 12,20 24,22 36,18 48,16 60,18 72,14 90,12 90,40 0,40" fill="oklch(0.86 0.13 152 / 0.16)" stroke="none"/>
+          </svg>
+        </div>
+      </div>
 
-      <!-- Right rail -->
-      <div class="stack">
+      <!-- LIVE signals card  +  Equity curve -->
+      <div class="live-grid">
+
+        <!-- LIVE / FIRING NOW -->
+        <section class="card live-card">
+          <div class="card-head">
+            <div>
+              <div class="card-title">Live signals</div>
+              <div class="card-sub">Active right now · auto-refresh every scan</div>
+            </div>
+            <div class="seg">
+              <div class="seg-btn on">Active</div>
+              <div class="seg-btn">Watching</div>
+              <div class="seg-btn">Just fired</div>
+            </div>
+          </div>
+
+          <!-- ACTIVE: position open, tracking exit -->
+          <div class="live-row firing">
+            <div class="live-bar"></div>
+            <div class="live-tag short">PE</div>
+            <div class="live-meta">
+              <div class="live-title">NIFTY 23,900 PE · short</div>
+              <div class="live-sub">Entered 02:50 pm · 1L × 75 · target ₹352 · SL ₹153</div>
+            </div>
+            <div><span class="live-chip active"><span class="dot"></span> In flight</span></div>
+            <div class="live-pnl win">+₹1,890<span class="lots">LTP ₹260 · +25% on entry ₹235</span></div>
+          </div>
+
+          <!-- ACTIVE: watching, pre-entry -->
+          <div class="live-row">
+            <div class="live-bar"></div>
+            <div class="live-tag long">CE</div>
+            <div class="live-meta">
+              <div class="live-title">BANKNIFTY 51,200 CE · long</div>
+              <div class="live-sub">Watch · 3 of 4 conditions met · waiting for RSI &gt; 52</div>
+            </div>
+            <div><span class="live-chip active"><span class="dot"></span> Watching</span></div>
+            <div class="live-pnl">—<span class="lots">no entry yet</span></div>
+          </div>
+
+          <!-- JUST FIRED -->
+          <div class="live-row">
+            <div class="live-bar win"></div>
+            <div class="live-tag long">CE</div>
+            <div class="live-meta">
+              <div class="live-title">FINNIFTY 24,200 CE · long</div>
+              <div class="live-sub">Just closed · 02:41 pm · 1L × 65 · held 11 min</div>
+            </div>
+            <div><span class="live-chip win">✓ T1 hit</span></div>
+            <div class="live-pnl win">+₹890<span class="lots">+12% · sold at ₹121</span></div>
+          </div>
+        </section>
 
         <!-- Equity curve -->
-        <section class="card equity">
+        <section class="card equity-card">
           <div class="card-head">
             <div>
               <div class="card-title">Equity curve</div>
-              <div class="card-sub" style="margin-top: 3px;">Last 7 sessions · ₹50K capital</div>
+              <div class="card-sub">Last 7 sessions · ₹50K base</div>
             </div>
             <span class="pct-pill win">▲ +8.5%</span>
           </div>
-          <svg class="equity-svg" viewBox="0 0 400 160" preserveAspectRatio="none">
+          <svg class="equity-svg" viewBox="0 0 400 180" preserveAspectRatio="none">
             <defs>
               <linearGradient id="eq-fill" x1="0%" y1="0%" x2="0%" y2="100%">
-                <stop offset="0%" stop-color="oklch(0.80 0.18 150 / 0.32)"/>
-                <stop offset="100%" stop-color="oklch(0.80 0.18 150 / 0.00)"/>
+                <stop offset="0%"   stop-color="oklch(0.86 0.13 152 / 0.36)"/>
+                <stop offset="100%" stop-color="oklch(0.86 0.13 152 / 0.00)"/>
               </linearGradient>
               <linearGradient id="eq-line" x1="0%" y1="0%" x2="100%" y2="0%">
-                <stop offset="0%" stop-color="oklch(0.75 0.17 50)"/>
-                <stop offset="50%" stop-color="oklch(0.80 0.18 150)"/>
-                <stop offset="100%" stop-color="oklch(0.80 0.18 150)"/>
+                <stop offset="0%"   stop-color="oklch(0.83 0.12 55)"/>
+                <stop offset="55%"  stop-color="oklch(0.80 0.10 295)"/>
+                <stop offset="100%" stop-color="oklch(0.86 0.13 152)"/>
               </linearGradient>
             </defs>
-            <!-- gridlines -->
             <g stroke="oklch(1 0 0 / 0.05)" stroke-width="1">
-              <line x1="0" y1="40" x2="400" y2="40"/>
-              <line x1="0" y1="80" x2="400" y2="80"/>
-              <line x1="0" y1="120" x2="400" y2="120"/>
+              <line x1="0" y1="45"  x2="400" y2="45"/>
+              <line x1="0" y1="90"  x2="400" y2="90"/>
+              <line x1="0" y1="135" x2="400" y2="135"/>
             </g>
-            <!-- equity area -->
-            <polyline
-              points="0,100 50,92 100,108 150,80 200,72 250,84 300,52 350,42 400,30"
-              fill="none" stroke="url(#eq-line)" stroke-width="2.5" stroke-linejoin="round"/>
-            <polyline
-              points="0,100 50,92 100,108 150,80 200,72 250,84 300,52 350,42 400,30 400,160 0,160"
-              fill="url(#eq-fill)" stroke="none"/>
-            <!-- dots -->
-            <g fill="oklch(0.80 0.18 150)" stroke="var(--bg-base)" stroke-width="2">
-              <circle cx="0" cy="100" r="3.5"/>
-              <circle cx="100" cy="108" r="3.5"/>
-              <circle cx="200" cy="72" r="3.5"/>
-              <circle cx="300" cy="52" r="3.5"/>
-              <circle cx="400" cy="30" r="4.5"/>
+            <polyline points="0,112 50,100 100,120 150,88 200,80 250,92 300,58 350,46 400,30"
+                      fill="none" stroke="url(#eq-line)" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+            <polyline points="0,112 50,100 100,120 150,88 200,80 250,92 300,58 350,46 400,30 400,180 0,180"
+                      fill="url(#eq-fill)" stroke="none"/>
+            <g fill="oklch(0.86 0.13 152)" stroke="var(--bg-base)" stroke-width="2.5">
+              <circle cx="0"   cy="112" r="3.5"/>
+              <circle cx="100" cy="120" r="3.5"/>
+              <circle cx="200" cy="80"  r="3.5"/>
+              <circle cx="300" cy="58"  r="3.5"/>
+              <circle cx="400" cy="30"  r="5"/>
             </g>
           </svg>
-          <div style="display: flex; justify-content: space-between; margin-top: 6px; font-family: 'JetBrains Mono', monospace; font-size: 9.5px; color: var(--ink-3);">
+          <div class="equity-axis">
             <span>05 May</span><span>07 May</span><span>09 May</span><span>11 May</span>
           </div>
         </section>
-
-        <!-- Top setups -->
-        <section class="card setups">
-          <div class="card-head">
-            <div>
-              <div class="card-title">Top setups</div>
-              <div class="card-sub" style="margin-top: 3px;">By net P&amp;L this week</div>
-            </div>
-          </div>
-          <div class="setup-row">
-            <div class="setup-icon">3·4</div>
-            <div>
-              <div class="setup-name">3-of-4 trend (morning)</div>
-              <div class="setup-sub">8 trades · 75% win · avg +₹1.5K</div>
-            </div>
-            <div class="setup-pnl win">+₹12,400</div>
-          </div>
-          <div class="setup-row">
-            <div class="setup-icon">VW</div>
-            <div>
-              <div class="setup-name">VWAP reclaim</div>
-              <div class="setup-sub">5 trades · 60% win · avg +₹640</div>
-            </div>
-            <div class="setup-pnl win">+₹3,200</div>
-          </div>
-          <div class="setup-row">
-            <div class="setup-icon">PD</div>
-            <div>
-              <div class="setup-name">PDH / PDL break</div>
-              <div class="setup-sub">4 trades · 50% win · avg −₹170</div>
-            </div>
-            <div class="setup-pnl loss">−₹680</div>
-          </div>
-          <div class="setup-row">
-            <div class="setup-icon">OR</div>
-            <div>
-              <div class="setup-name">Opening range</div>
-              <div class="setup-sub">3 trades · 67% win · avg +₹420</div>
-            </div>
-            <div class="setup-pnl win">+₹1,260</div>
-          </div>
-        </section>
-
       </div>
-    </div>
 
-    <div class="creditline">
-      preview only — replace with live data after sign-off
-    </div>
+      <!-- HISTORY (recent closed signals) -->
+      <section class="card live-card" style="margin-bottom: 14px;">
+        <div class="card-head">
+          <div>
+            <div class="card-title">Recent history</div>
+            <div class="card-sub">Closed signals · sorted by time</div>
+          </div>
+          <div class="seg">
+            <div class="seg-btn on">All</div>
+            <div class="seg-btn">Wins</div>
+            <div class="seg-btn">Losses</div>
+          </div>
+        </div>
+
+        <div class="live-row">
+          <div class="live-bar win"></div>
+          <div class="live-tag short">PE</div>
+          <div class="live-meta">
+            <div class="live-title">NIFTY 23,900 PE · short</div>
+            <div class="live-sub">11th May 2026 · Mon · 02:50 pm · 1L × 75 · held 24 min</div>
+          </div>
+          <div><span class="live-chip win">✓ T1 hit</span></div>
+          <div class="live-pnl win">+₹2,325<span class="lots">+50% on entry ₹235</span></div>
+        </div>
+
+        <div class="live-row">
+          <div class="live-bar loss"></div>
+          <div class="live-tag long">CE</div>
+          <div class="live-meta">
+            <div class="live-title">BANKNIFTY 51,000 CE · long</div>
+            <div class="live-sub">11th May 2026 · Mon · 11:20 am · 1L × 30 · held 18 min</div>
+          </div>
+          <div><span class="live-chip loss">✗ SL hit</span></div>
+          <div class="live-pnl loss">−₹1,500<span class="lots">−35% on entry ₹142</span></div>
+        </div>
+
+        <div class="live-row">
+          <div class="live-bar warn"></div>
+          <div class="live-tag long">CE</div>
+          <div class="live-meta">
+            <div class="live-title">NIFTY 23,800 CE · long</div>
+            <div class="live-sub">10th May 2026 · Sun · 10:15 am · 1L × 75 · held 45 min</div>
+          </div>
+          <div><span class="live-chip warn">⚠ Whipsaw</span></div>
+          <div class="live-pnl warn">±₹0<span class="lots">SL + T1 both touched</span></div>
+        </div>
+
+        <div class="live-row">
+          <div class="live-bar win"></div>
+          <div class="live-tag long">CE</div>
+          <div class="live-meta">
+            <div class="live-title">NIFTY 23,700 CE · long</div>
+            <div class="live-sub">9th May 2026 · Sat · 02:00 pm · 2L × 75 · held 32 min</div>
+          </div>
+          <div><span class="live-chip win">🎯 T2 hit</span></div>
+          <div class="live-pnl win">+₹3,750<span class="lots">+100% on entry ₹125</span></div>
+        </div>
+
+        <div class="live-row">
+          <div class="live-bar loss"></div>
+          <div class="live-tag short">PE</div>
+          <div class="live-meta">
+            <div class="live-title">BANKNIFTY 51,200 PE · short</div>
+            <div class="live-sub">9th May 2026 · Sat · 11:50 am · 1L × 30 · held 12 min</div>
+          </div>
+          <div><span class="live-chip loss">✗ SL hit</span></div>
+          <div class="live-pnl loss">−₹980<span class="lots">−35% on entry ₹93</span></div>
+        </div>
+      </section>
+
+      <!-- top setups -->
+      <section class="card setups-card">
+        <div class="card-head">
+          <div>
+            <div class="card-title">Top setups</div>
+            <div class="card-sub">By net P&amp;L this week</div>
+          </div>
+        </div>
+        <div class="setup-row">
+          <div class="setup-mark">3·4</div>
+          <div>
+            <div class="setup-name">3-of-4 trend (morning)</div>
+            <div class="setup-sub">8 trades · 75% win · avg +₹1.5K</div>
+          </div>
+          <div class="setup-pnl win">+₹12,400</div>
+        </div>
+        <div class="setup-row">
+          <div class="setup-mark">VW</div>
+          <div>
+            <div class="setup-name">VWAP reclaim</div>
+            <div class="setup-sub">5 trades · 60% win · avg +₹640</div>
+          </div>
+          <div class="setup-pnl win">+₹3,200</div>
+        </div>
+        <div class="setup-row">
+          <div class="setup-mark">PD</div>
+          <div>
+            <div class="setup-name">PDH / PDL break</div>
+            <div class="setup-sub">4 trades · 50% win · avg −₹170</div>
+          </div>
+          <div class="setup-pnl loss">−₹680</div>
+        </div>
+        <div class="setup-row">
+          <div class="setup-mark">OR</div>
+          <div>
+            <div class="setup-name">Opening range</div>
+            <div class="setup-sub">3 trades · 67% win · avg +₹420</div>
+          </div>
+          <div class="setup-pnl win">+₹1,260</div>
+        </div>
+      </section>
+
+    </section>
+
+    <!-- ============================================================== -->
+    <!-- VIEW: BACKTEST                                                   -->
+    <!-- ============================================================== -->
+    <section class="view" data-view="backtest">
+      <div class="empty-view">
+        <div class="icon-large"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M9 4v16"/></svg></div>
+        <h2>Backtest</h2>
+        <p>Replay any number of days through the engine and see every signal it would have fired with full outcome attribution. Days field is typeable now — type your range and hit run.</p>
+      </div>
+    </section>
+
+    <!-- ============================================================== -->
+    <!-- VIEW: JOURNAL                                                    -->
+    <!-- ============================================================== -->
+    <section class="view" data-view="journal">
+      <div class="empty-view">
+        <div class="icon-large"><svg viewBox="0 0 24 24"><path d="M4 4h12a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H4z"/><path d="M4 4v18"/></svg></div>
+        <h2>Journal</h2>
+        <p>Every trade with full context — entry, exit, P&amp;L, the indicators at that moment, and post-trade notes. 17 trades this week.</p>
+      </div>
+    </section>
+
+    <!-- ============================================================== -->
+    <!-- VIEW: STATS                                                      -->
+    <!-- ============================================================== -->
+    <section class="view" data-view="stats">
+      <div class="empty-view">
+        <div class="icon-large"><svg viewBox="0 0 24 24"><path d="M3 21V8M9 21V3M15 21v-9M21 21v-6"/></svg></div>
+        <h2>Stats</h2>
+        <p>Win rate by setup, R:R distribution, max drawdown, hold-time histogram, time-of-day breakdown, and broker cost impact.</p>
+      </div>
+    </section>
+
+    <!-- ============================================================== -->
+    <!-- VIEW: CALC                                                       -->
+    <!-- ============================================================== -->
+    <section class="view" data-view="calc">
+      <div class="empty-view">
+        <div class="icon-large"><svg viewBox="0 0 24 24"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M8 7h8M8 11h.01M12 11h.01M16 11h.01"/></svg></div>
+        <h2>Calculator</h2>
+        <p>Position sizer, premium-percent ladder, brokerage impact and Black-Scholes IV solver in one panel.</p>
+      </div>
+    </section>
+
+    <!-- ============================================================== -->
+    <!-- VIEW: LOGS                                                       -->
+    <!-- ============================================================== -->
+    <section class="view" data-view="logs">
+      <div class="empty-view">
+        <div class="icon-large"><svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg></div>
+        <h2>Audit logs</h2>
+        <p>Every kill-switch trigger, every regime block, every signal-rejection reason — timestamped and exportable.</p>
+      </div>
+    </section>
+
+    <!-- ============================================================== -->
+    <!-- VIEW: SETTINGS                                                   -->
+    <!-- ============================================================== -->
+    <section class="view" data-view="settings">
+      <div class="empty-view">
+        <div class="icon-large"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/></svg></div>
+        <h2>Settings</h2>
+        <p>Strategy toggles (v1 / v2-dry / v2-live), risk guards, brokerage model, Slack webhook and Angel One credentials.</p>
+      </div>
+    </section>
 
   </main>
 </div>
+
+<script>
+  // ─── sidebar nav: clicking switches the visible view ───
+  document.querySelectorAll('.nav-item[data-view]').forEach(item => {
+    item.addEventListener('click', () => {
+      const target = item.dataset.view;
+      document.querySelectorAll('.nav-item').forEach(n => n.classList.toggle('on', n === item));
+      document.querySelectorAll('.view').forEach(v => v.classList.toggle('on', v.dataset.view === target));
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    });
+  });
+
+  // ─── theme toggle: morphs sun ↔ moon, swaps palette ───
+  const themeBtn = document.getElementById('themeToggle');
+  const root = document.documentElement;
+  themeBtn.addEventListener('click', () => {
+    const next = root.dataset.theme === 'dark' ? 'light' : 'dark';
+    root.dataset.theme = next;
+    try { localStorage.setItem('preview-theme', next); } catch(_) {}
+  });
+  try {
+    const saved = localStorage.getItem('preview-theme');
+    if (saved === 'light' || saved === 'dark') root.dataset.theme = saved;
+  } catch(_) {}
+</script>
 
 </body>
 </html>
