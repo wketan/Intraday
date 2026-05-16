@@ -656,7 +656,12 @@
     }
 
     /* ── topbar ──────────────────────────────────────────────────────── */
-    .main-col { min-width: 0; padding: 18px 22px 40px; display: flex; flex-direction: column; }
+    .main-col { min-width: 0; padding: 18px 0 40px; display: flex; flex-direction: column; }
+    /* Children align at var(--pad-x) — every row (new + existing) has the
+       same left edge so the columns stack cleanly. */
+    .topbar       { padding: 0 var(--pad-x); }
+    .live-section { padding: 0 var(--pad-x); }
+    .risk-section { padding: 0 var(--pad-x); }
     .topbar { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
     .topbar .grow { flex: 1; }
     .iconbtn-glass {
@@ -741,9 +746,30 @@
     .live-strip .ltitle { font-size: 13.5px; font-weight: 600; color: var(--ink-0); letter-spacing: -0.005em; }
     .live-strip .lsub { font-family: var(--mono); font-size: 10.5px; color: var(--ink-2); margin-top: 1px; letter-spacing: 0.02em; }
 
+    /* Replay controls inside the live-strip — sit BEFORE the engine toggle */
+    .ls-replay-ctrls {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 4px 10px; margin-right: 8px;
+      background: var(--bg-2); border: 1px solid var(--line-1);
+      border-radius: 999px;
+    }
+    .ls-replay-ctrls .seg {
+      background: oklch(0 0 0 / 0.20); border: 1px solid var(--line-1);
+      border-radius: 999px; padding: 2px; display: inline-flex; gap: 2px;
+    }
+    .ls-replay-ctrls .seg button {
+      padding: 4px 10px; border-radius: 999px; border: 0; background: transparent;
+      color: var(--ink-2); font-family: var(--mono); font-size: 11px; font-weight: 600;
+      cursor: pointer; transition: all 0.15s;
+    }
+    .ls-replay-ctrls .seg button.on {
+      background: linear-gradient(95deg, var(--accent), var(--accent-2));
+      color: var(--accent-ink);
+    }
+
     /* ── engine toggle (inside live strip) ─────────────────────────── */
     .engine-toggle {
-      display: inline-flex; align-items: center; gap: 12px; margin-left: auto;
+      display: inline-flex; align-items: center; gap: 12px;
       padding: 5px 6px 5px 12px;
       background: var(--glass-bg); border: 1px solid var(--glass-border);
       border-radius: 999px; cursor: pointer; font-family: inherit;
@@ -3356,7 +3382,9 @@ function SwingTab({ data, getServer, getAuthToken, showToast }) {
     // ═══════════════════════════════════════════════════════════════════
 
     function NewSidebar({ tab, mode, setTab, setMode, signals, onSettings }) {
-      const liveCount = (signals || []).filter(s => s && (s.status === 'LIVE' || s.status === 'READY')).length;
+      // Live badge = anything active (LIVE/READY/REPLAY). Watch-only signals
+      // don't count — that would over-state activity.
+      const liveCount = (signals || []).filter(s => s && s.status && s.status !== 'WATCH').length;
       const journalCount = (signals || []).length;
       const items = [
         { id:'signals-live',   label:'Live signals', tab:'signals', mode:'live',
@@ -3491,7 +3519,7 @@ function SwingTab({ data, getServer, getAuthToken, showToast }) {
       return (
         <div className={`live-strip ${on ? '' : 'off'}`}>
           <div className="ldot"></div>
-          <div>
+          <div style={{minWidth: 0}}>
             <div className="ltitle">{on ? (mode==='replay' ? 'Backtest replay running' : 'AI engine live · scanning price action') : 'Engine paused'}</div>
             <div className="lsub">
               {mode === 'replay'
@@ -3499,9 +3527,10 @@ function SwingTab({ data, getServer, getAuthToken, showToast }) {
                 : `v2 · OHLC + RSI + EMA + VWAP + level breaks · IST ${istTime}`}
             </div>
           </div>
+          <span style={{flex: 1}}/>
           {mode === 'replay' && !on && (
-            <div style={{display:'flex',alignItems:'center',gap:6,fontSize:11.5,color:'var(--ink-2)'}}>
-              <span>Days</span>
+            <div className="ls-replay-ctrls">
+              <span style={{fontSize:11, color:'var(--ink-3)', fontFamily:'var(--mono)', textTransform:'uppercase', letterSpacing:'0.10em'}}>Days</span>
               <DaysInput value={replayDays} onCommit={setReplayDays} />
               <div className="seg">
                 {[1,2,4].map(x => (
@@ -3512,8 +3541,8 @@ function SwingTab({ data, getServer, getAuthToken, showToast }) {
           )}
           <button type="button" className={`engine-toggle ${on ? 'on' : 'off'}`} onClick={on ? doStop : doStart}>
             <span className="et-info">
-              <span className="et-label">{on ? 'LIVE' : 'OFF'}</span>
-              <span className="et-sub">{on ? 'tap to stop' : (isAutoActive ? 'tap to start' : 'auto-on 08:45 IST')}</span>
+              <span className="et-label">{on ? (mode==='replay'?'REPLAY':'LIVE') : 'OFF'}</span>
+              <span className="et-sub">{on ? 'tap to stop' : (mode==='replay' ? 'tap to start replay' : (isAutoActive ? 'tap to start' : 'auto-on 08:45 IST'))}</span>
             </span>
             <span className="et-switch" aria-hidden="true"/>
           </button>
@@ -3521,7 +3550,7 @@ function SwingTab({ data, getServer, getAuthToken, showToast }) {
       );
     }
 
-    function HeroRow({ trades, signals, capital }) {
+    function HeroRow({ trades, signals, capital, mode }) {
       const closed = (trades || []).filter(t => t && t.status && t.status !== 'OPEN');
       const pnl = closed.reduce((a, b) => a + (Number(b.pnl) || 0), 0);
       const wins   = closed.filter(t => t.status === 'WIN').length;
@@ -3536,16 +3565,22 @@ function SwingTab({ data, getServer, getAuthToken, showToast }) {
       const offset = C * (1 - winRate / 100);
       const pnlClass = pnl >= 0 ? 'win' : 'loss';
       const pnlSign = pnl >= 0 ? '+' : '−';
+      const sigCount = (signals || []).length;
+      const ebLabel = mode === 'replay' ? "Replay P&L" : "Today's P&L";
       return (
         <div className="hero-row">
           <div className="gcard gcard-hi hero-pnl-card">
-            <div className="h-eb">Today's P&amp;L</div>
+            <div className="h-eb">{ebLabel}</div>
             <div className={`h-big ${pnlClass}`}>
               <span className="currency">₹</span>{pnlSign}{Math.abs(Math.round(pnl)).toLocaleString('en-IN')}
             </div>
             <div className="h-foot">
               <span className={`pct-pill ${pnlClass}`}>{pnl>=0?'▲ +':'▼ −'}{Math.abs(pnlPct).toFixed(2)}%</span>
-              <span>{closed.length} closed · {(signals||[]).length} signals</span>
+              <span>
+                {closed.length === 0
+                  ? `${sigCount} signal${sigCount===1?'':'s'} found · waiting for fills`
+                  : `${closed.length} closed · ${sigCount} signal${sigCount===1?'':'s'}`}
+              </span>
             </div>
           </div>
           <div className="gcard hero-gauge">
@@ -3576,32 +3611,61 @@ function SwingTab({ data, getServer, getAuthToken, showToast }) {
             </div>
           </div>
           <div className="gcard hero-streak">
-            <div className="h-eb">Current streak</div>
-            <div className="streak-big">{streak}<span>W</span></div>
+            <div className="h-eb">{closed.length === 0 ? 'Signals found' : 'Current streak'}</div>
+            <div className="streak-big">
+              {closed.length === 0 ? sigCount : streak}<span>{closed.length === 0 ? 'S' : 'W'}</span>
+            </div>
             <div className="streak-dots">
               {dots.length === 0 && [0,1,2,3,4].map(i => <div key={i} className="streak-dot"/>)}
               {dots.map((t, i) => <div key={i} className={`streak-dot ${t.status==='WIN'?'win':'loss'}`}/>)}
             </div>
-            <div className="streak-foot">{closed.length} trades total</div>
+            <div className="streak-foot">
+              {closed.length === 0
+                ? (mode === 'replay' ? 'scanning replay window' : 'engine watching markets')
+                : `${closed.length} trades total`}
+            </div>
           </div>
         </div>
       );
     }
 
-    function IndexPills({ live }) {
+    function IndexPills({ live, candles }) {
       const order = [
         { key: 'NIFTY',     label: 'NIFTY 50' },
         { key: 'BANKNIFTY', label: 'BANK NIFTY' },
         { key: 'FINNIFTY',  label: 'FIN NIFTY' },
       ];
       const lv = live || {};
+      const cnd = candles || {};
       return (
         <div className="pill-row">
           {order.map(o => {
             const d = lv[o.key] || {};
-            const ltp = d.ltp ?? d.price ?? null;
-            const chg = d.pct ?? d.change ?? null;
+            const arr = Array.isArray(cnd[o.key]) ? cnd[o.key] : [];
+            const lastC  = arr.length ? arr[arr.length - 1] : null;
+            const firstC = arr.length ? arr[0] : null;
+            // Live ltp first; fall back to last candle's close so replay mode shows something.
+            let ltp = d.ltp ?? d.price ?? null;
+            if (ltp == null && lastC) ltp = lastC.close ?? lastC.c ?? null;
+            // %change from live; else compute from candles (close vs first-bar open)
+            let chg = d.pct ?? d.change ?? null;
+            if (chg == null && lastC && firstC) {
+              const open = firstC.open ?? firstC.o ?? null;
+              const close = lastC.close ?? lastC.c ?? null;
+              if (open && close) chg = ((close - open) / open) * 100;
+            }
             const isUp = chg == null ? null : chg >= 0;
+            // Sparkline from candle closes
+            let pts = isUp===false?"0,10 12,12 24,8 36,16 48,18 60,22 72,24 90,30":"0,28 12,24 24,26 36,18 48,16 60,18 72,9 90,4";
+            if (arr.length >= 8) {
+              const slice = arr.slice(-30);
+              const closes = slice.map(c => c.close ?? c.c).filter(v => v != null);
+              if (closes.length >= 2) {
+                const mn = Math.min(...closes), mx = Math.max(...closes), range = mx - mn || 1;
+                const step = 90 / (closes.length - 1);
+                pts = closes.map((v, i) => `${(i*step).toFixed(1)},${(34 - ((v - mn) / range) * 28).toFixed(1)}`).join(' ');
+              }
+            }
             return (
               <div key={o.key} className="gcard pill-card">
                 <div>
@@ -3614,8 +3678,7 @@ function SwingTab({ data, getServer, getAuthToken, showToast }) {
                   </div>
                 </div>
                 <svg className="pill-spark" viewBox="0 0 90 40" preserveAspectRatio="none">
-                  <polyline points={isUp===false?"0,10 12,12 24,8 36,16 48,18 60,22 72,24 90,30":"0,28 12,24 24,26 36,18 48,16 60,18 72,9 90,4"}
-                            fill="none" stroke={isUp===false?'oklch(0.76 0.14 22)':'oklch(0.86 0.13 152)'} strokeWidth="2"/>
+                  <polyline points={pts} fill="none" stroke={isUp===false?'oklch(0.76 0.14 22)':'oklch(0.86 0.13 152)'} strokeWidth="2"/>
                 </svg>
               </div>
             );
@@ -3624,7 +3687,7 @@ function SwingTab({ data, getServer, getAuthToken, showToast }) {
       );
     }
 
-    function LiveHeroCard({ signal, live, capital, onOpen }) {
+    function LiveHeroCard({ signal, live, capital, mode, onOpen }) {
       if (!signal) return null;
       const instLive = (live || {})[signal.inst] || {};
       const entry = Number(signal.entry || 0);
@@ -3632,6 +3695,9 @@ function SwingTab({ data, getServer, getAuthToken, showToast }) {
       const t1 = Number(signal.target1 || 0);
       const t2 = Number(signal.target2 || 0);
       const ltp = instLive.ltp ?? entry;
+      const status = signal.status || (mode === 'replay' ? 'REPLAY' : 'LIVE');
+      const isReplay = status === 'REPLAY';
+      const pillLabel = isReplay ? 'REPLAY · Backtest signal' : (status === 'WATCH' ? 'WATCH · pre-entry' : 'LIVE · In flight');
       const lotSize = ({NIFTY:75, BANKNIFTY:30, FINNIFTY:65})[signal.inst] || 75;
       const budget = (capital || 50000) * 0.5;
       const perLotCost = entry * lotSize;
@@ -3644,8 +3710,8 @@ function SwingTab({ data, getServer, getAuthToken, showToast }) {
       return (
         <div className="live-hero" onClick={onOpen}>
           <div className="lh-status">
-            <span className="lh-pill live"><span className="lh-dot"></span> LIVE · In flight</span>
-            <span className="lh-time">{signal.t || ''}</span>
+            <span className="lh-pill live"><span className="lh-dot"></span> {pillLabel}</span>
+            <span className="lh-time">{[signal.date, signal.t].filter(Boolean).join(' · ') || ''}</span>
           </div>
           <div className="lh-main">
             <div>
@@ -4435,8 +4501,18 @@ function SwingTab({ data, getServer, getAuthToken, showToast }) {
       const safeCandles = (candles && typeof candles === 'object' && !Array.isArray(candles)) ? candles : {};
       const safeLive    = (live && typeof live === 'object' && !Array.isArray(live)) ? live : {};
 
-      // First active LIVE signal for the LIVE HERO card
-      const activeLive = (safeSignals || []).find(s => s && (s.status === 'LIVE' || s.status === 'READY')) || null;
+      // Most recent active signal for the LIVE HERO. In live mode we prefer
+      // LIVE/READY; in replay mode REPLAY signals win. Fall back to the most
+      // recent signal regardless of status so the card never disappears when
+      // the engine is producing output.
+      const activeLive = (() => {
+        const sigs = safeSignals || [];
+        const live = sigs.find(s => s && (s.status === 'LIVE' || s.status === 'READY'));
+        if (live) return live;
+        const replay = sigs.find(s => s && s.status === 'REPLAY');
+        if (replay) return replay;
+        return sigs[0] || null;
+      })();
 
       return (
         <div key={theme+accent} className="app-shell">
@@ -4455,29 +4531,30 @@ function SwingTab({ data, getServer, getAuthToken, showToast }) {
             />
 
             {tab === 'signals' && (
-              <>
+              <div className="live-section">
                 <LiveStripBar
                   on={on} mode={mode}
                   doStart={doStart} doStop={doStop}
                   replayDays={replayDays} setReplayDays={setReplayDays}
                   speed={speed} setSpeed={setSpeed}
                 />
-                <HeroRow trades={safeTrades} signals={safeSignals} capital={capital}/>
-                <IndexPills live={safeLive}/>
+                <HeroRow trades={safeTrades} signals={safeSignals} capital={capital} mode={mode}/>
+                <IndexPills live={safeLive} candles={safeCandles}/>
                 {activeLive && (
                   <LiveHeroCard
                     signal={activeLive}
                     live={safeLive}
                     capital={capital}
+                    mode={mode}
                     onOpen={() => setInst(activeLive.inst)}
                   />
                 )}
-              </>
+              </div>
             )}
 
-            {/* Risk banner stays visible across views when engine is on */}
+            {/* Risk banner — same horizontal padding as the live section */}
             {on && metrics && tab === 'signals' && (
-              <div style={{margin:'10px 0'}}>
+              <div className="risk-section" style={{margin:'10px 0'}}>
                 <RiskBanner
                   metrics={metrics}
                   onTrip={() => doKillswitch('trip')}
