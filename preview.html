@@ -656,155 +656,133 @@
   .pill-pill { margin-top: 7px; }
   .pill-spark { margin-left: auto; width: 90px; height: 40px; flex-shrink: 0; }
 
-  /* ─── LIVE HERO · attention-grabbing in-flight trade card ──────────── */
+  /* ─── LIVE HERO · compact attention-grabbing in-flight card ────────── */
   .live-hero {
     position: relative;
-    margin-bottom: 12px;
-    padding: 22px 26px 20px;
-    border-radius: 18px;
+    margin-bottom: 10px;
+    padding: 14px 16px;
+    border-radius: 14px;
     background:
-      linear-gradient(140deg, var(--accent-soft) 0%, oklch(0.13 0.014 35 / 0.10) 60%, transparent 100%),
-      linear-gradient(140deg, oklch(0.13 0.014 35 / 0.50), oklch(0.10 0.014 35 / 0.40));
+      linear-gradient(120deg, var(--accent-soft) 0%, transparent 70%),
+      var(--glass-bg);
     border: 1.5px solid var(--accent);
     overflow: hidden;
     cursor: pointer;
-    transition: transform 0.2s;
+    transition: transform 0.2s, border-color 0.2s;
     isolation: isolate;
   }
   :root[data-theme="light"] .live-hero {
     background:
-      linear-gradient(140deg, var(--accent-soft) 0%, oklch(1 0 0 / 0.4) 60%, transparent 100%),
-      linear-gradient(140deg, oklch(1 0 0 / 0.50), oklch(1 0 0 / 0.35));
+      linear-gradient(120deg, var(--accent-soft) 0%, transparent 70%),
+      var(--glass-bg);
   }
-  .live-hero:hover { transform: translateY(-2px); }
-  /* Pulsing accent halo behind the card */
+  .live-hero:hover { transform: translateY(-1px); }
+  /* Pulsing accent halo */
   .live-hero::before {
     content: ''; position: absolute; inset: -2px; z-index: -1;
-    border-radius: 18px;
+    border-radius: 14px;
     background: linear-gradient(140deg, var(--accent), oklch(0.65 0.18 320));
-    opacity: 0.45;
-    filter: blur(14px);
+    opacity: 0.40;
+    filter: blur(12px);
     animation: hero-pulse 2.4s ease-in-out infinite;
   }
   @keyframes hero-pulse {
-    0%, 100% { opacity: 0.30; }
-    50%      { opacity: 0.65; }
+    0%, 100% { opacity: 0.25; }
+    50%      { opacity: 0.55; }
   }
 
+  /* Row 1 — status pills */
   .lh-status {
-    display: flex; align-items: center; gap: 9px; flex-wrap: wrap;
-    margin-bottom: 14px;
-    font-family: var(--font-mono); font-size: 10px;
-    text-transform: uppercase; letter-spacing: 0.14em; font-weight: 700;
+    display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+    margin-bottom: 8px;
+    font-family: var(--font-mono); font-size: 9.5px;
+    text-transform: uppercase; letter-spacing: 0.12em; font-weight: 700;
   }
-  .lh-ai {
+  .lh-pill {
     display: inline-flex; align-items: center; gap: 6px;
     padding: 3px 9px; border-radius: 999px;
-    font-family: var(--font-mono); font-size: 9.5px; letter-spacing: 0.10em;
-    background: linear-gradient(95deg, var(--accent-soft), var(--lilac-soft));
-    color: var(--ink-0); font-weight: 700;
-    border: 1px solid var(--glass-border);
+    border: 1px solid; font-weight: 700;
   }
-  .lh-ai svg { width: 12px; height: 12px; stroke: currentColor; fill: none; stroke-width: 2; }
+  .lh-pill.live {
+    color: oklch(0.78 0.20 22);
+    background: oklch(0.78 0.20 22 / 0.12);
+    border-color: oklch(0.78 0.20 22 / 0.30);
+  }
+  .lh-pill.ai {
+    background: linear-gradient(95deg, var(--accent-soft), var(--lilac-soft));
+    color: var(--ink-0);
+    border-color: var(--glass-border);
+  }
+  .lh-pill svg { width: 11px; height: 11px; stroke: currentColor; fill: none; stroke-width: 2; }
   .lh-dot {
-    width: 9px; height: 9px; border-radius: 50%;
-    background: oklch(0.78 0.20 22);  /* attention red */
-    box-shadow: 0 0 12px oklch(0.78 0.20 22), 0 0 0 4px oklch(0.78 0.20 22 / 0.18);
+    width: 7px; height: 7px; border-radius: 50%;
+    background: oklch(0.78 0.20 22);
+    box-shadow: 0 0 8px oklch(0.78 0.20 22);
     animation: livepulse 1.3s ease-in-out infinite;
   }
-  .lh-label { color: oklch(0.78 0.20 22); }
   .lh-time {
-    margin-left: auto; color: var(--ink-3); font-weight: 500; letter-spacing: 0.06em;
+    margin-left: auto; color: var(--ink-3); font-weight: 500;
+    letter-spacing: 0.04em;
   }
 
-  .lh-head {
+  /* Row 2 — title + P&L */
+  .lh-main {
     display: flex; align-items: baseline; justify-content: space-between;
-    gap: 14px; margin-bottom: 16px; flex-wrap: wrap;
+    gap: 12px; margin-bottom: 8px;
   }
   .lh-title {
-    font-size: 22px; font-weight: 700; letter-spacing: -0.025em;
-    color: var(--ink-0); line-height: 1.1;
+    font-size: 16px; font-weight: 700; letter-spacing: -0.018em;
+    color: var(--ink-0); line-height: 1.15;
   }
   .lh-sub {
-    font-family: var(--font-mono); font-size: 11px; color: var(--ink-2);
-    margin-top: 3px; letter-spacing: 0.02em;
+    font-family: var(--font-mono); font-size: 10.5px; color: var(--ink-2);
+    margin-top: 2px; letter-spacing: 0.02em;
   }
-  .lh-pnl-block { text-align: right; }
-  .lh-pnl-lbl {
-    font-family: var(--font-mono); font-size: 9.5px; color: var(--ink-3);
-    text-transform: uppercase; letter-spacing: 0.12em; margin-bottom: 4px;
+  .lh-pnl {
+    text-align: right; flex-shrink: 0;
   }
   .lh-pnl-num {
-    font-size: 30px; font-weight: 700; letter-spacing: -0.04em;
-    color: var(--win); line-height: 1; font-variant-numeric: tabular-nums;
-    text-shadow: 0 0 18px var(--win-glow);
-  }
-
-  .lh-prices {
-    display: flex; align-items: center; gap: 14px;
-    padding: 14px;
-    background: oklch(0 0 0 / 0.30);
-    border-radius: 12px; border: 1px solid var(--line-1);
-    margin-bottom: 12px;
-  }
-  :root[data-theme="light"] .lh-prices { background: oklch(1 0 0 / 0.55); }
-  .lh-px { display: flex; flex-direction: column; gap: 3px; }
-  .lh-px-lbl {
-    font-family: var(--font-mono); font-size: 9px; color: var(--ink-3);
-    text-transform: uppercase; letter-spacing: 0.10em;
-  }
-  .lh-px-val {
-    font-size: 18px; font-weight: 700; letter-spacing: -0.025em;
-    font-variant-numeric: tabular-nums; line-height: 1;
-  }
-  .lh-px.entry .lh-px-val { color: var(--ink-1); }
-  .lh-px.ltp .lh-px-val { color: var(--win); }
-  .lh-arrow {
-    color: var(--ink-3); font-size: 18px; padding: 0 4px;
-  }
-  .lh-pct {
-    font-family: var(--font-mono); font-size: 11px; font-weight: 700;
-    padding: 3px 8px; border-radius: 999px;
-    background: var(--win-soft); color: var(--win);
-    margin-left: auto;
-  }
-
-  .lh-levels {
-    display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px;
-    margin-bottom: 14px;
-  }
-  .lh-lvl {
-    padding: 9px 11px;
-    background: oklch(1 0 0 / 0.035);
-    border: 1px solid var(--line-1);
-    border-radius: 9px;
-  }
-  :root[data-theme="light"] .lh-lvl { background: oklch(0 0 0 / 0.025); }
-  .lh-lvl-lbl {
-    font-family: var(--font-mono); font-size: 9px; color: var(--ink-3);
-    text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 3px;
-  }
-  .lh-lvl-val {
-    font-size: 13px; font-weight: 700; letter-spacing: -0.02em;
+    font-size: 22px; font-weight: 700; letter-spacing: -0.035em;
+    color: var(--win); line-height: 1;
     font-variant-numeric: tabular-nums;
+    text-shadow: 0 0 14px var(--win-glow);
   }
-  .lh-lvl.sl .lh-lvl-val { color: var(--loss); }
-  .lh-lvl.t1 .lh-lvl-val,
-  .lh-lvl.t2 .lh-lvl-val { color: var(--win); }
+  .lh-pnl-pct {
+    font-family: var(--font-mono); font-size: 10px; font-weight: 600;
+    color: var(--win); margin-top: 2px;
+  }
 
+  /* Row 3 — inline price flow + levels + CTA */
+  .lh-row {
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+    font-family: var(--font-mono); font-size: 11.5px;
+    color: var(--ink-2);
+  }
+  .lh-row b { color: var(--ink-0); font-weight: 700; font-variant-numeric: tabular-nums; }
+  .lh-row .sep {
+    color: var(--ink-3); padding: 0 2px;
+  }
+  .lh-row .lvl-inline { display: inline-flex; gap: 5px; align-items: baseline; }
+  .lh-row .lvl-inline .lvl-k {
+    font-size: 9.5px; color: var(--ink-3); letter-spacing: 0.08em; text-transform: uppercase;
+  }
+  .lh-row .lvl-inline.sl b { color: var(--loss); }
+  .lh-row .lvl-inline.t1 b,
+  .lh-row .lvl-inline.t2 b { color: var(--win); }
+  .lh-row .lvl-inline.ltp b { color: var(--win); }
   .lh-cta {
-    width: 100%;
-    padding: 13px 16px;
-    border-radius: 12px;
+    margin-left: auto;
+    padding: 7px 14px;
+    border-radius: 9px;
     background: linear-gradient(95deg, var(--accent), var(--accent-2));
     color: var(--accent-ink);
-    border: 0; font-family: var(--font-sans); font-weight: 700; font-size: 13px;
+    border: 0; font-family: var(--font-sans); font-weight: 600; font-size: 11.5px;
     letter-spacing: -0.005em; cursor: pointer;
-    box-shadow: 0 8px 24px oklch(0.55 0.18 290 / 0.45);
-    transition: transform 0.15s, box-shadow 0.15s;
-    display: flex; align-items: center; justify-content: center; gap: 8px;
+    box-shadow: 0 4px 14px oklch(0.55 0.18 290 / 0.35);
+    transition: transform 0.15s;
+    white-space: nowrap;
   }
-  .lh-cta:hover { transform: translateY(-1px); box-shadow: 0 12px 30px oklch(0.55 0.18 290 / 0.55); }
+  .lh-cta:hover { transform: translateY(-1px); }
 
   /* History rows muted (clearly "past") */
   .history-list .live-row {
@@ -1022,11 +1000,15 @@
     backdrop-filter: blur(50px) saturate(180%);
     -webkit-backdrop-filter: blur(50px) saturate(180%);
     border-left: 1px solid var(--glass-border-hi);
-    box-shadow: -32px 0 60px oklch(0 0 0 / 0.55), inset 1px 0 0 oklch(1 0 0 / 0.10);
+    /* shadow disabled when closed so it doesn't leak into the page */
+    box-shadow: inset 1px 0 0 oklch(1 0 0 / 0.10);
     transform: translateX(100%);
-    transition: transform 0.42s cubic-bezier(0.4, 0, 0.2, 1);
+    transition: transform 0.42s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.42s ease;
     overflow-y: auto;
     display: flex; flex-direction: column;
+  }
+  .drawer.open {
+    box-shadow: -32px 0 60px oklch(0 0 0 / 0.55), inset 1px 0 0 oklch(1 0 0 / 0.10);
   }
   :root[data-theme="light"] .drawer {
     background: linear-gradient(160deg, oklch(1 0 0 / 0.78), oklch(0.98 0.008 75 / 0.72));
@@ -1674,50 +1656,42 @@
             </div>
           </div>
 
-          <!-- LIVE HERO — in-flight signal, demands attention -->
+          <!-- LIVE HERO — compact, attention-grabbing in-flight card -->
           <div class="live-hero" data-sig="sig-1">
+
+            <!-- Row 1 — status pills + time -->
             <div class="lh-status">
-              <span class="lh-dot"></span>
-              <span class="lh-label">LIVE · In flight</span>
-              <span class="lh-ai">
-                <svg viewBox="0 0 24 24"><path d="M9.663 17h4.673M12 3v1M3.34 7l.94.34M19.66 7l-.94.34M5 12H4M20 12h-1M12 21a4 4 0 0 0 4-4H8a4 4 0 0 0 4 4z"/></svg>
-                AI · 72%
+              <span class="lh-pill live"><span class="lh-dot"></span> LIVE · In flight</span>
+              <span class="lh-pill ai">
+                <svg viewBox="0 0 24 24"><path d="M12 2a4 4 0 0 0-4 4v2H6a3 3 0 0 0-3 3v3a3 3 0 0 0 3 3h2v2a4 4 0 0 0 4 4 4 4 0 0 0 4-4v-2h2a3 3 0 0 0 3-3v-3a3 3 0 0 0-3-3h-2V6a4 4 0 0 0-4-4z"/></svg>
+                AI 72%
               </span>
               <span class="lh-time">entered 02:50 pm · 4 min ago</span>
             </div>
 
-            <div class="lh-head">
+            <!-- Row 2 — title + P&L -->
+            <div class="lh-main">
               <div>
                 <div class="lh-title">NIFTY 23,900 PE · short</div>
-                <div class="lh-sub">19-MAY-2026 expiry · 8 DTE · 1L × 75</div>
+                <div class="lh-sub">19-MAY-2026 · 8 DTE · 1L × 75 · cap ₹17,625</div>
               </div>
-              <div class="lh-pnl-block">
-                <div class="lh-pnl-lbl">Live P&amp;L</div>
+              <div class="lh-pnl">
                 <div class="lh-pnl-num">+₹1,890</div>
+                <div class="lh-pnl-pct">▲ +10.6%</div>
               </div>
             </div>
 
-            <div class="lh-prices">
-              <div class="lh-px entry">
-                <div class="lh-px-lbl">Entry</div>
-                <div class="lh-px-val">₹235</div>
-              </div>
-              <div class="lh-arrow">→</div>
-              <div class="lh-px ltp">
-                <div class="lh-px-lbl">LTP (live)</div>
-                <div class="lh-px-val">₹260</div>
-              </div>
-              <span class="lh-pct">▲ +10.6%</span>
+            <!-- Row 3 — inline prices + levels + CTA -->
+            <div class="lh-row">
+              <span class="lvl-inline"><span class="lvl-k">Entry</span><b>₹235</b></span>
+              <span class="sep">→</span>
+              <span class="lvl-inline ltp"><span class="lvl-k">LTP</span><b>₹260</b></span>
+              <span class="sep">·</span>
+              <span class="lvl-inline sl"><span class="lvl-k">SL</span><b>₹153</b></span>
+              <span class="lvl-inline t1"><span class="lvl-k">T1</span><b>₹352</b></span>
+              <span class="lvl-inline t2"><span class="lvl-k">T2</span><b>₹470</b></span>
+              <button type="button" class="lh-cta">Details →</button>
             </div>
-
-            <div class="lh-levels">
-              <div class="lh-lvl sl"><div class="lh-lvl-lbl">SL</div><div class="lh-lvl-val">₹153</div></div>
-              <div class="lh-lvl t1"><div class="lh-lvl-lbl">Target 1</div><div class="lh-lvl-val">₹352</div></div>
-              <div class="lh-lvl t2"><div class="lh-lvl-lbl">Target 2</div><div class="lh-lvl-val">₹470</div></div>
-              <div class="lh-lvl"><div class="lh-lvl-lbl">Capital</div><div class="lh-lvl-val">₹17,625</div></div>
-            </div>
-
-            <button type="button" class="lh-cta">Open trade details  →</button>
           </div>
 
           <!-- ACTIVE: watching, pre-entry -->
