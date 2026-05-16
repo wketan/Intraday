@@ -4757,23 +4757,32 @@ def api_replay_premium():
         ts_s_clean = ts_s.replace("T", " ").split(".")[0].split("+")[0]
         ts = datetime.strptime(ts_s_clean[:19], "%Y-%m-%d %H:%M:%S")
 
-        # If expiry not supplied, pick the next NIFTY weekly Tuesday that is
-        # AT LEAST 5 days out from `ts`. Reason: retail traders rarely buy
-        # options with 0-4 DTE — too much gamma risk on Mon/Tue. The next-
-        # week expiry is what the user is almost certainly looking at on
-        # their broker chart. (Old logic picked nearest Tuesday which gave
-        # an "expired" or "1 DTE" contract no one was actually trading.)
+        # If expiry not supplied, pick an expiry that ACTUALLY EXISTS for the
+        # symbol. NIFTY has weekly Tuesday expiries; BANKNIFTY and FINNIFTY
+        # are MONTHLY last-Tuesday only (post-Nov-2024). The old logic picked
+        # "next Tuesday" universally — fine for NIFTY but a non-existent
+        # contract for BANKNIFTY/FINNIFTY, which is why the NSE bhavcopy
+        # returned nothing for those two.
         if expiry_s:
             expiry_d = datetime.strptime(expiry_s, "%Y-%m-%d").date()
         else:
             d = ts.date()
             min_dte = int(flask_request.args.get("min_dte", 5))
-            # Walk Tuesdays forward until we find one >= min_dte days from ts
-            days_ahead = (1 - d.weekday()) % 7   # next Tuesday
-            if days_ahead == 0: days_ahead = 7   # if today is Tue, start from next
-            while days_ahead < min_dte:
-                days_ahead += 7
-            expiry_d = d + timedelta(days=days_ahead)
+            if symbol == "NIFTY":
+                # Walk weekly Tuesdays forward until we find one >= min_dte
+                days_ahead = (1 - d.weekday()) % 7
+                if days_ahead == 0: days_ahead = 7
+                while days_ahead < min_dte:
+                    days_ahead += 7
+                expiry_d = d + timedelta(days=days_ahead)
+            else:
+                # BANKNIFTY / FINNIFTY — monthly last-Tuesday only
+                try:
+                    cands = data_layer._candidate_expiries_for_date(d, symbol)
+                    cands = [e for e in cands if (e - d).days >= min_dte]
+                    expiry_d = cands[0] if cands else (d + timedelta(days=21))
+                except Exception:
+                    expiry_d = d + timedelta(days=21)
             expiry_s = expiry_d.strftime("%Y-%m-%d")
 
         # ── Diagnostic trace — every step records its outcome so the dashboard

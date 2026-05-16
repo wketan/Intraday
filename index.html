@@ -820,10 +820,17 @@
     .h-big {
       font-weight: 700; font-size: 38px; line-height: 1; letter-spacing: -0.04em;
       font-variant-numeric: tabular-nums; margin-bottom: 6px; position: relative;
+      display: inline-flex; align-items: baseline; gap: 0;
+      text-align: left;
     }
-    .h-big.win  { color: var(--long); text-shadow: 0 0 32px var(--win-glow); }
+    .h-big.win  { color: var(--long);  text-shadow: 0 0 32px var(--win-glow); }
     .h-big.loss { color: var(--short); text-shadow: 0 0 32px var(--loss-glow); }
-    .h-big .currency { font-size: inherit; opacity: 1; font-weight: inherit; }
+    .h-big .currency {
+      font-size: inherit; opacity: 1; font-weight: inherit;
+      line-height: inherit; letter-spacing: inherit;
+      margin: 0; padding: 0;
+      vertical-align: baseline;
+    }
     .h-foot { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--ink-2); position: relative; }
     .pct-pill {
       display: inline-flex; align-items: center; gap: 4px;
@@ -4501,6 +4508,66 @@ function SwingTab({ data, getServer, getAuthToken, showToast }) {
       const safeCandles = (candles && typeof candles === 'object' && !Array.isArray(candles)) ? candles : {};
       const safeLive    = (live && typeof live === 'object' && !Array.isArray(live)) ? live : {};
 
+      // ── simulated backtest trades ─────────────────────────────────────
+      // In replay mode the server only generates SIGNALS, not trades. To
+      // populate the hero P&L / win-rate cards with real numbers, walk
+      // forward through the candles after each signal and check which
+      // level (SL / T1 / T2) was hit first.
+      //
+      // P&L is approximate: index_points × lot_size × 0.5 (delta proxy for
+      // an ATM option). Not exact, but the right order of magnitude — good
+      // enough to gauge "did this strategy make money?".
+      const LOT_SIZES_BT = { NIFTY: 75, BANKNIFTY: 30, FINNIFTY: 65 };
+      const simulatedTrades = useMemo(() => {
+        if (mode !== 'replay') return [];
+        return safeSignals.map(sig => {
+          if (!sig || !sig.iso_ts || !sig.entry) return null;
+          const candles = safeCandles[sig.inst] || [];
+          if (candles.length === 0) return null;
+          const startMs = Date.parse(String(sig.iso_ts).replace(' ', 'T'));
+          if (isNaN(startMs)) return null;
+          const future = candles.filter(c => {
+            const t = c && c.time ? Date.parse(c.time) : 0;
+            return t >= startMs;
+          });
+          if (future.length === 0) return null;
+
+          const entry = Number(sig.entry);
+          const sl = Number(sig.sl);
+          const t1 = Number(sig.target1);
+          const t2 = Number(sig.target2);
+          const isLong = sig.dir === 'LONG';
+
+          let status = 'OPEN', exitPrice = null;
+          for (const bar of future) {
+            const hi = Number(bar.high ?? bar.h ?? bar.close ?? bar.c ?? 0);
+            const lo = Number(bar.low  ?? bar.l ?? bar.close ?? bar.c ?? 0);
+            if (isLong) {
+              if (sl && lo <= sl)        { status = 'LOSS'; exitPrice = sl; break; }
+              if (t2 && hi >= t2)        { status = 'WIN';  exitPrice = t2; break; }
+              if (t1 && hi >= t1)        { status = 'WIN';  exitPrice = t1; break; }
+            } else {
+              if (sl && hi >= sl)        { status = 'LOSS'; exitPrice = sl; break; }
+              if (t2 && lo <= t2)        { status = 'WIN';  exitPrice = t2; break; }
+              if (t1 && lo <= t1)        { status = 'WIN';  exitPrice = t1; break; }
+            }
+          }
+          if (exitPrice == null) {
+            const last = future[future.length - 1];
+            exitPrice = Number(last.close ?? last.c ?? entry);
+          }
+
+          const indexPoints = isLong ? (exitPrice - entry) : (entry - exitPrice);
+          const lot = LOT_SIZES_BT[sig.inst] || 75;
+          // Rough option-premium P&L per lot: index_points × 0.5 delta × lot
+          const pnl = Math.round(indexPoints * 0.5 * lot);
+          return { ...sig, status, exitPrice, pnl };
+        }).filter(Boolean);
+      }, [mode, safeSignals, safeCandles]);
+
+      // Which trade-set drives the hero / win-rate cards
+      const heroTrades = mode === 'replay' ? simulatedTrades : safeTrades;
+
       // Most recent active signal for the LIVE HERO. In live mode we prefer
       // LIVE/READY; in replay mode REPLAY signals win. Fall back to the most
       // recent signal regardless of status so the card never disappears when
@@ -4538,7 +4605,7 @@ function SwingTab({ data, getServer, getAuthToken, showToast }) {
                   replayDays={replayDays} setReplayDays={setReplayDays}
                   speed={speed} setSpeed={setSpeed}
                 />
-                <HeroRow trades={safeTrades} signals={safeSignals} capital={capital} mode={mode}/>
+                <HeroRow trades={heroTrades} signals={safeSignals} capital={capital} mode={mode}/>
                 <IndexPills live={safeLive} candles={safeCandles}/>
                 {activeLive && (
                   <LiveHeroCard
