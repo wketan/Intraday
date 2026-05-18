@@ -900,12 +900,15 @@
     /* ── live HERO card ──────────────────────────────────────────────── */
     .live-hero {
       position: relative; margin-bottom: 10px;
-      padding: 14px 16px; border-radius: 14px;
-      background: linear-gradient(120deg, var(--accent-dim) 0%, transparent 70%), var(--glass-bg);
-      border: 1.5px solid var(--accent); overflow: hidden; cursor: pointer;
-      transition: transform 0.2s;
+      padding: 18px 20px; border-radius: 16px;
+      background: linear-gradient(120deg, var(--accent-dim) 0%, transparent 60%), var(--glass-bg);
+      border: 2px solid var(--accent); overflow: hidden; cursor: pointer;
+      transition: transform 0.2s, box-shadow 0.2s;
+      box-shadow: 0 0 0 6px var(--accent-faint), var(--glass-shadow);
     }
-    .live-hero:hover { transform: translateY(-1px); }
+    .live-hero:hover { transform: translateY(-2px); box-shadow: 0 0 0 8px var(--accent-faint), var(--glass-shadow); }
+    .live-hero .lh-title { font-size: 19px; }
+    .live-hero .lh-pnl-num { font-size: 26px; }
     .live-hero::before {
       content:''; position:absolute; inset:-2px; z-index:-1;
       border-radius: 14px;
@@ -3546,7 +3549,7 @@ function SwingTab({ data, getServer, getAuthToken, showToast }) {
       );
     }
 
-    function LiveStripBar({ on, mode, doStart, doStop, replayDays, speed, setSpeed, setReplayDays }) {
+    function LiveStripBar({ on, mode, doStart, doStop, replayDays, speed, setSpeed, setReplayDays, autoMode, setAutoMode }) {
       const istTime = (() => {
         const d = new Date();
         const utc = d.getUTCHours() * 60 + d.getUTCMinutes();
@@ -3558,7 +3561,15 @@ function SwingTab({ data, getServer, getAuthToken, showToast }) {
       const isAutoActive = (() => {
         const d = new Date();
         const ist = ((d.getUTCHours() * 60 + d.getUTCMinutes()) + 330) % 1440;
-        return ist >= (8*60+45) && ist < (17*60);
+        const shift = (d.getUTCHours() * 60 + d.getUTCMinutes() + 330) >= 1440 ? 1 : 0;
+        const dow = (d.getUTCDay() + shift) % 7;
+        const weekday = dow >= 1 && dow <= 5;
+        return weekday && ist >= (8*60+45) && ist < (16*60);
+      })();
+      const nextEdge = (() => {
+        if (on)  return 'auto-off 16:00 IST';
+        if (autoMode && !isAutoActive) return 'auto-on Mon-Fri · 08:45 IST';
+        return 'tap to start';
       })();
       return (
         <div className={`live-strip ${on ? '' : 'off'}`}>
@@ -3586,7 +3597,7 @@ function SwingTab({ data, getServer, getAuthToken, showToast }) {
           <button type="button" className={`engine-toggle ${on ? 'on' : 'off'}`} onClick={on ? doStop : doStart}>
             <span className="et-info">
               <span className="et-label">{on ? (mode==='replay'?'REPLAY':'LIVE') : 'OFF'}</span>
-              <span className="et-sub">{on ? 'tap to stop' : (mode==='replay' ? 'tap to start replay' : (isAutoActive ? 'tap to start' : 'auto-on 08:45 IST'))}</span>
+              <span className="et-sub">{mode==='replay' && !on ? 'tap to start replay' : nextEdge}</span>
             </span>
             <span className="et-switch" aria-hidden="true"/>
           </button>
@@ -3832,8 +3843,10 @@ function SwingTab({ data, getServer, getAuthToken, showToast }) {
               </div>
               {Array.isArray(signal.strategies) && signal.strategies.length > 0 && (
                 <div className="lh-ai-strats">
-                  {signal.strategies.map((s, i) => (
-                    <span key={i} className="lh-ai-strat">{typeof s === 'string' ? s : (s.name || s.label || JSON.stringify(s).slice(0, 12))}</span>
+                  {signal.strategies.filter(Boolean).map((s, i) => (
+                    <span key={i} className="lh-ai-strat">
+                      {typeof s === 'string' ? s : ((s && (s.name || s.label)) || '?')}
+                    </span>
                   ))}
                 </div>
               )}
@@ -3907,6 +3920,11 @@ function SwingTab({ data, getServer, getAuthToken, showToast }) {
       const [speed, setSpeed] = useState(2); // 1x/2x/4x
       const [replayDays, setReplayDays] = useState(5);
       const [on, setOn] = useState(false);
+      // Auto-schedule: engine should be running Mon-Fri 08:45 to 16:00 IST.
+      // The user can still flip the engine OFF manually (manual override),
+      // and we won't re-flip it ON in the same session.
+      const [autoMode, setAutoMode] = useState(() => localStorage.getItem('se_auto_mode') !== '0');
+      const lastAutoFlipRef = useRef(null);
       const [serverOk, setServerOk] = useState(null);
       const [signals, setSignals] = useState([]);
       const [trades, setTrades] = useState([]);
@@ -4244,6 +4262,38 @@ function SwingTab({ data, getServer, getAuthToken, showToast }) {
         const id = setInterval(check, 10000);
         return () => { alive = false; clearInterval(id); };
       }, []);
+
+      // ── auto-schedule: Mon-Fri 08:45 → 16:00 IST ──
+      // Runs every 30s. Flips the engine on/off automatically inside the
+      // window. Manual stop inside the window will pause auto-on until the
+      // next window boundary (so the user isn't fought).
+      useEffect(() => {
+        if (!autoMode) return;
+        const isInWindow = () => {
+          const d = new Date();
+          const istMins = ((d.getUTCHours() * 60 + d.getUTCMinutes()) + 330) % 1440;
+          // IST day-of-week: shift if IST crosses UTC day boundary
+          const istDayShift = (d.getUTCHours() * 60 + d.getUTCMinutes() + 330) >= 1440 ? 1 : 0;
+          const istDow = (d.getUTCDay() + istDayShift) % 7;  // 0 = Sun
+          const isWeekday = istDow >= 1 && istDow <= 5;
+          const start = 8 * 60 + 45;   // 08:45
+          const end   = 16 * 60;        // 16:00
+          return isWeekday && istMins >= start && istMins < end;
+        };
+        const tick = () => {
+          const should = isInWindow();
+          if (should && !on && mode === 'live' && lastAutoFlipRef.current !== 'off-manual') {
+            lastAutoFlipRef.current = 'on';
+            try { doStart && doStart(); } catch(_) {}
+          } else if (!should && on) {
+            lastAutoFlipRef.current = 'off';
+            try { doStop && doStop(); } catch(_) {}
+          }
+        };
+        tick();
+        const id = setInterval(tick, 30_000);
+        return () => clearInterval(id);
+      }, [autoMode, on, mode]); // eslint-disable-line react-hooks/exhaustive-deps
 
       // live pollers
       useEffect(() => {
@@ -4699,6 +4749,7 @@ function SwingTab({ data, getServer, getAuthToken, showToast }) {
                   doStart={doStart} doStop={doStop}
                   replayDays={replayDays} setReplayDays={setReplayDays}
                   speed={speed} setSpeed={setSpeed}
+                  autoMode={autoMode} setAutoMode={setAutoMode}
                 />
                 <HeroRow trades={heroTrades} signals={safeSignals} capital={capital} mode={mode}/>
                 <IndexPills live={safeLive} candles={safeCandles}/>
@@ -4709,7 +4760,12 @@ function SwingTab({ data, getServer, getAuthToken, showToast }) {
                     live={safeLive}
                     capital={capital}
                     mode={mode}
-                    onOpen={() => setInst(activeLive.inst)}
+                    onOpen={() => {
+                      // SignalsTab expects sel to be a numeric INDEX into INST,
+                      // not the instrument name. Translate before calling.
+                      const idx = INST.findIndex(i => i && i.name === activeLive.inst);
+                      if (idx >= 0) setInst(idx);
+                    }}
                   />
                 )}
               </div>
