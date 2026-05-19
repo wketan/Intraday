@@ -3771,19 +3771,43 @@ function SwingTab({ data, getServer, getAuthToken, showToast }) {
                   : simStatus === 'OPEN' ? 'REPLAY · Open at end'
                   : 'REPLAY · Backtest signal';
       } else {
-        const ltp = instLive.ltp ?? entry;
-        const budget = (capital || 50000) * 0.5;
-        const perLotCost = entry * lotSize;
-        const lots = Math.max(1, Math.min(3, perLotCost ? Math.floor(budget / perLotCost) : 1));
-        const contracts = lots * lotSize;
-        pnl = Math.round((ltp - entry) * contracts);
-        pct = entry ? ((ltp - entry) / entry * 100) : 0;
+        // Engine signals carry INDEX-LEVEL prices (e.g. NIFTY entry=23658),
+        // NOT option premium. Multiplying entry × lot_size gives the index
+        // notional (~₹17 lakh for 1 lot of NIFTY) — way bigger than the
+        // option's actual cost. So if entry looks like an index level, use
+        // an option-approximation: option premium ≈ 1.2% of spot for ATM
+        // weekly, and P&L per share ≈ index_points × 0.5 (delta).
+        const isIndexLevel = entry > 500;
+        const ltpLocal = instLive.ltp ?? entry;
+        const sigDir = signal.dir === 'LONG' ? 1 : -1;
+        if (isIndexLevel) {
+          const optPremiumEst = Math.max(5, entry * 0.012);
+          const indexPoints = ltpLocal - entry;
+          const perLotPnL = indexPoints * sigDir * 0.5 * lotSize;
+          const budget = (capital || 50000) * 0.5;
+          const lots = Math.max(1, Math.min(3,
+            Math.floor(budget / (optPremiumEst * lotSize)) || 1));
+          pnl = Math.round(perLotPnL * lots);
+          pct = entry ? (indexPoints * sigDir / entry) * 100 : 0;
+        } else {
+          // Genuine option-premium signal — use real math.
+          const budget = (capital || 50000) * 0.5;
+          const perLotCost = entry * lotSize;
+          const lots = Math.max(1, Math.min(3, perLotCost ? Math.floor(budget / perLotCost) : 1));
+          const contracts = lots * lotSize;
+          pnl = Math.round((ltpLocal - entry) * contracts);
+          pct = entry ? ((ltpLocal - entry) / entry * 100) : 0;
+        }
         pnlIsWin = pnl >= 0;
         pillLabel = status === 'WATCH' ? 'WATCH · pre-entry' : 'LIVE · In flight';
       }
 
+      // Sizing recomputation for display fields (lots × lot_size · cap).
+      // Same isIndexLevel detection so the displayed capital matches reality.
+      const isIndexLevelDisp = entry > 500;
+      const sizingPremium = isIndexLevelDisp ? Math.max(5, entry * 0.012) : entry;
       const budget = (capital || 50000) * 0.5;
-      const perLotCost = entry * lotSize;
+      const perLotCost = sizingPremium * lotSize;
       const lots = Math.max(1, Math.min(3, perLotCost ? Math.floor(budget / perLotCost) : 1));
       const cap = Math.round(perLotCost * lots);
       const ltp = instLive.ltp ?? entry;
@@ -3808,19 +3832,24 @@ function SwingTab({ data, getServer, getAuthToken, showToast }) {
             </div>
           </div>
           <div className="lh-row">
-            <span className="lvl-inline"><span className="lvl-k">Entry</span><b>₹{Math.round(entry)}</b></span>
+            <span className="lvl-inline"><span className="lvl-k">{isIndexLevelDisp?'Spot entry':'Entry'}</span><b>{isIndexLevelDisp?'':'₹'}{Math.round(entry).toLocaleString('en-IN')}</b></span>
             <span className="sep">→</span>
             {exitPrice != null
               ? <span className={`lvl-inline ${simStatus==='WIN'?'t1':simStatus==='LOSS'?'sl':''}`}>
-                  <span className="lvl-k">Exit ({simStatus})</span><b>₹{Math.round(exitPrice)}</b>
+                  <span className="lvl-k">Exit ({simStatus})</span><b>{isIndexLevelDisp?'':'₹'}{Math.round(exitPrice).toLocaleString('en-IN')}</b>
                 </span>
-              : <span className="lvl-inline ltp"><span className="lvl-k">LTP</span><b>₹{Math.round(ltp)}</b></span>}
+              : <span className="lvl-inline ltp"><span className="lvl-k">{isIndexLevelDisp?'Spot LTP':'LTP'}</span><b>{isIndexLevelDisp?'':'₹'}{Math.round(ltp).toLocaleString('en-IN')}</b></span>}
             <span className="sep">·</span>
-            <span className="lvl-inline sl"><span className="lvl-k">SL</span><b>₹{Math.round(sl)}</b></span>
-            <span className="lvl-inline t1"><span className="lvl-k">T1</span><b>₹{Math.round(t1)}</b></span>
-            <span className="lvl-inline t2"><span className="lvl-k">T2</span><b>₹{Math.round(t2)}</b></span>
-            <button type="button" className="lh-cta">Details →</button>
+            <span className="lvl-inline sl"><span className="lvl-k">SL</span><b>{isIndexLevelDisp?'':'₹'}{Math.round(sl).toLocaleString('en-IN')}</b></span>
+            <span className="lvl-inline t1"><span className="lvl-k">T1</span><b>{isIndexLevelDisp?'':'₹'}{Math.round(t1).toLocaleString('en-IN')}</b></span>
+            <span className="lvl-inline t2"><span className="lvl-k">T2</span><b>{isIndexLevelDisp?'':'₹'}{Math.round(t2).toLocaleString('en-IN')}</b></span>
+            <button type="button" className="lh-cta" onClick={(e)=>{ e.stopPropagation(); if (onOpen) onOpen(); }}>Details →</button>
           </div>
+          {isIndexLevelDisp && (
+            <div style={{fontSize:10.5, color:'var(--ink-3)', marginTop:6, fontFamily:'var(--mono)', letterSpacing:'0.02em'}}>
+              <span style={{color:'var(--accent)'}}>★</span> Levels above are <b style={{color:'var(--ink-1)'}}>spot index</b>. Buy the <b style={{color:'var(--ink-0)'}}>{signal.strike} {signal.type}</b> option at LTP — sizing &amp; P&amp;L estimated via delta ≈ 0.5 on a ~₹{Math.round(sizingPremium)} ATM premium.
+            </div>
+          )}
           {/* AI summary — narrative + indicator readout, restored from the
               signal's reasons / strategies. Helps the user understand "why
               should I take this trade?" without leaving the card. */}
@@ -4784,6 +4813,12 @@ function SwingTab({ data, getServer, getAuthToken, showToast }) {
                       // not the instrument name. Translate before calling.
                       const idx = INST.findIndex(i => i && i.name === activeLive.inst);
                       if (idx >= 0) setInst(idx);
+                      // Scroll the SignalsTab into view so "Details" feels like
+                      // it actually opened something.
+                      requestAnimationFrame(() => {
+                        const target = document.querySelector('.inst-row');
+                        if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                      });
                     }}
                   />
                 )}
