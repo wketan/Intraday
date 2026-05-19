@@ -444,11 +444,16 @@ class SlackAlert:
     
     @staticmethod
     def format_close(instrument, direction, result, pnl, option=None, entry_time=None):
-        emoji = "✅" if result == "WIN" else "❌"
+        emoji = ("🎯" if result == "T2" else
+                 "✅" if result == "WIN" else
+                 "❌" if result == "LOSS" else "⊙")
         exit_time = datetime.now(IST).strftime("%H:%M")
+        result_label = ("Target 2 hit (+100%)" if result == "T2" else
+                        "Target 1 hit (+50%)"  if result == "WIN" else
+                        "Stop loss hit (−35%)" if result == "LOSS" else result)
         msg = f"""{emoji} *TRADE CLOSED: {instrument}*
 ━━━━━━━━━━━━━━━━━━━━━
-📊 {direction} → *{result}*"""
+📊 {direction} → *{result_label}*"""
         if option:
             msg += f"\n📋 {option.get('symbol','')}"
         if entry_time:
@@ -459,15 +464,97 @@ class SlackAlert:
         return msg
 
     @staticmethod
-    def format_daily_summary(perf):
-        return f"""📊 *DAILY SUMMARY*
+    def format_close_blocks(instrument, direction, result, pnl, option=None, entry_time=None):
+        emoji = ("🎯" if result == "T2" else
+                 "✅" if result == "WIN" else
+                 "❌" if result == "LOSS" else "⊙")
+        exit_time = datetime.now(IST).strftime("%H:%M")
+        result_label = ("Target 2 hit (+100%)" if result == "T2" else
+                        "Target 1 hit (+50%)"  if result == "WIN" else
+                        "Stop loss hit (−35%)" if result == "LOSS" else (result or "—"))
+        sign = "+" if pnl >= 0 else "−"
+        amt = int(round(abs(float(pnl or 0))))
+        blocks = [
+            {"type": "section", "text": {"type": "mrkdwn",
+                "text": f"{emoji} *Trade closed: {instrument} {direction}*  ·  *{result_label}*"}},
+            {"type": "section", "fields": [
+                {"type": "mrkdwn", "text": f"📋 *Contract*\n{option.get('symbol','—') if option else '—'}"},
+                {"type": "mrkdwn", "text": f"💰 *P&L*\n{sign}₹{amt:,}"},
+                {"type": "mrkdwn", "text": f"⏰ *Entry → Exit*\n{entry_time or '—'} → {exit_time} IST"},
+                {"type": "mrkdwn", "text": f"🏷 *Outcome*\n{result}"},
+            ]},
+        ]
+        return blocks
+
+    @staticmethod
+    def format_daily_summary(perf, rows=None):
+        """Plain-text EOD summary (push-notification fallback)."""
+        rows = rows or []
+        msg = f"""📊 *DAILY SUMMARY* — {datetime.now(IST).strftime('%a · %d %b %Y')}
 ━━━━━━━━━━━━━━━━━
-Total Signals: {perf["total"]}
-✅ Wins: {perf["wins"]}  |  ❌ Losses: {perf["losses"]}
-📈 Win Rate: *{perf["win_rate"]}%*
-💰 Total P&L: *₹{perf["total_pnl"]}*
-🏆 Best: ₹{perf["best_trade"]}  |  📉 Worst: ₹{perf["worst_trade"]}
-━━━━━━━━━━━━━━━━━"""
+Total: {perf["total"]}  ·  ✅ {perf["wins"]} wins  ·  ❌ {perf["losses"]} losses
+Win rate: *{perf["win_rate"]}%*  ·  Net P&L: *{'+' if perf["total_pnl"]>=0 else ''}₹{perf["total_pnl"]}*
+🏆 Best: ₹{perf["best_trade"]}  ·  📉 Worst: ₹{perf["worst_trade"]}
+"""
+        if rows:
+            msg += "\n*Trade-by-trade:*"
+            for r in rows:
+                pnl = r.get("pnl_rupees", 0) or 0
+                sign = "+" if pnl >= 0 else ""
+                emoji = "🎯" if r.get("result") == "T2" else ("✅" if r.get("result") == "WIN" else
+                        ("❌" if r.get("result") == "LOSS" else "⊙"))
+                msg += (f"\n{emoji} {r.get('instrument','')} {r.get('direction','')} "
+                        f"{r.get('option_symbol','')} · "
+                        f"{r.get('timestamp','—')}→{r.get('exit_time','—')} · "
+                        f"{r.get('result','OPEN')} · {sign}₹{int(round(pnl))}")
+        msg += "\n━━━━━━━━━━━━━━━━━"
+        return msg
+
+    @staticmethod
+    def format_daily_summary_blocks(perf, rows=None):
+        """Rich Slack-blocks version of the EOD summary with a row per trade."""
+        def _i(v):
+            try: return f"{int(round(float(v))):,}"
+            except: return str(v)
+        rows = rows or []
+        net_sign = "+" if perf["total_pnl"] >= 0 else "−"
+        net_color_text = "Net P&L"
+        blocks = [
+            {"type": "section", "text": {"type": "mrkdwn",
+                "text": f"📊 *DAILY SUMMARY* — {datetime.now(IST).strftime('%a · %d %b %Y')}"}},
+            {"type": "divider"},
+            {"type": "section", "fields": [
+                {"type": "mrkdwn", "text": f"*Total signals*\n{perf['total']}"},
+                {"type": "mrkdwn", "text": f"*Win rate*\n{perf['win_rate']}%"},
+                {"type": "mrkdwn", "text": f"*Wins*\n✅ {perf['wins']}"},
+                {"type": "mrkdwn", "text": f"*Losses*\n❌ {perf['losses']}"},
+                {"type": "mrkdwn", "text": f"*{net_color_text}*\n{net_sign}₹{_i(abs(perf['total_pnl']))}"},
+                {"type": "mrkdwn", "text": f"*Best / worst*\n+₹{_i(perf['best_trade'])} / −₹{_i(abs(perf['worst_trade']))}"},
+            ]},
+        ]
+        if rows:
+            blocks.append({"type": "divider"})
+            blocks.append({"type": "section", "text": {"type": "mrkdwn", "text": "*Trade-by-trade*"}})
+            # Slack 'context' blocks render small, dense lines — ideal for a list
+            for r in rows:
+                pnl = int(round(float(r.get("pnl_rupees", 0) or 0)))
+                sign = "+" if pnl >= 0 else "−"
+                result = r.get("result") or "OPEN"
+                emoji = ("🎯" if result == "T2" else
+                         "✅" if result == "WIN" else
+                         "❌" if result == "LOSS" else
+                         "⊙")
+                inst   = r.get("instrument", "")
+                dirn   = r.get("direction", "")
+                osym   = r.get("option_symbol", "")
+                t_in   = (r.get("timestamp") or "—")[:5]
+                t_out  = (r.get("exit_time") or "—")[:5]
+                blocks.append({"type": "context", "elements": [{"type": "mrkdwn",
+                    "text": f"{emoji}  *{inst} {dirn}* · {osym} · {t_in} → {t_out} · "
+                            f"*{result}* · {sign}₹{_i(abs(pnl))}"}]})
+        blocks.append({"type": "context", "elements": [{"type": "mrkdwn",
+            "text": "_Auto-generated at market close · brokerage + slippage applied_"}]})
+        return blocks
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -2840,6 +2927,7 @@ class PLTracker:
             opt_entry  = float(s.get("option_entry") or 0)
             opt_sl     = float(s.get("option_sl") or 0)
             opt_t1     = float(s.get("option_target1") or 0)
+            opt_t2     = float(s.get("option_target2") or 0)
             opt_lots   = int(s.get("option_lots") or 0)
             lot_size   = int(s.get("option_lot_size") or inst.get("lot_size", 25))
             qty        = max(1, opt_lots) * lot_size if opt_lots else lot_size
@@ -2880,13 +2968,16 @@ class PLTracker:
                         pass
                 opt_sl = new_sl
 
-            # Exit detection — prefer option-based levels
+            # Exit detection — prefer option-based levels. T2 wins over T1
+            # so a fast surge to T2 is recorded as the bigger result.
             result = None
             exit_opt = None
             if cur_opt is not None and opt_entry > 0:
-                if cur_opt >= opt_t1 and opt_t1 > 0:
+                if opt_t2 > 0 and cur_opt >= opt_t2:
+                    result = "T2"; exit_opt = cur_opt
+                elif opt_t1 > 0 and cur_opt >= opt_t1:
                     result = "WIN"; exit_opt = cur_opt
-                elif cur_opt <= opt_sl and opt_sl > 0:
+                elif opt_sl > 0 and cur_opt <= opt_sl:
                     result = "LOSS"; exit_opt = cur_opt
             elif idx_px:
                 # Legacy fallback (no token) → use index levels (old behaviour) but
@@ -2913,9 +3004,15 @@ class PLTracker:
                     pnl_pts = (idx_px - s["index_entry"]) if d == "LONG" else (s["index_entry"] - idx_px)
                     pnl_rs = round(pnl_pts * lot_size, 0)
                     update_result(s["id"], idx_px, result, round(pnl_pts, 2), pnl_rs)
-                emoji = "✅" if result == "WIN" else "❌"
+                emoji = "🎯" if result == "T2" else ("✅" if result == "WIN" else "❌")
                 log.info(f"{emoji} {s['instrument']} {s['direction']} → {result} | ₹{pnl_rs} (opt exit ₹{cur_opt})")
-                SlackAlert.send(SlackAlert.format_close(s["instrument"], s["direction"], result, pnl_rs))
+                opt_dict = {"symbol": s.get("option_symbol", "")} if s.get("option_symbol") else None
+                SlackAlert.send(
+                    SlackAlert.format_close(s["instrument"], s["direction"], result, pnl_rs,
+                                            option=opt_dict, entry_time=s.get("timestamp", "")[:5]),
+                    blocks=SlackAlert.format_close_blocks(s["instrument"], s["direction"], result, pnl_rs,
+                                                          option=opt_dict, entry_time=s.get("timestamp", "")[:5]),
+                )
                 self._best_premium.pop(s["id"], None)
 
     def close_all(self):
@@ -2937,9 +3034,17 @@ class PLTracker:
                               qty=qty, lots=lots)
             else:
                 update_result(s["id"], s["index_price"], "EXPIRED", 0, 0)
-        perf = get_perf()
+        today = datetime.now(IST).strftime("%Y-%m-%d")
+        perf = get_perf(date=today)
         if perf["total"] > 0:
-            SlackAlert.send(SlackAlert.format_daily_summary(perf))
+            todays_rows = db_exec(
+                "SELECT * FROM signals WHERE date=? ORDER BY id ASC",
+                (today,), fetch=True) or []
+            todays_rows = [dict(r) for r in todays_rows]
+            SlackAlert.send(
+                SlackAlert.format_daily_summary(perf, rows=todays_rows),
+                blocks=SlackAlert.format_daily_summary_blocks(perf, rows=todays_rows),
+            )
 
 # ═══════════════════════════════════════════════════════════════════
 # MAIN ENGINE
