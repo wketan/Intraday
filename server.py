@@ -4146,7 +4146,11 @@ class SwingEngine:
         if sig["confidence"] >= self.ALERT_CONF:
             log.info(f"[Swing] 🎯 {name} {sig['direction']} conf={sig['confidence']}% "
                      f"price={sig['price']} rr={sig['risk_reward']}")
-            SlackAlert.send(self._format_slack(name, sig, opt))
+            # Swing alerts are intentionally muted on Slack — the user only
+            # wants intraday signals (NIFTY/BANKNIFTY/FINNIFTY) there. Swing
+            # signals are still produced + visible on the dashboard if the
+            # Swing tab is reintroduced; just no Slack pings.
+            # SlackAlert.send(self._format_slack(name, sig, opt))
 
     def _pick_option(self, name, info, sig, spot):
         """Select swing option (monthly expiry, ≥15 DTE, ATM strike)."""
@@ -4285,13 +4289,10 @@ ORIGINAL ENTRY REASONS:
                 last_ai_reasoning=reasoning,
                 last_ai_ts=now_str)
             log.info(f"[Swing] AI exit #{pos['id']} {name}: {decision} — {reasoning[:60]}")
-            # Auto-Slack on EXIT/PARTIAL
+            # Swing exit Slack pings muted — user wants intraday-only Slack.
+            # Decision still logged + persisted to DB.
             if decision in ("EXIT","PARTIAL_EXIT"):
-                icon = "🚪" if decision=="EXIT" else "⚠"
-                SlackAlert.send(f"{icon} *Swing Exit Signal: {name}*\n"
-                                f"Decision: *{decision}* ({ai.get('urgency','')})\n"
-                                f"{reasoning}\n"
-                                f"{'⚠ ' + ai.get('risk_note','') if ai.get('risk_note') else ''}")
+                pass
             return ai
         except Exception as e:
             log.warning(f"[Swing] AI exit post-processing error: {e}")
@@ -5377,9 +5378,8 @@ def _startup():
                 log.info("▶ Auto-startup: starting swing engine...")
                 swing_engine.start()
                 log.info("▶ Auto-startup: swing engine running ✅")
-            SlackAlert.send(f"🚀 *Signal Engines Auto-Started*\n"
-                            f"• Intraday: NIFTY, BANKNIFTY, FINNIFTY\n"
-                            f"• Swing: {len(SWING_STOCKS)} instruments (30-min cycle)\n"
+            SlackAlert.send(f"🚀 *Intraday Engine Started*\n"
+                            f"Scanning NIFTY · BANKNIFTY · FINNIFTY\n"
                             f"Alerts will arrive here when confidence ≥ threshold")
             return
         err = engine.client.last_login_error or "unknown"

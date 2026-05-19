@@ -4259,6 +4259,26 @@ function SwingTab({ data, getServer, getAuthToken, showToast }) {
         return () => { alive = false; clearInterval(id); };
       }, []);
 
+      // engine on/off sync — independent of the live-poller so the dashboard
+      // mirrors the server's running state even when the client thinks it's
+      // off (e.g., the server auto-started in the morning while the user
+      // wasn't watching). Pings /api/status every 8s and aligns `on`.
+      useEffect(() => {
+        let alive = true;
+        const sync = async () => {
+          try {
+            const s = await apiJSON('/api/status');
+            if (!alive) return;
+            const serverRunning = !!(s && s.running);
+            if (serverRunning && !on) setOn(true);
+            else if (!serverRunning && on) setOn(false);
+          } catch (_) {}
+        };
+        sync();
+        const id = setInterval(sync, 8000);
+        return () => { alive = false; clearInterval(id); };
+      }, [on]);
+
       // ── auto-schedule: Mon-Fri 08:45 ON, 16:00 OFF (IST) ──
       // Runs every 30s. Auto-START on weekdays at 08:45, auto-STOP at 16:00
       // (every day, including weekends if the engine is somehow still on).
