@@ -3558,17 +3558,9 @@ function SwingTab({ data, getServer, getAuthToken, showToast }) {
         const h12 = ((h + 11) % 12) + 1;
         return `${String(h12).padStart(2,'0')}:${String(m).padStart(2,'0')} ${h < 12 ? 'am' : 'pm'}`;
       })();
-      const isAutoActive = (() => {
-        const d = new Date();
-        const ist = ((d.getUTCHours() * 60 + d.getUTCMinutes()) + 330) % 1440;
-        const shift = (d.getUTCHours() * 60 + d.getUTCMinutes() + 330) >= 1440 ? 1 : 0;
-        const dow = (d.getUTCDay() + shift) % 7;
-        const weekday = dow >= 1 && dow <= 5;
-        return weekday && ist >= (8*60+45) && ist < (16*60);
-      })();
       const nextEdge = (() => {
-        if (on)  return 'auto-off 16:00 IST';
-        if (autoMode && !isAutoActive) return 'auto-on Mon-Fri · 08:45 IST';
+        if (on) return 'auto-off 16:00 IST';
+        if (autoMode) return 'auto-on Mon-Fri · 08:45 IST';
         return 'tap to start';
       })();
       return (
@@ -4263,29 +4255,22 @@ function SwingTab({ data, getServer, getAuthToken, showToast }) {
         return () => { alive = false; clearInterval(id); };
       }, []);
 
-      // ── auto-schedule: Mon-Fri 08:45 → 16:00 IST ──
-      // Runs every 30s. Flips the engine on/off automatically inside the
-      // window. Manual stop inside the window will pause auto-on until the
-      // next window boundary (so the user isn't fought).
+      // ── auto-schedule: Mon-Fri 08:45 ON, 16:00 OFF (IST) ──
+      // Runs every 30s. Auto-START on weekdays at 08:45, auto-STOP at 16:00
+      // (every day, including weekends if the engine is somehow still on).
       useEffect(() => {
         if (!autoMode) return;
-        const isInWindow = () => {
+        const tick = () => {
           const d = new Date();
           const istMins = ((d.getUTCHours() * 60 + d.getUTCMinutes()) + 330) % 1440;
-          // IST day-of-week: shift if IST crosses UTC day boundary
           const istDayShift = (d.getUTCHours() * 60 + d.getUTCMinutes() + 330) >= 1440 ? 1 : 0;
-          const istDow = (d.getUTCDay() + istDayShift) % 7;  // 0 = Sun
+          const istDow = (d.getUTCDay() + istDayShift) % 7;
           const isWeekday = istDow >= 1 && istDow <= 5;
-          const start = 8 * 60 + 45;   // 08:45
-          const end   = 16 * 60;        // 16:00
-          return isWeekday && istMins >= start && istMins < end;
-        };
-        const tick = () => {
-          const should = isInWindow();
-          if (should && !on && mode === 'live' && lastAutoFlipRef.current !== 'off-manual') {
+          const inWindow = isWeekday && istMins >= (8 * 60 + 45) && istMins < (16 * 60);
+          if (inWindow && !on && mode === 'live' && lastAutoFlipRef.current !== 'on') {
             lastAutoFlipRef.current = 'on';
             try { doStart && doStart(); } catch(_) {}
-          } else if (!should && on) {
+          } else if (!inWindow && on) {
             lastAutoFlipRef.current = 'off';
             try { doStop && doStop(); } catch(_) {}
           }
