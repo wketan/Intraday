@@ -307,6 +307,89 @@ class SlackAlert:
             return False
     
     @staticmethod
+    def format_signal_blocks(instrument, signal, option, timing=None, ai=None):
+        """Compact 2-column Slack 'blocks' layout. All info from the legacy
+        text format, but rendered side-by-side using Slack `fields` (which
+        flow in a 2-col grid) instead of stacked single-column lines.
+        Takes the same args as format_signal; callers pass both:
+            text   = format_signal(...)        # fallback for push-notif preview
+            blocks = format_signal_blocks(...) # rich rendering inside Slack
+        """
+        def _i(v):
+            try: return f"{int(round(float(v))):,}"
+            except: return str(v)
+
+        arrow = "🟢" if signal["direction"] == "LONG" else "🔴"
+        entry_time = signal.get("timestamp", datetime.now(IST).strftime("%H:%M"))
+
+        header = f"{arrow} *{instrument} {signal['direction']}*"
+        if option:
+            header += f"  ·  *{option.get('action','BUY')} {option['symbol']}*"
+
+        blocks = [
+            {"type": "section", "text": {"type": "mrkdwn", "text": header}},
+            {"type": "divider"},
+        ]
+
+        if option:
+            # Two columns × three rows of trade levels
+            levels = [
+                {"type": "mrkdwn", "text": f"▶ *Buy*\n`₹{_i(option['entry'])}`  _(Live LTP)_"},
+                {"type": "mrkdwn", "text": f"🛑 *SL*\n`₹{_i(option['sl'])}`"},
+                {"type": "mrkdwn", "text": f"✅ *T1*  `₹{_i(option['target1'])}`\n→ +₹{_i(option.get('t1_profit', 0))}"},
+                {"type": "mrkdwn", "text": f"✅ *T2*  `₹{_i(option['target2'])}`\n→ +₹{_i(option.get('t2_profit', 0))}"},
+                {"type": "mrkdwn", "text": f"💼 *Capital*\n`₹{_i(option.get('capital','?'))}` · max loss ₹{_i(option.get('max_loss','?'))}"},
+                {"type": "mrkdwn", "text": f"📐 *Greeks*\nΔ {option.get('delta', 0.4)} · R:R {signal.get('risk_reward', '?')}"},
+            ]
+            blocks.append({"type": "section", "fields": levels})
+        else:
+            idx_fields = [
+                {"type": "mrkdwn", "text": f"▶ *Entry*\n`{signal['entry']}`"},
+                {"type": "mrkdwn", "text": f"🛑 *SL*\n`{signal['sl']}`"},
+                {"type": "mrkdwn", "text": f"✅ *T1*\n`{signal['target1']}`"},
+                {"type": "mrkdwn", "text": f"✅ *T2*\n`{signal['target2']}`"},
+            ]
+            blocks.append({"type": "section", "fields": idx_fields})
+
+        # Timing + confidence in 2-col layout
+        timing_fields = [
+            {"type": "mrkdwn", "text": f"⏰ *Entry*\n{entry_time} IST"},
+        ]
+        if timing:
+            timing_fields.append({"type": "mrkdwn", "text": f"🎯 *Target by*\n~{timing['target_by']} IST  _({timing.get('est_duration','')})_"})
+            timing_fields.append({"type": "mrkdwn", "text": f"🛑 *SL by*\n~{timing['sl_by']} IST"})
+        timing_fields.append({"type": "mrkdwn", "text": f"🎯 *Confidence*\n{signal['confidence']}% · {len(signal.get('reasons',[]))} strategies"})
+        blocks.append({"type": "divider"})
+        blocks.append({"type": "section", "fields": timing_fields})
+
+        # AI analysis — full-width section (the rationale is prose, so 1-col)
+        if ai and ai.get("verdict"):
+            v = ai["verdict"]
+            emoji = "✅" if v == "TAKE" else ("⏸" if v == "WAIT" else "⛔")
+            adj = ai.get("confidence_adj", 0)
+            adj_str = f"+{adj}" if adj > 0 else str(adj)
+            ai_text = f"*🤖 AI: {emoji} {v}*  (Conf {adj_str}%)"
+            if ai.get("reasoning"):
+                ai_text += f"\n💡 {ai['reasoning']}"
+            if ai.get("risk_note"):
+                ai_text += f"\n⚠️ {ai['risk_note']}"
+            blocks.append({"type": "divider"})
+            blocks.append({"type": "section", "text": {"type": "mrkdwn", "text": ai_text}})
+
+        # Reasons — context block (smaller text)
+        reasons = signal.get("reasons", [])[:4]
+        if reasons:
+            blocks.append({
+                "type": "context",
+                "elements": [{"type": "mrkdwn", "text": "*Why:* " + " · ".join(reasons)}],
+            })
+        blocks.append({
+            "type": "context",
+            "elements": [{"type": "mrkdwn", "text": "⚠️ Verify option LTP before trading. Not financial advice."}],
+        })
+        return blocks
+
+    @staticmethod
     def format_signal(instrument, signal, option, timing=None, ai=None):
         arrow = "🟢" if signal["direction"] == "LONG" else "🔴"
         entry_time = signal.get("timestamp", datetime.now(IST).strftime("%H:%M"))
@@ -3569,8 +3652,11 @@ class Engine:
                                  f"pos={(ai_result or {}).get('position_pct',100)}% "
                                  f"tighten={(ai_result or {}).get('sl_tightening','none')}")
 
-                        # 📱 SLACK ALERT
-                        SlackAlert.send(SlackAlert.format_signal(name, sig, opt, timing, ai_result))
+                        # 📱 SLACK ALERT — rich 2-column blocks + plain-text fallback
+                        SlackAlert.send(
+                            SlackAlert.format_signal(name, sig, opt, timing, ai_result),
+                            blocks=SlackAlert.format_signal_blocks(name, sig, opt, timing, ai_result),
+                        )
 
                         # BUG FIX #7: Only start the 15-min cooldown AFTER an alert fires.
                         # Previously this was set unconditionally at the bottom of the loop,
@@ -4549,7 +4635,7 @@ def test_slack():
     if not CONFIG["slack_enabled"] or not CONFIG["slack_webhook"]:
         return jsonify({"status": "failed", "reason": "SLACK_WEBHOOK env var is not set on the server"}), 200
     # Render a realistic sample so the user sees exactly what live alerts look like.
-    sample = SlackAlert.format_signal(
+    sample_args = dict(
         instrument="BANKNIFTY",
         signal={
             "direction": "LONG", "confidence": 72,
@@ -4576,8 +4662,11 @@ def test_slack():
             "risk_note": "Watch 53,700 on retest — close below it nullifies the setup.",
         },
     )
-    sample = "*🧪 SAMPLE — this is what a real signal looks like:*\n\n" + sample
-    ok = SlackAlert.send(sample)
+    text = "🧪 SAMPLE — this is what a real signal looks like\n\n" + SlackAlert.format_signal(**sample_args)
+    blocks = ([{"type": "section", "text": {"type": "mrkdwn",
+                                            "text": "*🧪 SAMPLE — this is what a real signal looks like*"}}]
+              + SlackAlert.format_signal_blocks(**sample_args))
+    ok = SlackAlert.send(text, blocks=blocks)
     return jsonify({"status":"ok" if ok else "failed",
                     "reason": "delivered to Slack" if ok else "Slack rejected the webhook (URL or perms)"})
 
