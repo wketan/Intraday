@@ -4546,8 +4546,40 @@ def option_ltp():
 @app.route("/api/test-slack", methods=["POST"])
 @require_auth
 def test_slack():
-    ok = SlackAlert.send("✅ *Test Alert*\nSlack notifications are working!\nYou'll receive trading signals here during market hours.")
-    return jsonify({"status":"ok" if ok else "failed"})
+    if not CONFIG["slack_enabled"] or not CONFIG["slack_webhook"]:
+        return jsonify({"status": "failed", "reason": "SLACK_WEBHOOK env var is not set on the server"}), 200
+    # Render a realistic sample so the user sees exactly what live alerts look like.
+    sample = SlackAlert.format_signal(
+        instrument="BANKNIFTY",
+        signal={
+            "direction": "LONG", "confidence": 72,
+            "entry": 53742, "sl": 53590, "target1": 53896, "target2": 54050,
+            "risk_reward": "1 : 1.8", "rsi": 61,
+            "reasons": ["EMA21 > EMA50 (stacked bullish)",
+                        "VWAP reclaim with rising volume",
+                        "Break of 09:25 ORB high (+18 pts)",
+                        "RSI 61 (trending, not overbought)"],
+            "timestamp": datetime.now(IST).strftime("%H:%M"),
+        },
+        option={
+            "symbol": "BANKNIFTY 53800 CE", "action": "BUY",
+            "entry": 235, "sl": 153, "target1": 352, "target2": 470,
+            "t1_profit": 3510, "t2_profit": 7050,
+            "capital": 7050, "max_loss": 2460,
+            "delta": 0.46, "dte": 5,
+        },
+        timing={"target_by": "10:45", "est_duration": "~75 min", "sl_by": "11:30"},
+        ai={
+            "verdict": "TAKE", "confidence_adj": 4,
+            "reasoning": "Strong morning trend with stacked EMAs and VIX below mean. "
+                         "Setup respects 09:25 ORB and has clear invalidation.",
+            "risk_note": "Watch 53,700 on retest — close below it nullifies the setup.",
+        },
+    )
+    sample = "*🧪 SAMPLE — this is what a real signal looks like:*\n\n" + sample
+    ok = SlackAlert.send(sample)
+    return jsonify({"status":"ok" if ok else "failed",
+                    "reason": "delivered to Slack" if ok else "Slack rejected the webhook (URL or perms)"})
 
 @app.route("/api/test-chain/<name>")
 def test_chain(name):

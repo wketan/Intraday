@@ -3520,7 +3520,7 @@ function SwingTab({ data, getServer, getAuthToken, showToast }) {
       );
     }
 
-    function NewTopbar({ theme, setTheme, userName, capital, onProfileClick, onTweaks }) {
+    function NewTopbar({ theme, setTheme, userName, capital, onProfileClick, onTweaks, onTestSlack }) {
       const capShort = (() => {
         const n = Number(capital) || 50000;
         if (n >= 100000) return '₹' + (n / 100000).toFixed(n % 100000 === 0 ? 0 : 1) + 'L cap';
@@ -3534,6 +3534,10 @@ function SwingTab({ data, getServer, getAuthToken, showToast }) {
             <svg className="ico-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
             <svg className="ico-moon" viewBox="0 0 24 24"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
             <span className="thumb"/>
+          </button>
+          <button type="button" className="iconbtn-glass" onClick={onTestSlack} title="Send a test Slack alert" style={{padding:'0 14px', width:'auto', gap:7, fontWeight:600, fontSize:12}}>
+            <svg viewBox="0 0 24 24" width="14" height="14"><path d="M14.5 10c-.83 0-1.5-.67-1.5-1.5v-5c0-.83.67-1.5 1.5-1.5s1.5.67 1.5 1.5v5c0 .83-.67 1.5-1.5 1.5z"/><path d="M20.5 10H19V8.5c0-.83.67-1.5 1.5-1.5s1.5.67 1.5 1.5-.67 1.5-1.5 1.5z"/><path d="M9.5 14c.83 0 1.5.67 1.5 1.5v5c0 .83-.67 1.5-1.5 1.5S8 21.33 8 20.5v-5c0-.83.67-1.5 1.5-1.5z"/><path d="M3.5 14H5v1.5c0 .83-.67 1.5-1.5 1.5S2 16.33 2 15.5 2.67 14 3.5 14z"/><path d="M14 14.5c0-.83.67-1.5 1.5-1.5h5c.83 0 1.5.67 1.5 1.5s-.67 1.5-1.5 1.5h-5c-.83 0-1.5-.67-1.5-1.5z"/><path d="M15.5 19H14v1.5c0 .83.67 1.5 1.5 1.5s1.5-.67 1.5-1.5-.67-1.5-1.5-1.5z"/><path d="M10 9.5C10 8.67 9.33 8 8.5 8h-5C2.67 8 2 8.67 2 9.5S2.67 11 3.5 11h5c.83 0 1.5-.67 1.5-1.5z"/><path d="M8.5 5H10V3.5C10 2.67 9.33 2 8.5 2S7 2.67 7 3.5 7.67 5 8.5 5z"/></svg>
+            <span>Test Slack</span>
           </button>
           <div className="iconbtn-glass" onClick={onTweaks} title="settings">
             <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09a1.65 1.65 0 0 0-1.08-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1.08 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
@@ -4725,6 +4729,16 @@ function SwingTab({ data, getServer, getAuthToken, showToast }) {
               userName={userName} capital={capital}
               onTweaks={() => setTweakOpen(o => !o)}
               onProfileClick={() => setProfileOpen(true)}
+              onTestSlack={async () => {
+                try {
+                  const r = await apiFetch('/api/test-slack', { method: 'POST' });
+                  const j = await r.json();
+                  if (j.status === 'ok') showToast('✓ Slack test sent — check your channel');
+                  else showToast('✗ Slack: ' + (j.reason || 'failed'));
+                } catch(e) {
+                  showToast('✗ Slack test failed · ' + (e.message || e));
+                }
+              }}
             />
 
             {tab === 'signals' && (
