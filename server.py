@@ -48,10 +48,15 @@ CONFIG = {
     "budget":            int(os.environ.get("BUDGET", "50000")),
 
     # ── Risk guards (kill-switch) ──
-    # Stop firing new alerts after either threshold is hit for the day.
-    # Defaults: stop after ₹2000 cumulative loss OR 8 trades (open + closed).
-    "daily_loss_limit":  int(os.environ.get("DAILY_LOSS_LIMIT", "2000")),
-    "max_trades_per_day":int(os.environ.get("MAX_TRADES_PER_DAY", "8")),
+    # OFF by default — user wants every quality signal to flow through.
+    # Quality is still gated by:
+    #   · the AI veto layer (confidence_adj + TAKE/WAIT/SKIP verdict)
+    #   · min_confidence floor (62% by default, raised on RANGING regimes)
+    #   · regime filters (VIX, expiry, Monday-block, time-of-day cutoff)
+    # Set DAILY_LOSS_LIMIT or MAX_TRADES_PER_DAY env vars to re-enable
+    # the kill-switch (non-zero value); 0 = disabled.
+    "daily_loss_limit":  int(os.environ.get("DAILY_LOSS_LIMIT", "0")),
+    "max_trades_per_day":int(os.environ.get("MAX_TRADES_PER_DAY", "0")),
 
     # ── Cost model (subtracted from displayed P&L for realism) ──
     # Round-trip brokerage estimate per lot (Zerodha/Angel: ~₹40 entry + ~₹40 exit + STT + GST).
