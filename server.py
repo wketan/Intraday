@@ -443,7 +443,7 @@ class SlackAlert:
         return msg
     
     @staticmethod
-    def format_close(instrument, direction, result, pnl, option=None, entry_time=None):
+    def format_close(instrument, direction, result, pnl, option=None, entry_time=None, near_miss=None):
         emoji = ("🎯" if result == "T2" else
                  "✅" if result == "WIN" else
                  "❌" if result == "LOSS" else "⊙")
@@ -459,12 +459,14 @@ class SlackAlert:
         if entry_time:
             msg += f"\n⏰ {entry_time} → {exit_time} IST"
         msg += f"""
-💰 P&L: *{"+" if pnl>=0 else ""}₹{pnl}*
-━━━━━━━━━━━━━━━━━━━━━"""
+💰 P&L: *{"+" if pnl>=0 else ""}₹{pnl}*"""
+        if near_miss:
+            msg += f"\n⚠️ Near-miss: {near_miss.get('hint','')}"
+        msg += "\n━━━━━━━━━━━━━━━━━━━━━"
         return msg
 
     @staticmethod
-    def format_close_blocks(instrument, direction, result, pnl, option=None, entry_time=None):
+    def format_close_blocks(instrument, direction, result, pnl, option=None, entry_time=None, near_miss=None):
         emoji = ("🎯" if result == "T2" else
                  "✅" if result == "WIN" else
                  "❌" if result == "LOSS" else "⊙")
@@ -484,6 +486,13 @@ class SlackAlert:
                 {"type": "mrkdwn", "text": f"🏷 *Outcome*\n{result}"},
             ]},
         ]
+        if near_miss:
+            peak_amt = int(round(float(near_miss.get('peak') or 0)))
+            blocks.append({"type": "section", "text": {"type": "mrkdwn",
+                "text": f"⚠️ *Near-miss exit*\n"
+                        f"Premium peaked at *₹{peak_amt}* at *{near_miss.get('peak_time','')}* — "
+                        f"that was *{int(near_miss.get('pct_to_t1', 0))}%* of the way to T1. "
+                        f"A breakeven SL move at half-T1 (now default) would have prevented this loss."}})
         return blocks
 
     @staticmethod
@@ -503,10 +512,19 @@ Win rate: *{perf["win_rate"]}%*  ·  Net P&L: *{'+' if perf["total_pnl"]>=0 else
                 sign = "+" if pnl >= 0 else ""
                 emoji = "🎯" if r.get("result") == "T2" else ("✅" if r.get("result") == "WIN" else
                         ("❌" if r.get("result") == "LOSS" else "⊙"))
-                msg += (f"\n{emoji} {r.get('instrument','')} {r.get('direction','')} "
+                line = (f"\n{emoji} {r.get('instrument','')} {r.get('direction','')} "
                         f"{r.get('option_symbol','')} · "
                         f"{r.get('timestamp','—')}→{r.get('exit_time','—')} · "
                         f"{r.get('result','OPEN')} · {sign}₹{int(round(pnl))}")
+                # Near-miss: peaked deep into favorable territory before SL
+                peak = r.get("peak_premium")
+                oent = float(r.get("option_entry") or 0)
+                ot1  = float(r.get("option_target1") or 0)
+                if (r.get("result") == "LOSS" and peak and oent > 0 and ot1 > oent):
+                    favor = (float(peak) - oent) / (ot1 - oent) * 100
+                    if favor >= 40:
+                        line += f"  (⚠ peaked ₹{int(round(float(peak)))} = {int(round(favor))}% to T1)"
+                msg += line
         msg += "\n━━━━━━━━━━━━━━━━━"
         return msg
 
@@ -549,9 +567,21 @@ Win rate: *{perf["win_rate"]}%*  ·  Net P&L: *{'+' if perf["total_pnl"]>=0 else
                 osym   = r.get("option_symbol", "")
                 t_in   = (r.get("timestamp") or "—")[:5]
                 t_out  = (r.get("exit_time") or "—")[:5]
+                # Near-miss tag for losses where premium peaked deep into
+                # favorable territory ("could have exited at peak").
+                peak  = r.get("peak_premium")
+                ptime = r.get("peak_time")
+                oent  = float(r.get("option_entry") or 0)
+                ot1   = float(r.get("option_target1") or 0)
+                near = ""
+                if (result == "LOSS" and peak and oent > 0 and ot1 > oent):
+                    favor = (float(peak) - oent) / (ot1 - oent) * 100
+                    if favor >= 40:
+                        near = (f"  ·  ⚠ peaked ₹{int(round(float(peak)))} "
+                                f"({int(round(favor))}% to T1) at {ptime}")
                 blocks.append({"type": "context", "elements": [{"type": "mrkdwn",
                     "text": f"{emoji}  *{inst} {dirn}* · {osym} · {t_in} → {t_out} · "
-                            f"*{result}* · {sign}₹{_i(abs(pnl))}"}]})
+                            f"*{result}* · {sign}₹{_i(abs(pnl))}{near}"}]})
         blocks.append({"type": "context", "elements": [{"type": "mrkdwn",
             "text": "_Auto-generated at market close · brokerage + slippage applied_"}]})
         return blocks
@@ -595,6 +625,10 @@ def init_db():
         ("slippage_rs", "REAL"),
         ("pnl_rupees_net", "REAL"),
         ("option_exit_realistic", "REAL"),
+        # High-water / low-water marks during the trade — surface near-miss
+        # exits ("could have booked at peak ₹140 before SL hit at ₹70").
+        ("peak_premium", "REAL"),   ("peak_time", "TEXT"),
+        ("trough_premium", "REAL"), ("trough_time", "TEXT"),
     ]:
         col, typ = col_decl
         if col not in cols:
@@ -2892,6 +2926,12 @@ class PLTracker:
         self.client = client
         # Track the best option LTP seen per row id (for trailing)
         self._best_premium = {}
+        # Per-signal peak / trough premium + time. We persist these to the DB
+        # on close so the daily summary can flag "near-miss" exits (e.g.
+        # premium peaked ₹140 — 80% of the way to T1 — before reversing
+        # and hitting SL).
+        self._peak     = {}   # {sig_id: (peak_premium, "HH:MM")}
+        self._trough   = {}   # {sig_id: (trough_premium, "HH:MM")}
 
     def _current_option_price(self, token):
         """Fetch current option price via FULL mode depth; fall back to LTP."""
@@ -2948,12 +2988,29 @@ class PLTracker:
                     best = cur_opt
                     self._best_premium[s["id"]] = best
 
-                # Apply SL tightening rules — they only MOVE SL up (tighter), never loosen
+                # Peak / trough tracking — independent of any SL strategy.
+                # Surfaces "near-miss" exits in the close alert + EOD summary.
+                now_hm = datetime.now(IST).strftime("%H:%M")
+                pk = self._peak.get(s["id"])
+                if pk is None or cur_opt > pk[0]:
+                    self._peak[s["id"]] = (cur_opt, now_hm)
+                tr = self._trough.get(s["id"])
+                if tr is None or cur_opt < tr[0]:
+                    self._trough[s["id"]] = (cur_opt, now_hm)
+
+                # Apply SL tightening rules — they only MOVE SL up (tighter), never loosen.
+                # DEFAULT behaviour is breakeven-at-half-T1 even when the AI
+                # didn't explicitly request it: once the trade is halfway to
+                # T1, SL jumps to entry so a reversal stops out at zero loss
+                # instead of full SL. This single rule would have prevented
+                # the user's yesterday losses where premium peaked well into
+                # the favorable half before reversing.
                 new_sl = opt_sl
-                if tighten == "breakeven_at_half_t1" and opt_t1 > opt_entry:
+                if (tighten in ("breakeven_at_half_t1", "none", "", None) and
+                        opt_t1 > opt_entry):
                     half_t1 = opt_entry + (opt_t1 - opt_entry) * 0.5
                     if best >= half_t1:
-                        new_sl = max(new_sl, opt_entry)  # breakeven
+                        new_sl = max(new_sl, opt_entry)  # lock breakeven
                 elif tighten == "trailing_atr":
                     # 1× option-ATR ≈ delta × index-ATR, from stored indicators
                     try:
@@ -3004,16 +3061,43 @@ class PLTracker:
                     pnl_pts = (idx_px - s["index_entry"]) if d == "LONG" else (s["index_entry"] - idx_px)
                     pnl_rs = round(pnl_pts * lot_size, 0)
                     update_result(s["id"], idx_px, result, round(pnl_pts, 2), pnl_rs)
+                # Persist peak/trough so the daily summary + dashboard can read them
+                pk = self._peak.get(s["id"])
+                tr = self._trough.get(s["id"])
+                try:
+                    db_exec(
+                        "UPDATE signals SET peak_premium=?, peak_time=?, trough_premium=?, trough_time=? WHERE id=?",
+                        ((pk[0] if pk else None), (pk[1] if pk else None),
+                         (tr[0] if tr else None), (tr[1] if tr else None), s["id"]),
+                    )
+                except Exception as _e:
+                    log.warning(f"  peak persist failed: {_e}")
+                # Compute near-miss summary: how far did the trade go in our
+                # favor before exiting? Useful when the result is LOSS but
+                # the peak was ≥40% of the way to T1.
+                near_miss = None
+                if pk and opt_entry > 0 and opt_t1 > opt_entry:
+                    favor = (pk[0] - opt_entry) / (opt_t1 - opt_entry) * 100  # %
+                    if result == "LOSS" and favor >= 40:
+                        near_miss = {"peak": pk[0], "peak_time": pk[1],
+                                     "pct_to_t1": round(favor, 0),
+                                     "hint": f"Could have exited at ₹{int(round(pk[0]))} "
+                                             f"({int(round(favor))}% of the way to T1) at {pk[1]}."}
                 emoji = "🎯" if result == "T2" else ("✅" if result == "WIN" else "❌")
-                log.info(f"{emoji} {s['instrument']} {s['direction']} → {result} | ₹{pnl_rs} (opt exit ₹{cur_opt})")
+                log.info(f"{emoji} {s['instrument']} {s['direction']} → {result} | ₹{pnl_rs} (opt exit ₹{cur_opt})"
+                         + (f" · peak ₹{pk[0]} at {pk[1]}" if pk else ""))
                 opt_dict = {"symbol": s.get("option_symbol", "")} if s.get("option_symbol") else None
                 SlackAlert.send(
                     SlackAlert.format_close(s["instrument"], s["direction"], result, pnl_rs,
-                                            option=opt_dict, entry_time=s.get("timestamp", "")[:5]),
+                                            option=opt_dict, entry_time=s.get("timestamp", "")[:5],
+                                            near_miss=near_miss),
                     blocks=SlackAlert.format_close_blocks(s["instrument"], s["direction"], result, pnl_rs,
-                                                          option=opt_dict, entry_time=s.get("timestamp", "")[:5]),
+                                                          option=opt_dict, entry_time=s.get("timestamp", "")[:5],
+                                                          near_miss=near_miss),
                 )
                 self._best_premium.pop(s["id"], None)
+                self._peak.pop(s["id"], None)
+                self._trough.pop(s["id"], None)
 
     def close_all(self):
         opens = db_exec("SELECT * FROM signals WHERE status='OPEN' AND date=?",
