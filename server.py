@@ -484,7 +484,7 @@ class SlackAlert:
 ━━━━━━━━━━━━━━━━━━━━━
 📊 {direction} → *{result_label}*"""
         if option:
-            msg += f"\n📋 {option.get('symbol','')}"
+            msg += f"\n📋 {SlackAlert._humanize_symbol(option.get('symbol',''))}"
         if entry_time:
             msg += f"\n⏰ {entry_time} → {exit_time} IST"
         msg += f"""
@@ -509,7 +509,7 @@ class SlackAlert:
             {"type": "section", "text": {"type": "mrkdwn",
                 "text": f"{emoji} *Trade closed: {instrument} {direction}*  ·  *{result_label}*"}},
             {"type": "section", "fields": [
-                {"type": "mrkdwn", "text": f"📋 *Contract*\n{option.get('symbol','—') if option else '—'}"},
+                {"type": "mrkdwn", "text": f"📋 *Contract*\n{SlackAlert._humanize_symbol(option.get('symbol','')) if option else '—'}"},
                 {"type": "mrkdwn", "text": f"💰 *P&L*\n{sign}₹{amt:,}"},
                 {"type": "mrkdwn", "text": f"⏰ *Entry → Exit*\n{entry_time or '—'} → {exit_time} IST"},
                 {"type": "mrkdwn", "text": f"🏷 *Outcome*\n{result}"},
@@ -2998,6 +2998,11 @@ class PLTracker:
         # Most recent premium per open signal — exposed to the dashboard for
         # the live "multiple compact cards" feed. Updated every check() tick.
         self._last_seen = {}  # {sig_id: current_premium}
+        # Cross-instrument loss cooldown: when a SHORT just hit SL, the
+        # immediate bearish read was wrong, so block new SHORTs across
+        # ALL instruments for LOSS_COOLDOWN_MIN minutes. Same for LONG.
+        self._loss_cooldown = {}  # { "LONG" | "SHORT": datetime_until }
+        self.LOSS_COOLDOWN_MIN = 60
 
     def _current_option_price(self, token):
         """Fetch current option price via FULL mode depth; fall back to LTP."""
@@ -3152,6 +3157,12 @@ class PLTracker:
                                      "hint": f"Could have exited at ₹{int(round(pk[0]))} "
                                              f"({int(round(favor))}% of the way to T1) at {pk[1]}."}
                 emoji = "🎯" if result == "T2" else ("✅" if result == "WIN" else "❌")
+                # Cross-instrument LOSS cooldown — same direction blocked for an hour
+                if result == "LOSS":
+                    until = datetime.now(IST) + timedelta(minutes=self.LOSS_COOLDOWN_MIN)
+                    self._loss_cooldown[s["direction"]] = until
+                    log.info(f"⏸ {s['direction']} cooldown until {until.strftime('%H:%M')} IST "
+                             f"(triggered by {s['instrument']} loss)")
                 log.info(f"{emoji} {s['instrument']} {s['direction']} → {result} | ₹{pnl_rs} (opt exit ₹{cur_opt})"
                          + (f" · peak ₹{pk[0]} at {pk[1]}" if pk else ""))
                 opt_dict = {"symbol": s.get("option_symbol", "")} if s.get("option_symbol") else None
@@ -3857,6 +3868,18 @@ class Engine:
                                     result["option"] = opt
                             except Exception:
                                 pass
+
+                        # ── Cross-instrument LOSS cooldown ──
+                        # If a same-direction trade just hit SL, suppress
+                        # new fires of that direction for 60 min — the read
+                        # was likely wrong, don't double down.
+                        cd_until = self.tracker._loss_cooldown.get(sig["direction"])
+                        if cd_until and datetime.now(IST) < cd_until:
+                            mins_left = int((cd_until - datetime.now(IST)).total_seconds() / 60) + 1
+                            log.info(f"⏸ {name} {sig['direction']} skipped — "
+                                     f"loss cooldown active ({mins_left}m remaining)")
+                            self._last_signal[name] = datetime.now(IST)
+                            continue
 
                         # ── Layer B: validation + sizing + SL rule ──
                         ai_result = SignalValidation.analyze(name, sig, opt, regime=regime,
