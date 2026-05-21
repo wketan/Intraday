@@ -324,17 +324,8 @@ class SlackAlert:
             try: return f"{int(round(float(v))):,}"
             except: return str(v)
 
-        # Humanize the option symbol so it's actually readable on Slack:
-        #   "BANKNIFTY26MAY2654300CE"  →  "BANKNIFTY · 26-May-26 · 54300 CE"
-        import re as _re
-        def _human_sym(s):
-            if not s: return ""
-            m = _re.match(r'^([A-Z]+?)(\d{1,2})([A-Z]{3})(\d{2,4})(\d+)(CE|PE)$', s.upper())
-            if m:
-                ix, dd, mon, yy, strike, typ = m.groups()
-                yy_short = yy[-2:] if len(yy) >= 2 else yy
-                return f"{ix} · {dd}-{mon.title()}-{yy_short} · {strike} {typ}"
-            return s
+        # Delegate to the canonical humanizer (fixed regex for Angel symbols).
+        _human_sym = SlackAlert._humanize_symbol
 
         arrow = "🟢" if signal["direction"] == "LONG" else "🔴"
         entry_time = signal.get("timestamp", datetime.now(IST).strftime("%H:%M"))
@@ -408,14 +399,21 @@ class SlackAlert:
 
     @staticmethod
     def _humanize_symbol(sym):
-        """BANKNIFTY26MAY2654300CE → BANKNIFTY · 26-May-26 · 54300 CE"""
+        """Parse Angel One option symbol format:
+            <SYMBOL><DD><MMM><YY><STRIKE><CE/PE>
+        e.g. BANKNIFTY26MAY2554300CE → BANKNIFTY · 26-May-25 · 54300 CE
+
+        Year is EXACTLY 2 digits (the current Angel/NSE format). Earlier
+        version used \\d{2,4} which was greedy and chewed up the first
+        2 digits of the strike (e.g. parsed "2525700" as year=2525,
+        strike=700, breaking FINNIFTY25700 → "700" in the alert).
+        """
         if not sym: return ""
         import re as _re
-        m = _re.match(r'^([A-Z]+?)(\d{1,2})([A-Z]{3})(\d{2,4})(\d+)(CE|PE)$', sym.upper())
+        m = _re.match(r'^([A-Z]+?)(\d{1,2})([A-Z]{3})(\d{2})(\d{3,6})(CE|PE)$', sym.upper())
         if m:
             ix, dd, mon, yy, strike, typ = m.groups()
-            yy_short = yy[-2:] if len(yy) >= 2 else yy
-            return f"{ix} · {dd}-{mon.title()}-{yy_short} · {strike} {typ}"
+            return f"{ix} · {dd}-{mon.title()}-{yy} · {strike} {typ}"
         return sym
 
     @staticmethod
@@ -4741,7 +4739,18 @@ def config():
     d=flask_request.json or{}
     if"target_min"in d:CONFIG["target_points_min"]=int(d["target_min"]);engine.sgen.tmin=int(d["target_min"])
     if"target_max"in d:CONFIG["target_points_max"]=int(d["target_max"]);engine.sgen.tmax=int(d["target_max"])
-    return jsonify({"status":"ok"})
+    # Trading capital — drives OptPicker's max_capital cap. The user can
+    # now bump or lower this from the dashboard profile modal and the
+    # NEXT signal will size its option position to fit the new budget.
+    if "budget" in d:
+        try:
+            new_budget = int(d["budget"])
+            if new_budget >= 5000:
+                CONFIG["budget"] = new_budget
+                log.info(f"💰 Capital updated → ₹{new_budget:,}")
+        except Exception:
+            pass
+    return jsonify({"status":"ok", "budget": CONFIG.get("budget")})
 
 @app.route("/api/history")
 def history():

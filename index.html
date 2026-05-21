@@ -946,7 +946,14 @@
     .lcm-row2 b.loss { color: var(--short); }
     .lcm-k { font-size: 9.5px; color: var(--ink-3); letter-spacing: 0.06em; text-transform: uppercase; }
     .lcm-arrow, .lcm-sep { color: var(--ink-3); }
-    .lcm-pnl-now, .lcm-pnl-peak { display: inline-flex; align-items: baseline; gap: 5px; }
+    .lcm-block {
+      display: inline-flex; align-items: baseline; gap: 5px;
+      white-space: nowrap; flex-shrink: 0;
+      padding: 2px 8px; border-radius: 6px;
+      background: oklch(0 0 0 / 0.18);
+    }
+    [data-theme="light"] .lcm-block { background: oklch(0 0 0 / 0.04); }
+    .lcm-time { color: var(--ink-3); margin-left: 3px; }
     .lcm-row3 b { font-size: 13px; font-weight: 700; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
     .lcm-row3 b.win  { color: var(--long);  text-shadow: 0 0 10px var(--win-glow); }
     .lcm-row3 b.loss { color: var(--short); text-shadow: 0 0 10px var(--loss-glow); }
@@ -3811,11 +3818,14 @@ function SwingTab({ data, getServer, getAuthToken, showToast }) {
     // status poll updates.
     function _humanSym(sym) {
       if (!sym) return '';
-      const m = String(sym).toUpperCase().match(/^([A-Z]+?)(\d{1,2})([A-Z]{3})(\d{2,4})(\d+)(CE|PE)$/);
+      // Angel/NSE option format: <SYMBOL><DD><MMM><YY><STRIKE><CE/PE>
+      // YY is exactly 2 digits; previous \d{2,4} pattern was greedy and
+      // ate 2 digits off the strike (e.g. FINNIFTY26MAY2525700CE → strike "700").
+      const m = String(sym).toUpperCase().match(/^([A-Z]+?)(\d{1,2})([A-Z]{3})(\d{2})(\d{3,6})(CE|PE)$/);
       if (!m) return sym;
       const [, ix, dd, mon, yy, strike, typ] = m;
       const monTitle = mon[0] + mon.slice(1).toLowerCase();
-      return `${ix} · ${dd}-${monTitle}-${yy.slice(-2)} · ${strike} ${typ}`;
+      return `${ix} · ${dd}-${monTitle}-${yy} · ${strike} ${typ}`;
     }
     function LiveSignalCard({ sig }) {
       if (!sig) return null;
@@ -3849,19 +3859,22 @@ function SwingTab({ data, getServer, getAuthToken, showToast }) {
               <span className="lcm-k">T2</span><b className="win">₹{Math.round(t2)}</b>
             </div>
             <div className="lcm-row3">
-              <div className="lcm-pnl-now">
+              <span className="lcm-block">
                 <span className="lcm-k">Now</span>
                 {pnlNow == null
                   ? <b className="muted">—</b>
-                  : <><b className={winNow ? 'win' : 'loss'}>{fmt(pnlNow)}</b><span className={`pct ${winNow?'win':'loss'}`}>{(pctNow >= 0 ? '+' : '')}{pctNow.toFixed(1)}%</span></>}
-              </div>
+                  : <>
+                      <b className={winNow ? 'win' : 'loss'}>{fmt(pnlNow)}</b>
+                      <span className={`pct ${winNow?'win':'loss'}`}>{(pctNow >= 0 ? '+' : '')}{pctNow.toFixed(1)}%</span>
+                    </>}
+              </span>
               {peak != null && pnlPk != null && pnlPk > 0 && (
-                <div className="lcm-pnl-peak">
+                <span className="lcm-block">
                   <span className="lcm-k">Peak</span>
                   <b className="win">{fmt(pnlPk)}</b>
                   <span className="pct win">+{pctPk.toFixed(1)}%</span>
-                  <span className="lcm-k" style={{marginLeft:6}}>at {sig.peak_time}</span>
-                </div>
+                  <span className="lcm-k lcm-time">at {sig.peak_time}</span>
+                </span>
               )}
               <span className="lcm-tin">entered {sig.t_in}</span>
             </div>
@@ -4439,6 +4452,17 @@ function SwingTab({ data, getServer, getAuthToken, showToast }) {
         const id = setInterval(check, 10000);
         return () => { alive = false; clearInterval(id); };
       }, []);
+
+      // One-shot capital sync on app mount — the user's stored profile
+      // capital ("₹50K cap" in the chip) is the source of truth. Push it
+      // to the server so OptPicker sizes lots within that budget.
+      useEffect(() => {
+        if (!capital || capital < 5000) return;
+        apiFetch('/api/config', {
+          method: 'POST',
+          body: JSON.stringify({ budget: Number(capital) }),
+        }).catch(()=>{});
+      }, []);  // mount-only — explicit saves handle updates
 
       // engine on/off sync — independent of the live-poller so the dashboard
       // mirrors the server's running state even when the client thinks it's
@@ -5018,6 +5042,14 @@ function SwingTab({ data, getServer, getAuthToken, showToast }) {
                   localStorage.setItem('se_user_name', name);
                   localStorage.setItem('se_capital', String(cap));
                 } catch(_) {}
+                // Push the new capital to the server so OptPicker uses it
+                // when sizing the NEXT signal. Without this, the dashboard
+                // would show one capital but the engine would keep using
+                // the BUDGET env var to pick lots.
+                apiFetch('/api/config', {
+                  method: 'POST',
+                  body: JSON.stringify({ budget: Number(cap) }),
+                }).catch(()=>{});
                 setProfileOpen(false);
               }}
             />
