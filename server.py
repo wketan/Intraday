@@ -4756,6 +4756,128 @@ def start():
 def stop():
     return jsonify(engine.stop())
 
+@app.route("/api/backtest", methods=["POST"])
+@require_auth
+def api_backtest():
+    """Run a multi-day backtest of the v2 strategy across NIFTY/BANKNIFTY/
+    FINNIFTY and return JSON results.
+
+    Body:
+      {
+        "days":       int (default 30, max 90),
+        "symbols":    ["NIFTY","BANKNIFTY","FINNIFTY"]  (default all 3),
+        "budget":     int (default current CONFIG['budget'])
+      }
+
+    Returns:
+      {
+        "ok": true,
+        "summary": { ... aggregate stats per symbol + overall ... },
+        "trades":  [ ...per-trade rows, capped at 500... ],
+        "params":  { days, symbols, budget, range }
+      }
+
+    Slow endpoint (data_layer fetches candles + option premiums from Angel/
+    NSE bhavcopy for every signal). Caller should set a long client timeout.
+    """
+    try:
+        body = flask_request.json or {}
+        days     = max(1, min(int(body.get("days", 30)), 90))
+        budget   = int(body.get("budget", CONFIG.get("budget", 50000)))
+        symbols  = body.get("symbols") or ["NIFTY", "BANKNIFTY", "FINNIFTY"]
+        symbols  = [s for s in symbols if s in INSTRUMENTS]
+        if not symbols:
+            return jsonify({"ok": False, "error": "No valid symbols"}), 400
+
+        from datetime import date, timedelta
+        try:
+            from backtest_v2 import run_backtest, summarise
+            import dataclasses
+        except Exception as e:
+            return jsonify({"ok": False, "error": f"backtest import failed: {e}"}), 500
+
+        to_date   = datetime.now(IST).date() - timedelta(days=1)  # yesterday
+        from_date = to_date - timedelta(days=days)
+
+        all_trades = []
+        by_symbol  = {}
+        for sym in symbols:
+            try:
+                ts = run_backtest(sym, from_date, to_date, budget=budget, verbose=False)
+            except Exception as e:
+                log.warning(f"  backtest {sym} crashed: {e}")
+                ts = []
+            # Compute per-symbol summary
+            taken_w = [t for t in ts if t.bucket == "TAKEN_WIN"]
+            taken_l = [t for t in ts if t.bucket == "TAKEN_LOSS"]
+            taken_n = len(taken_w) + len(taken_l)
+            net = sum(t.net_pnl for t in taken_w + taken_l)
+            wr  = round(len(taken_w) / taken_n * 100, 1) if taken_n else 0.0
+            by_symbol[sym] = {
+                "trades": taken_n,
+                "wins":   len(taken_w),
+                "losses": len(taken_l),
+                "win_rate": wr,
+                "net_pnl":  round(net, 0),
+                "avg_win":  round(sum(t.net_pnl for t in taken_w) / len(taken_w), 0) if taken_w else 0,
+                "avg_loss": round(sum(t.net_pnl for t in taken_l) / len(taken_l), 0) if taken_l else 0,
+                "filtered": len([t for t in ts if t.bucket.startswith("FILTERED")]),
+            }
+            all_trades.extend(ts)
+
+        # Aggregate stats across all symbols (TAKEN only — those are what the engine would have fired)
+        taken = [t for t in all_trades if t.bucket in ("TAKEN_WIN", "TAKEN_LOSS")]
+        wins  = [t for t in taken if t.bucket == "TAKEN_WIN"]
+        losses = [t for t in taken if t.bucket == "TAKEN_LOSS"]
+        cum = 0.0; peak = 0.0; dd = 0.0
+        for t in sorted(taken, key=lambda x: (x.date, x.time)):
+            cum += t.net_pnl
+            peak = max(peak, cum)
+            dd = min(dd, cum - peak)
+        win_rate = round(len(wins) / len(taken) * 100, 1) if taken else 0.0
+        net_pnl = sum(t.net_pnl for t in taken)
+        avg_win  = (sum(t.net_pnl for t in wins) / len(wins))  if wins  else 0
+        avg_loss = (sum(t.net_pnl for t in losses) / len(losses)) if losses else 0
+        expectancy = round((win_rate/100) * avg_win + ((100-win_rate)/100) * avg_loss, 0)
+
+        # Equity curve (cumulative net P&L per closed trade, ordered by time)
+        ordered = sorted(taken, key=lambda x: (x.date, x.time))
+        curve = []; c = 0.0
+        for t in ordered:
+            c += t.net_pnl
+            curve.append({"date": t.date, "time": t.time, "pnl": round(c, 0)})
+
+        # Cap returned per-trade rows at 500 for payload size
+        trades_out = [dataclasses.asdict(t) for t in all_trades[:500]]
+
+        return jsonify({
+            "ok": True,
+            "params": {
+                "days": days, "from": str(from_date), "to": str(to_date),
+                "symbols": symbols, "budget": budget,
+            },
+            "summary": {
+                "total_signals": len(all_trades),
+                "taken_count":   len(taken),
+                "filtered_count": len(all_trades) - len(taken),
+                "wins":          len(wins),
+                "losses":        len(losses),
+                "win_rate":      win_rate,
+                "net_pnl":       round(net_pnl, 0),
+                "avg_win":       round(avg_win, 0),
+                "avg_loss":      round(avg_loss, 0),
+                "expectancy":    expectancy,
+                "max_drawdown":  round(dd, 0),
+                "by_symbol":     by_symbol,
+                "equity_curve":  curve,
+            },
+            "trades": trades_out,
+        })
+    except Exception as e:
+        log.error(f"  /api/backtest error: {e}")
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
 @app.route("/api/config", methods=["POST"])
 @require_auth
 def config():

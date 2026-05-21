@@ -1131,6 +1131,87 @@
       background: var(--glass-bg); border: 1px solid var(--glass-border); color: var(--ink-1);
     }
 
+    /* ── Backtest view ────────────────────────────────────────────── */
+    .backtest-view { display: flex; flex-direction: column; gap: 10px; padding: 0 var(--pad-x); }
+    .bt-controls {
+      display: flex; align-items: center; gap: 20px;
+      padding: 12px 16px; flex-wrap: wrap;
+    }
+    .bt-control { display: flex; align-items: center; gap: 8px; }
+    .bt-control label {
+      font-family: var(--mono); font-size: 10px; font-weight: 600;
+      letter-spacing: 0.10em; text-transform: uppercase; color: var(--ink-3);
+    }
+    .bt-seg {
+      display: inline-flex; gap: 2px;
+      background: var(--bg-2); border: 1px solid var(--line-1);
+      border-radius: 8px; padding: 2px;
+    }
+    .bt-seg button {
+      padding: 5px 11px; border-radius: 6px; border: 0;
+      background: transparent; color: var(--ink-2);
+      font-family: var(--mono); font-size: 11px; font-weight: 600;
+      cursor: pointer; transition: all 0.15s;
+    }
+    .bt-seg button.on {
+      background: linear-gradient(95deg, var(--accent), var(--accent-2));
+      color: var(--accent-ink);
+    }
+    .bt-run {
+      margin-left: auto; padding: 9px 18px;
+      background: linear-gradient(95deg, var(--accent), var(--accent-2));
+      color: var(--accent-ink); border: 0; border-radius: 9px;
+      font-family: var(--ui); font-weight: 600; font-size: 12.5px;
+      cursor: pointer; box-shadow: 0 4px 14px oklch(0.55 0.18 290 / 0.35);
+      transition: transform 0.15s;
+    }
+    .bt-run:hover:not(:disabled) { transform: translateY(-1px); }
+    .bt-run:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    .bt-loading { padding: 18px 20px; display: flex; align-items: center; gap: 16px; }
+    .bt-spinner {
+      width: 22px; height: 22px; border-radius: 50%;
+      border: 2px solid var(--line-2); border-top-color: var(--accent);
+      animation: bt-spin 0.9s linear infinite;
+    }
+    @keyframes bt-spin { to { transform: rotate(360deg); } }
+    .bt-loading-title { font-weight: 600; font-size: 14px; color: var(--ink-0); }
+    .bt-loading-sub { font-size: 12px; color: var(--ink-2); margin-top: 2px; }
+
+    .bt-error { padding: 14px 16px; color: var(--short); font-family: var(--mono); font-size: 12px; }
+
+    .bt-stat-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+    @media (max-width: 1000px) { .bt-stat-row { grid-template-columns: repeat(2, 1fr); } }
+    .bt-stat-card { padding: 14px 16px; }
+    .bt-stat-eb {
+      font-family: var(--mono); font-size: 9.5px; font-weight: 600;
+      letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-3);
+      margin-bottom: 6px;
+    }
+    .bt-stat-val {
+      font-size: 24px; font-weight: 700; letter-spacing: -0.025em;
+      font-variant-numeric: tabular-nums; line-height: 1.05;
+    }
+    .bt-stat-sub { font-size: 11px; color: var(--ink-2); margin-top: 4px; font-family: var(--mono); }
+
+    .bt-curve { padding: 14px 16px; }
+    .bt-curve-head { display: flex; justify-content: space-between; margin-bottom: 8px; }
+    .bt-curve-title { font-weight: 600; font-size: 13px; }
+    .bt-curve-meta { font-family: var(--mono); font-size: 11px; color: var(--ink-3); }
+    .bt-curve-svg { width: 100%; height: 100px; display: block; }
+
+    .bt-bysym, .bt-tradelog { padding: 14px 16px; }
+    .bt-bysym-head, .bt-tradelog-head { font-weight: 600; font-size: 13px; margin-bottom: 8px; }
+    .bt-table { width: 100%; border-collapse: collapse; font-size: 11.5px; font-family: var(--mono); }
+    .bt-table th { text-align: left; padding: 6px 8px; color: var(--ink-3); font-weight: 600;
+                   letter-spacing: 0.06em; text-transform: uppercase; border-bottom: 1px solid var(--line-1); font-size: 9.5px; }
+    .bt-table td { padding: 6px 8px; border-bottom: 1px dashed var(--line-0); color: var(--ink-1); font-variant-numeric: tabular-nums; }
+    .bt-table tr:last-child td { border-bottom: 0; }
+
+    .bt-hint { padding: 16px 18px; }
+    .bt-hint-title { font-weight: 600; font-size: 14px; margin-bottom: 6px; }
+    .bt-hint-body { font-size: 12px; color: var(--ink-2); line-height: 1.55; }
+
     /* hide the old tab bar inside the new shell — sidebar replaces it */
     .app-shell .tabs { display: none !important; }
     /* Kill inst-row's extra vertical padding so the gap from LIVE HERO to
@@ -3511,7 +3592,7 @@ function SwingTab({ data, getServer, getAuthToken, showToast }) {
           ico: <svg viewBox="0 0 24 24"><path d="M3 12h4l3-9 4 18 3-9h4"/></svg>,
           badge: liveCount > 0 ? <span className="nav-badge live"><span className="nav-dot"></span>{liveCount}</span> : null,
         },
-        { id:'signals-back',   label:'Backtest',     tab:'signals', mode:'replay',
+        { id:'backtest',       label:'Backtest',     tab:'backtest',
           ico: <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M9 4v16"/></svg>,
         },
         { id:'journal',  label:'Journal', tab:'journal',
@@ -4039,6 +4120,204 @@ function SwingTab({ data, getServer, getAuthToken, showToast }) {
                   ))}
                 </div>
               )}
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    // ─── Backtest view ─────────────────────────────────────────────────
+    // Click "Run backtest" → POSTs /api/backtest → renders summary +
+    // per-symbol breakdown + equity curve + last 100 trades.
+    function BacktestView() {
+      const [days, setDays] = React.useState(30);
+      const [symbols, setSymbols] = React.useState({ NIFTY: true, BANKNIFTY: true, FINNIFTY: true });
+      const [loading, setLoading] = React.useState(false);
+      const [data, setData] = React.useState(null);
+      const [err, setErr] = React.useState(null);
+
+      const fmt = (n, signed = true) => {
+        const v = Math.round(Number(n) || 0);
+        const sign = signed ? (v >= 0 ? '+' : '−') : '';
+        return sign + '₹' + Math.abs(v).toLocaleString('en-IN');
+      };
+
+      const run = async () => {
+        setLoading(true); setErr(null); setData(null);
+        try {
+          const syms = Object.keys(symbols).filter(k => symbols[k]);
+          const r = await apiFetch('/api/backtest', {
+            method: 'POST',
+            body: JSON.stringify({ days, symbols: syms }),
+          });
+          const j = await r.json();
+          if (!j.ok) throw new Error(j.error || 'backtest failed');
+          setData(j);
+        } catch (e) {
+          setErr(e.message || String(e));
+        } finally {
+          setLoading(false);
+        }
+      };
+
+      const summary = data?.summary;
+      const trades  = data?.trades || [];
+      const winRateColor = summary && summary.win_rate >= 50 ? 'var(--long)' : 'var(--short)';
+      const pnlColor     = summary && summary.net_pnl >= 0 ? 'var(--long)' : 'var(--short)';
+
+      // Equity-curve SVG (small inline chart)
+      let curvePath = null, curveLast = null;
+      if (summary && summary.equity_curve && summary.equity_curve.length > 1) {
+        const ec = summary.equity_curve;
+        const pnls = ec.map(p => p.pnl);
+        const mn = Math.min(0, ...pnls), mx = Math.max(0, ...pnls);
+        const range = (mx - mn) || 1;
+        const W = 800, H = 120;
+        const step = ec.length > 1 ? W / (ec.length - 1) : W;
+        const pts = ec.map((p, i) => `${(i*step).toFixed(1)},${(H - ((p.pnl - mn) / range) * H).toFixed(1)}`).join(' ');
+        curvePath = pts;
+        curveLast = ec[ec.length - 1];
+      }
+
+      return (
+        <div className="backtest-view">
+          <div className="bt-controls gcard">
+            <div className="bt-control">
+              <label>Window</label>
+              <div className="bt-seg">
+                {[7, 30, 60, 90].map(d => (
+                  <button key={d} type="button" className={days === d ? 'on' : ''} onClick={() => setDays(d)}>{d}d</button>
+                ))}
+              </div>
+            </div>
+            <div className="bt-control">
+              <label>Symbols</label>
+              <div className="bt-seg">
+                {['NIFTY','BANKNIFTY','FINNIFTY'].map(s => (
+                  <button key={s} type="button" className={symbols[s] ? 'on' : ''}
+                          onClick={() => setSymbols({...symbols, [s]: !symbols[s]})}>{s}</button>
+                ))}
+              </div>
+            </div>
+            <button type="button" className="bt-run" onClick={run} disabled={loading || Object.values(symbols).every(v => !v)}>
+              {loading ? '⏳ Running…' : '▶ Run backtest'}
+            </button>
+          </div>
+
+          {loading && (
+            <div className="bt-loading gcard">
+              <div className="bt-spinner"/>
+              <div className="bt-loading-text">
+                <div className="bt-loading-title">Replaying {days} day{days===1?'':'s'} of market data…</div>
+                <div className="bt-loading-sub">Fetching candles · running v2 confluence · simulating each signal forward. Usually takes 30–120 seconds.</div>
+              </div>
+            </div>
+          )}
+
+          {err && (
+            <div className="bt-error gcard">⚠ Backtest failed: {err}</div>
+          )}
+
+          {summary && !loading && (
+            <>
+              {/* Top summary row */}
+              <div className="bt-stat-row">
+                <div className="gcard bt-stat-card">
+                  <div className="bt-stat-eb">Net P&amp;L</div>
+                  <div className="bt-stat-val" style={{color: pnlColor}}>{fmt(summary.net_pnl)}</div>
+                  <div className="bt-stat-sub">over {data.params.days} day{data.params.days===1?'':'s'}  ·  {data.params.from} → {data.params.to}</div>
+                </div>
+                <div className="gcard bt-stat-card">
+                  <div className="bt-stat-eb">Win rate</div>
+                  <div className="bt-stat-val" style={{color: winRateColor}}>{summary.win_rate}%</div>
+                  <div className="bt-stat-sub">{summary.wins}W · {summary.losses}L · {summary.taken_count} taken</div>
+                </div>
+                <div className="gcard bt-stat-card">
+                  <div className="bt-stat-eb">Expectancy</div>
+                  <div className="bt-stat-val" style={{color: summary.expectancy >= 0 ? 'var(--long)' : 'var(--short)'}}>{fmt(summary.expectancy)}</div>
+                  <div className="bt-stat-sub">per trade  ·  avg win {fmt(summary.avg_win)} / loss {fmt(summary.avg_loss)}</div>
+                </div>
+                <div className="gcard bt-stat-card">
+                  <div className="bt-stat-eb">Max drawdown</div>
+                  <div className="bt-stat-val" style={{color: 'var(--short)'}}>{fmt(summary.max_drawdown)}</div>
+                  <div className="bt-stat-sub">peak-to-trough on cumulative</div>
+                </div>
+              </div>
+
+              {/* Equity curve */}
+              {curvePath && (
+                <div className="gcard bt-curve">
+                  <div className="bt-curve-head">
+                    <span className="bt-curve-title">Equity curve</span>
+                    <span className="bt-curve-meta">Last point: {curveLast.date} {curveLast.time}  ·  {fmt(curveLast.pnl)}</span>
+                  </div>
+                  <svg viewBox="0 0 800 120" preserveAspectRatio="none" className="bt-curve-svg">
+                    <polyline points={curvePath} fill="none"
+                              stroke={summary.net_pnl >= 0 ? 'oklch(0.86 0.13 152)' : 'oklch(0.76 0.14 22)'}
+                              strokeWidth="1.5" strokeLinejoin="round"/>
+                  </svg>
+                </div>
+              )}
+
+              {/* Per-symbol breakdown */}
+              <div className="gcard bt-bysym">
+                <div className="bt-bysym-head">By symbol</div>
+                <table className="bt-table">
+                  <thead><tr><th>Symbol</th><th>Trades</th><th>Win rate</th><th>Wins</th><th>Losses</th><th>Net P&amp;L</th><th>Filtered</th></tr></thead>
+                  <tbody>
+                    {Object.entries(summary.by_symbol).map(([s, v]) => (
+                      <tr key={s}>
+                        <td>{s}</td>
+                        <td>{v.trades}</td>
+                        <td style={{color: v.win_rate >= 50 ? 'var(--long)' : 'var(--short)'}}>{v.win_rate}%</td>
+                        <td style={{color: 'var(--long)'}}>{v.wins}</td>
+                        <td style={{color: 'var(--short)'}}>{v.losses}</td>
+                        <td style={{color: v.net_pnl >= 0 ? 'var(--long)' : 'var(--short)', fontWeight: 600}}>{fmt(v.net_pnl)}</td>
+                        <td style={{color: 'var(--ink-3)'}}>{v.filtered}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Trade log (first 50) */}
+              <div className="gcard bt-tradelog">
+                <div className="bt-tradelog-head">Trade log <span style={{color:'var(--ink-3)', fontSize:11, fontWeight:400, marginLeft:8}}>showing {Math.min(50, trades.length)} of {summary.total_signals} signals</span></div>
+                <table className="bt-table">
+                  <thead><tr><th>Date</th><th>Time</th><th>Inst</th><th>Dir</th><th>Strike</th><th>Bucket</th><th>P&amp;L</th><th>Filter / reason</th></tr></thead>
+                  <tbody>
+                    {trades.slice(0, 50).map((t, i) => {
+                      const isTaken = t.bucket.startsWith('TAKEN');
+                      const isWin = t.bucket.endsWith('_WIN');
+                      return (
+                        <tr key={i}>
+                          <td>{t.date}</td>
+                          <td>{t.time}</td>
+                          <td>{t.instrument}</td>
+                          <td>{t.direction}</td>
+                          <td>{t.strike}{t.opt_type}</td>
+                          <td style={{color: !isTaken ? 'var(--ink-3)' : (isWin ? 'var(--long)' : 'var(--short)')}}>{t.bucket}</td>
+                          <td style={{color: t.net_pnl >= 0 ? 'var(--long)' : 'var(--short)', fontWeight: 600}}>{fmt(t.net_pnl)}</td>
+                          <td style={{color:'var(--ink-3)', fontSize:11}}>{t.filter_reason || t.exit_reason || '—'}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          )}
+
+          {!loading && !summary && !err && (
+            <div className="bt-hint gcard">
+              <div className="bt-hint-title">What this does</div>
+              <div className="bt-hint-body">
+                Replays the v2 strategy (6-indicator confluence: VWAP, RSI, EMA-stack, range-expansion, MACD, Bollinger) over the selected window, simulating each signal forward bar-by-bar against real option premiums.
+                Applies the same gates as live: regime filter, AI veto, breakeven-at-half-T1, 60-min cross-instrument loss cooldown.
+                <br/><br/>
+                <b>Win rate</b> below shows whether the strategy actually has an edge in the recent regime.
+                If you see &lt;45% win rate over 60+ days, the strategy needs structural rework — not parameter tweaks.
+              </div>
             </div>
           )}
         </div>
@@ -5021,6 +5300,7 @@ function SwingTab({ data, getServer, getAuthToken, showToast }) {
 
             <div key={tab+mode} className="reveal-enter" style={{flex:1, overflowY:'auto'}}>
               {tab === 'signals' && <SignalsTab sel={inst} setSel={setInst} signals={safeSignals} candles={safeCandles} live={safeLive} on={on}/>}
+              {tab === 'backtest'&& <BacktestView/>}
               {tab === 'swing'   && <SwingTab data={swingData} getServer={getServer} getAuthToken={getAuthToken} showToast={showToast}/>}
               {tab === 'journal' && <JournalTab trades={safeTrades}/>}
               {tab === 'stats' && <StatsTab trades={safeTrades} signals={safeSignals}/>}
