@@ -897,18 +897,22 @@
     .pill-pill { margin-top: 5px; }
     .pill-spark { margin-left: auto; width: 80px; height: 34px; flex-shrink: 0; }
 
-    /* ── live HERO card ──────────────────────────────────────────────── */
+    /* ── live HERO card (compact) ────────────────────────────────────── */
     .live-hero {
       position: relative; margin-bottom: 10px;
-      padding: 18px 20px; border-radius: 16px;
+      padding: 12px 14px; border-radius: 14px;
       background: linear-gradient(120deg, var(--accent-dim) 0%, transparent 60%), var(--glass-bg);
-      border: 2px solid var(--accent); overflow: hidden; cursor: pointer;
-      transition: transform 0.2s, box-shadow 0.2s;
-      box-shadow: 0 0 0 6px var(--accent-faint), var(--glass-shadow);
+      border: 1.5px solid var(--accent); overflow: hidden; cursor: pointer;
+      transition: transform 0.15s, box-shadow 0.15s;
+      box-shadow: 0 0 0 3px var(--accent-faint), var(--glass-shadow);
     }
-    .live-hero:hover { transform: translateY(-2px); box-shadow: 0 0 0 8px var(--accent-faint), var(--glass-shadow); }
-    .live-hero .lh-title { font-size: 19px; }
-    .live-hero .lh-pnl-num { font-size: 26px; }
+    .live-hero:hover { transform: translateY(-1px); box-shadow: 0 0 0 5px var(--accent-faint), var(--glass-shadow); }
+    .live-hero .lh-title { font-size: 15px; }
+    .live-hero .lh-pnl-num { font-size: 20px; }
+    .live-hero .lh-status { margin-bottom: 6px; }
+    .live-hero .lh-main { margin-bottom: 6px; }
+    .live-hero .lh-ai { margin-top: 6px; padding: 8px 10px; }
+    .live-hero .lh-ai-body { font-size: 11px; }
     .live-hero::before {
       content:''; position:absolute; inset:-2px; z-index:-1;
       border-radius: 14px;
@@ -2522,8 +2526,9 @@
             </span>
           </div>
 
-          {/* Strategy toggle (Phase 2.10) — switch v1 / v2 dry / v2 live from UI */}
-          <StrategyToggle eng={eng} onChange={onStrategyChange}/>
+          {/* Strategy toggle hidden — committing to a single engine for simplicity.
+              Set STRATEGY env var on Railway if you need to flip modes. */}
+          {false && <StrategyToggle eng={eng} onChange={onStrategyChange}/>}
 
           {/* Manual override controls */}
           {tripped ? (

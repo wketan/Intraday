@@ -513,10 +513,14 @@ Win rate: *{perf["win_rate"]}%*  ·  Net P&L: *{'+' if perf["total_pnl"]>=0 else
         if rows:
             msg += "\n*Trade-by-trade:*"
             for r in rows:
-                pnl = r.get("pnl_rupees", 0) or 0
+                raw_pnl = float(r.get("pnl_rupees", 0) or 0)
+                result = r.get("result") or "OPEN"
+                pnl_abs = abs(raw_pnl)
+                pnl = -pnl_abs if result == "LOSS" else (
+                       pnl_abs if result in ("WIN", "T1", "T2") else raw_pnl)
                 sign = "+" if pnl >= 0 else ""
-                emoji = "🎯" if r.get("result") == "T2" else ("✅" if r.get("result") == "WIN" else
-                        ("❌" if r.get("result") == "LOSS" else "⊙"))
+                emoji = "🎯" if result == "T2" else ("✅" if result == "WIN" else
+                        ("❌" if result == "LOSS" else "⊙"))
                 line = (f"\n{emoji} {r.get('instrument','')} {r.get('direction','')} "
                         f"{r.get('option_symbol','')} · "
                         f"{r.get('timestamp','—')}→{r.get('exit_time','—')} · "
@@ -560,9 +564,21 @@ Win rate: *{perf["win_rate"]}%*  ·  Net P&L: *{'+' if perf["total_pnl"]>=0 else
             blocks.append({"type": "section", "text": {"type": "mrkdwn", "text": "*Trade-by-trade*"}})
             # Slack 'context' blocks render small, dense lines — ideal for a list
             for r in rows:
-                pnl = int(round(float(r.get("pnl_rupees", 0) or 0)))
-                sign = "+" if pnl >= 0 else "−"
+                raw_pnl = float(r.get("pnl_rupees", 0) or 0)
                 result = r.get("result") or "OPEN"
+                # SIGN GUARD: enforce that LOSS rows display negative P&L
+                # and WIN/T1/T2 rows display positive. Some historical rows
+                # had a sign-mismatch from earlier code paths (option_entry=0
+                # fallback caused positive premium × qty to be stored against
+                # a LOSS classification). Coerce to the truth the label says.
+                pnl_abs = int(round(abs(raw_pnl)))
+                if result == "LOSS":
+                    pnl = -pnl_abs
+                elif result in ("WIN", "T1", "T2"):
+                    pnl = pnl_abs
+                else:
+                    pnl = int(round(raw_pnl))  # OPEN / EXPIRED keep their sign
+                sign = "+" if pnl >= 0 else "−"
                 emoji = ("🎯" if result == "T2" else
                          "✅" if result == "WIN" else
                          "❌" if result == "LOSS" else
@@ -877,10 +893,24 @@ def get_perf(date=None):
                 "total_brokerage":0,"total_slippage":0,
                 "avg_win":0,"avg_loss":0,"best_trade":0,"worst_trade":0}
     rows = [dict(r) for r in rows]
-    wins = [r for r in rows if r["result"]=="WIN"]
-    losses = [r for r in rows if r["result"]=="LOSS"]
-    pnls     = [r["pnl_rupees"]     or 0 for r in rows]
-    pnls_net = [r.get("pnl_rupees_net") if r.get("pnl_rupees_net") is not None else (r["pnl_rupees"] or 0) for r in rows]
+    wins = [r for r in rows if r["result"] in ("WIN", "T1", "T2")]
+    losses = [r for r in rows if r["result"] == "LOSS"]
+    # Sign-guard: same defensive normalization the formatters use, so the
+    # aggregate Net P&L can't show "+₹2,606" when every trade is a LOSS.
+    def _signed_pnl(r):
+        raw = float(r.get("pnl_rupees") or 0)
+        if r.get("result") == "LOSS":               return -abs(raw)
+        if r.get("result") in ("WIN", "T1", "T2"):  return  abs(raw)
+        return raw
+    def _signed_pnl_net(r):
+        raw = r.get("pnl_rupees_net")
+        if raw is None: raw = r.get("pnl_rupees") or 0
+        raw = float(raw)
+        if r.get("result") == "LOSS":               return -abs(raw)
+        if r.get("result") in ("WIN", "T1", "T2"):  return  abs(raw)
+        return raw
+    pnls     = [_signed_pnl(r)     for r in rows]
+    pnls_net = [_signed_pnl_net(r) for r in rows]
     brk      = [r.get("brokerage_rs") or 0 for r in rows]
     slp      = [r.get("slippage_rs")  or 0 for r in rows]
     return {
@@ -890,8 +920,8 @@ def get_perf(date=None):
         "total_pnl_net":round(sum(pnls_net),0),
         "total_brokerage":round(sum(brk),0),
         "total_slippage":round(sum(slp),0),
-        "avg_win":round(sum(r["pnl_rupees"] or 0 for r in wins)/len(wins),0) if wins else 0,
-        "avg_loss":round(sum(r["pnl_rupees"] or 0 for r in losses)/len(losses),0) if losses else 0,
+        "avg_win":round(sum(abs(r["pnl_rupees"] or 0) for r in wins)/len(wins),0) if wins else 0,
+        "avg_loss":round(sum(-abs(r["pnl_rupees"] or 0) for r in losses)/len(losses),0) if losses else 0,
         "best_trade":round(max(pnls),0) if pnls else 0,
         "worst_trade":round(min(pnls),0) if pnls else 0,
     }
