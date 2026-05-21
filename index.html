@@ -897,7 +897,68 @@
     .pill-pill { margin-top: 5px; }
     .pill-spark { margin-left: auto; width: 80px; height: 34px; flex-shrink: 0; }
 
-    /* ── live HERO card (compact) ────────────────────────────────────── */
+    /* ── LIVE signal feed (multiple compact cards) ──────────────────── */
+    .live-feed { display: flex; flex-direction: column; gap: 8px; margin-bottom: 10px; }
+    .live-feed-head {
+      display: flex; align-items: center; gap: 8px; padding: 0 4px 2px;
+      font-family: var(--mono); font-size: 10px; text-transform: uppercase;
+      letter-spacing: 0.14em; color: var(--ink-2);
+    }
+    .lfh-dot {
+      width: 8px; height: 8px; border-radius: 50%;
+      background: oklch(0.78 0.20 22);
+      box-shadow: 0 0 8px oklch(0.78 0.20 22);
+      animation: nav-pulse 1.4s ease-in-out infinite;
+    }
+    .lfh-title { color: var(--ink-0); font-weight: 700; }
+    .lfh-count { margin-left: auto; color: var(--ink-3); }
+    .live-feed-empty {
+      padding: 14px 16px; margin-bottom: 10px;
+      background: var(--glass-bg); border: 1px solid var(--glass-border);
+      backdrop-filter: blur(30px) saturate(180%);
+      border-radius: 12px; box-shadow: var(--glass-shadow);
+      font-family: var(--mono); font-size: 11.5px; color: var(--ink-2);
+      display: flex; align-items: center; gap: 10px;
+    }
+    .lfe-dot {
+      width: 6px; height: 6px; border-radius: 50%;
+      background: var(--long); box-shadow: 0 0 6px var(--long);
+      animation: nav-pulse 1.6s ease-in-out infinite;
+    }
+    .live-card-mini {
+      display: grid; grid-template-columns: 3px 1fr;
+      background: linear-gradient(120deg, var(--accent-dim) 0%, transparent 65%), var(--glass-bg);
+      border: 1px solid var(--accent);
+      border-radius: 11px; overflow: hidden;
+      box-shadow: 0 0 0 2px var(--accent-faint), var(--glass-shadow);
+    }
+    .lcm-bar { background: linear-gradient(180deg, var(--accent), var(--accent-2)); }
+    .lcm-body { padding: 9px 12px; display: flex; flex-direction: column; gap: 4px; }
+    .lcm-row1 { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+    .lcm-title { font-size: 13px; font-weight: 700; letter-spacing: -0.015em; color: var(--ink-0); }
+    .lcm-sym   { font-family: var(--mono); font-size: 11px; color: var(--ink-2); letter-spacing: 0.02em; }
+    .lcm-row2, .lcm-row3 {
+      display: flex; align-items: baseline; gap: 5px; flex-wrap: wrap;
+      font-family: var(--mono); font-size: 11px; color: var(--ink-2);
+    }
+    .lcm-row2 b { color: var(--ink-0); font-weight: 700; font-variant-numeric: tabular-nums; }
+    .lcm-row2 b.win  { color: var(--long); }
+    .lcm-row2 b.loss { color: var(--short); }
+    .lcm-k { font-size: 9.5px; color: var(--ink-3); letter-spacing: 0.06em; text-transform: uppercase; }
+    .lcm-arrow, .lcm-sep { color: var(--ink-3); }
+    .lcm-pnl-now, .lcm-pnl-peak { display: inline-flex; align-items: baseline; gap: 5px; }
+    .lcm-row3 b { font-size: 13px; font-weight: 700; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+    .lcm-row3 b.win  { color: var(--long);  text-shadow: 0 0 10px var(--win-glow); }
+    .lcm-row3 b.loss { color: var(--short); text-shadow: 0 0 10px var(--loss-glow); }
+    .lcm-row3 .pct {
+      font-family: var(--mono); font-size: 10px; font-weight: 600;
+      padding: 1px 6px; border-radius: 999px;
+    }
+    .lcm-row3 .pct.win  { background: var(--long-dim);  color: var(--long); }
+    .lcm-row3 .pct.loss { background: var(--short-dim); color: var(--short); }
+    .lcm-tin { margin-left: auto; font-family: var(--mono); font-size: 10px; color: var(--ink-3); }
+
+    /* ── live HERO card (compact) — legacy, kept for fallback ──────── */
     .live-hero {
       position: relative; margin-bottom: 10px;
       padding: 12px 14px; border-radius: 14px;
@@ -3510,7 +3571,7 @@ function SwingTab({ data, getServer, getAuthToken, showToast }) {
             </div>
             <div className="name">
               <span>Intraday Engine</span>
-              <span className="sub">v2 · live</span>
+              <span className="sub">live · auto-scheduled</span>
             </div>
           </div>
           {renderGroup(trading, 'Trading')}
@@ -3580,7 +3641,7 @@ function SwingTab({ data, getServer, getAuthToken, showToast }) {
             <div className="lsub">
               {mode === 'replay'
                 ? `${replayDays || 5}d window · ${speed||1}x speed · IST ${istTime}`
-                : `v2 · OHLC + RSI + EMA + VWAP + level breaks · IST ${istTime}`}
+                : `OHLC · RSI · EMA · VWAP · MACD · Bollinger · IST ${istTime}`}
             </div>
           </div>
           <span style={{flex: 1}}/>
@@ -3739,6 +3800,91 @@ function SwingTab({ data, getServer, getAuthToken, showToast }) {
               </div>
             );
           })}
+        </div>
+      );
+    }
+
+    // ─── Multiple compact LIVE cards ───────────────────────────────────
+    // Renders one row per OPEN signal from /api/status. Each card shows
+    // current premium, current P&L, peak P&L (with the time it peaked),
+    // and the entry/SL/T1/T2 ladder. Cards auto-refresh as the parent's
+    // status poll updates.
+    function _humanSym(sym) {
+      if (!sym) return '';
+      const m = String(sym).toUpperCase().match(/^([A-Z]+?)(\d{1,2})([A-Z]{3})(\d{2,4})(\d+)(CE|PE)$/);
+      if (!m) return sym;
+      const [, ix, dd, mon, yy, strike, typ] = m;
+      const monTitle = mon[0] + mon.slice(1).toLowerCase();
+      return `${ix} · ${dd}-${monTitle}-${yy.slice(-2)} · ${strike} ${typ}`;
+    }
+    function LiveSignalCard({ sig }) {
+      if (!sig) return null;
+      const entry  = Number(sig.entry || 0);
+      const cur    = sig.current_premium != null ? Number(sig.current_premium) : null;
+      const sl     = Number(sig.sl || 0);
+      const t1     = Number(sig.t1 || 0);
+      const t2     = Number(sig.t2 || 0);
+      const peak   = sig.peak_premium != null ? Number(sig.peak_premium) : null;
+      const pnlNow = sig.pnl_now != null ? Number(sig.pnl_now) : null;
+      const pnlPk  = sig.pnl_peak != null ? Number(sig.pnl_peak) : null;
+      const pctNow = (cur != null && entry > 0) ? ((cur - entry) / entry * 100) : null;
+      const pctPk  = (peak != null && entry > 0) ? ((peak - entry) / entry * 100) : null;
+      const winNow = pnlNow == null ? null : pnlNow >= 0;
+
+      const fmt = n => (n >= 0 ? '+' : '−') + '₹' + Math.abs(Math.round(n)).toLocaleString('en-IN');
+      return (
+        <div className="live-card-mini">
+          <div className="lcm-bar"/>
+          <div className="lcm-body">
+            <div className="lcm-row1">
+              <span className="lcm-title">{sig.instrument} {sig.direction}</span>
+              <span className="lcm-sym">{_humanSym(sig.option_symbol)}</span>
+            </div>
+            <div className="lcm-row2">
+              <span className="lcm-k">Entry</span><b>₹{Math.round(entry)}</b>
+              {cur != null && <><span className="lcm-arrow">→</span><span className="lcm-k">LTP</span><b className={winNow ? 'win' : 'loss'}>₹{Math.round(cur)}</b></>}
+              <span className="lcm-sep">·</span>
+              <span className="lcm-k">SL</span><b className="loss">₹{Math.round(sl)}</b>
+              <span className="lcm-k">T1</span><b className="win">₹{Math.round(t1)}</b>
+              <span className="lcm-k">T2</span><b className="win">₹{Math.round(t2)}</b>
+            </div>
+            <div className="lcm-row3">
+              <div className="lcm-pnl-now">
+                <span className="lcm-k">Now</span>
+                {pnlNow == null
+                  ? <b className="muted">—</b>
+                  : <><b className={winNow ? 'win' : 'loss'}>{fmt(pnlNow)}</b><span className={`pct ${winNow?'win':'loss'}`}>{(pctNow >= 0 ? '+' : '')}{pctNow.toFixed(1)}%</span></>}
+              </div>
+              {peak != null && pnlPk != null && pnlPk > 0 && (
+                <div className="lcm-pnl-peak">
+                  <span className="lcm-k">Peak</span>
+                  <b className="win">{fmt(pnlPk)}</b>
+                  <span className="pct win">+{pctPk.toFixed(1)}%</span>
+                  <span className="lcm-k" style={{marginLeft:6}}>at {sig.peak_time}</span>
+                </div>
+              )}
+              <span className="lcm-tin">entered {sig.t_in}</span>
+            </div>
+          </div>
+        </div>
+      );
+    }
+    function LiveSignalFeed({ openSignals }) {
+      if (!Array.isArray(openSignals) || openSignals.length === 0) {
+        return (
+          <div className="live-feed-empty">
+            <span className="lfe-dot"/> No active signals. Engine is scanning…
+          </div>
+        );
+      }
+      return (
+        <div className="live-feed">
+          <div className="live-feed-head">
+            <span className="lfh-dot"/>
+            <span className="lfh-title">Live signals</span>
+            <span className="lfh-count">{openSignals.length} active</span>
+          </div>
+          {openSignals.map(sig => <LiveSignalCard key={sig.id} sig={sig}/>)}
         </div>
       );
     }
@@ -3958,6 +4104,7 @@ function SwingTab({ data, getServer, getAuthToken, showToast }) {
       const [serverOk, setServerOk] = useState(null);
       const [signals, setSignals] = useState([]);
       const [trades, setTrades] = useState([]);
+      const [openSignals, setOpenSignals] = useState([]);   // server-side live tracking
       const [logLines, setLogLines] = useState([]);
       const [candles, setCandles] = useState({});    // { NIFTY:[...], BANKNIFTY:[...], ... }
       const [live, setLive] = useState({});          // { NIFTY:{ltp, chg, pct}, ... }
@@ -4349,6 +4496,11 @@ function SwingTab({ data, getServer, getAuthToken, showToast }) {
             const s = await apiJSON('/api/status');
             if (!alive) return;
             lastStatusErr = ''; // success — reset throttle
+
+            // ── OPEN signals (live tracking): one card per row, with current
+            // premium + peak + live P&L. Server's PLTracker updates these
+            // every check() tick.
+            if (Array.isArray(s.open_signals)) setOpenSignals(s.open_signals);
 
             // ── WATCH signals: s.signals is the per-instrument latest-scan dict.
             // Always updated by server (no confidence gate). Show on dashboard with
@@ -4806,27 +4958,28 @@ function SwingTab({ data, getServer, getAuthToken, showToast }) {
                 />
                 <HeroRow trades={heroTrades} signals={safeSignals} capital={capital} mode={mode}/>
                 <IndexPills live={safeLive} candles={safeCandles}/>
-                {activeLive && (
-                  <LiveHeroCard
-                    signal={activeLive}
-                    simulatedTrade={simulatedTrades.find(t => t && t.id === activeLive.id) || null}
-                    live={safeLive}
-                    capital={capital}
-                    mode={mode}
-                    onOpen={() => {
-                      // SignalsTab expects sel to be a numeric INDEX into INST,
-                      // not the instrument name. Translate before calling.
-                      const idx = INST.findIndex(i => i && i.name === activeLive.inst);
-                      if (idx >= 0) setInst(idx);
-                      // Scroll the SignalsTab into view so "Details" feels like
-                      // it actually opened something.
-                      requestAnimationFrame(() => {
-                        const target = document.querySelector('.inst-row');
-                        if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                      });
-                    }}
-                  />
-                )}
+                {/* LIVE FEED — one compact card per open signal, with live
+                    P&L + peak. Falls back to the simulated/replay hero only
+                    when there are no open signals to track. */}
+                {openSignals.length > 0
+                  ? <LiveSignalFeed openSignals={openSignals}/>
+                  : activeLive && (
+                      <LiveHeroCard
+                        signal={activeLive}
+                        simulatedTrade={simulatedTrades.find(t => t && t.id === activeLive.id) || null}
+                        live={safeLive}
+                        capital={capital}
+                        mode={mode}
+                        onOpen={() => {
+                          const idx = INST.findIndex(i => i && i.name === activeLive.inst);
+                          if (idx >= 0) setInst(idx);
+                          requestAnimationFrame(() => {
+                            const target = document.querySelector('.inst-row');
+                            if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                          });
+                        }}
+                      />
+                    )}
               </div>
             )}
 

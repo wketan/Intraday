@@ -324,12 +324,24 @@ class SlackAlert:
             try: return f"{int(round(float(v))):,}"
             except: return str(v)
 
+        # Humanize the option symbol so it's actually readable on Slack:
+        #   "BANKNIFTY26MAY2654300CE"  →  "BANKNIFTY · 26-May-26 · 54300 CE"
+        import re as _re
+        def _human_sym(s):
+            if not s: return ""
+            m = _re.match(r'^([A-Z]+?)(\d{1,2})([A-Z]{3})(\d{2,4})(\d+)(CE|PE)$', s.upper())
+            if m:
+                ix, dd, mon, yy, strike, typ = m.groups()
+                yy_short = yy[-2:] if len(yy) >= 2 else yy
+                return f"{ix} · {dd}-{mon.title()}-{yy_short} · {strike} {typ}"
+            return s
+
         arrow = "🟢" if signal["direction"] == "LONG" else "🔴"
         entry_time = signal.get("timestamp", datetime.now(IST).strftime("%H:%M"))
 
-        header = f"{arrow} *{instrument} {signal['direction']}*"
+        header = f"{arrow}  *{instrument}  {signal['direction']}*"
         if option:
-            header += f"  ·  *{option.get('action','BUY')} {option['symbol']}*"
+            header += f"\n📋  *{option.get('action','BUY')}  ·  {_human_sym(option.get('symbol',''))}*"
 
         blocks = [
             {"type": "section", "text": {"type": "mrkdwn", "text": header}},
@@ -395,16 +407,30 @@ class SlackAlert:
         return blocks
 
     @staticmethod
+    def _humanize_symbol(sym):
+        """BANKNIFTY26MAY2654300CE → BANKNIFTY · 26-May-26 · 54300 CE"""
+        if not sym: return ""
+        import re as _re
+        m = _re.match(r'^([A-Z]+?)(\d{1,2})([A-Z]{3})(\d{2,4})(\d+)(CE|PE)$', sym.upper())
+        if m:
+            ix, dd, mon, yy, strike, typ = m.groups()
+            yy_short = yy[-2:] if len(yy) >= 2 else yy
+            return f"{ix} · {dd}-{mon.title()}-{yy_short} · {strike} {typ}"
+        return sym
+
+    @staticmethod
     def format_signal(instrument, signal, option, timing=None, ai=None):
         arrow = "🟢" if signal["direction"] == "LONG" else "🔴"
         entry_time = signal.get("timestamp", datetime.now(IST).strftime("%H:%M"))
-        
-        msg = f"""{arrow} *SIGNAL: {instrument} {signal["direction"]}*
+
+        msg = f"""{arrow}  *SIGNAL  ·  {instrument}  {signal["direction"]}*
 ━━━━━━━━━━━━━━━━━━━━━"""
 
         if option:
+            _sym = SlackAlert._humanize_symbol(option.get("symbol", ""))
             msg += f"""
-📋 *{option["action"]}: {option["symbol"]}*
+
+📋  *{option["action"]}  ·  {_sym}*
 
 *TRADE PLAN:*
 ▶ Buy at: `₹{option["entry"]}` (Live LTP)
@@ -521,10 +547,12 @@ Win rate: *{perf["win_rate"]}%*  ·  Net P&L: *{'+' if perf["total_pnl"]>=0 else
                 sign = "+" if pnl >= 0 else ""
                 emoji = "🎯" if result == "T2" else ("✅" if result == "WIN" else
                         ("❌" if result == "LOSS" else "⊙"))
-                line = (f"\n{emoji} {r.get('instrument','')} {r.get('direction','')} "
-                        f"{r.get('option_symbol','')} · "
-                        f"{r.get('timestamp','—')}→{r.get('exit_time','—')} · "
-                        f"{r.get('result','OPEN')} · {sign}₹{int(round(pnl))}")
+                ts_raw = (r.get('timestamp') or '')
+                t_in_text = ts_raw.split(" ")[1][:5] if " " in ts_raw else (ts_raw[:5] or '—')
+                line = (f"\n{emoji} {r.get('instrument','')} {r.get('direction','')} · "
+                        f"{SlackAlert._humanize_symbol(r.get('option_symbol','') or '')} · "
+                        f"{t_in_text}→{r.get('exit_time','—')} · "
+                        f"{result} · {sign}₹{int(round(pnl))}")
                 # Near-miss: peaked deep into favorable territory before SL
                 peak = r.get("peak_premium")
                 oent = float(r.get("option_entry") or 0)
@@ -585,8 +613,10 @@ Win rate: *{perf["win_rate"]}%*  ·  Net P&L: *{'+' if perf["total_pnl"]>=0 else
                          "⊙")
                 inst   = r.get("instrument", "")
                 dirn   = r.get("direction", "")
-                osym   = r.get("option_symbol", "")
-                t_in   = (r.get("timestamp") or "—")[:5]
+                osym   = SlackAlert._humanize_symbol(r.get("option_symbol", "") or "")
+                # timestamp is stored as "YYYY-MM-DD HH:MM:SS" — pull HH:MM
+                ts_raw = (r.get("timestamp") or "")
+                t_in   = ts_raw.split(" ")[1][:5] if " " in ts_raw else (ts_raw[:5] or "—")
                 t_out  = (r.get("exit_time") or "—")[:5]
                 # Near-miss tag for losses where premium peaked deep into
                 # favorable territory ("could have exited at peak").
@@ -2967,6 +2997,9 @@ class PLTracker:
         # and hitting SL).
         self._peak     = {}   # {sig_id: (peak_premium, "HH:MM")}
         self._trough   = {}   # {sig_id: (trough_premium, "HH:MM")}
+        # Most recent premium per open signal — exposed to the dashboard for
+        # the live "multiple compact cards" feed. Updated every check() tick.
+        self._last_seen = {}  # {sig_id: current_premium}
 
     def _current_option_price(self, token):
         """Fetch current option price via FULL mode depth; fall back to LTP."""
@@ -3018,6 +3051,8 @@ class PLTracker:
 
             # Trailing-SL bookkeeping (per signal id)
             if cur_opt is not None:
+                # Live "current premium" for the dashboard feed
+                self._last_seen[s["id"]] = cur_opt
                 best = self._best_premium.get(s["id"], opt_entry)
                 if cur_opt > best:
                     best = cur_opt
@@ -3133,6 +3168,7 @@ class PLTracker:
                 self._best_premium.pop(s["id"], None)
                 self._peak.pop(s["id"], None)
                 self._trough.pop(s["id"], None)
+                self._last_seen.pop(s["id"], None)
 
     def close_all(self):
         opens = db_exec("SELECT * FROM signals WHERE status='OPEN' AND date=?",
@@ -3897,7 +3933,63 @@ class Engine:
                 log.error(f"Loop err: {e}");time.sleep(5)
     
     def get_state(self):
+        # Live-tracking feed: every OPEN signal with current premium, peak,
+        # and live P&L. Drives the dashboard's "multiple compact cards"
+        # showing each trade's status in real time.
+        open_signals = []
+        try:
+            today = datetime.now(IST).strftime("%Y-%m-%d")
+            opens = db_exec(
+                "SELECT * FROM signals WHERE status='OPEN' AND date=? ORDER BY id DESC",
+                (today,), fetch=True) or []
+            for r in opens:
+                r = dict(r)
+                pk = self.tracker._peak.get(r["id"])
+                cur = self.tracker._last_seen.get(r["id"]) if hasattr(self.tracker, "_last_seen") else None
+                opt_entry = float(r.get("option_entry") or 0)
+                opt_sl    = float(r.get("option_sl") or 0)
+                opt_t1    = float(r.get("option_target1") or 0)
+                opt_t2    = float(r.get("option_target2") or 0)
+                lot_size  = int(r.get("option_lot_size") or 0)
+                lots      = max(1, int(r.get("option_lots") or 1))
+                qty       = lot_size * lots
+                pnl_now = None; pnl_peak = None; pct_to_t1 = None
+                if cur is not None and opt_entry > 0 and qty > 0:
+                    pnl_now = round((cur - opt_entry) * qty, 0)
+                if pk and opt_entry > 0 and qty > 0:
+                    pnl_peak = round((pk[0] - opt_entry) * qty, 0)
+                    if opt_t1 > opt_entry:
+                        pct_to_t1 = round((pk[0] - opt_entry) / (opt_t1 - opt_entry) * 100, 0)
+                # Build a clean dict for the client — no raw DB columns
+                ts_raw = r.get("timestamp") or ""
+                t_in = ts_raw.split(" ")[1][:5] if " " in ts_raw else ts_raw[:5]
+                open_signals.append({
+                    "id": r["id"],
+                    "instrument": r.get("instrument"),
+                    "direction":  r.get("direction"),
+                    "option_symbol": r.get("option_symbol"),
+                    "option_type":   r.get("option_type"),
+                    "option_strike": r.get("option_strike"),
+                    "entry":  opt_entry,
+                    "sl":     opt_sl,
+                    "t1":     opt_t1,
+                    "t2":     opt_t2,
+                    "lots":   lots,
+                    "lot_size": lot_size,
+                    "qty":    qty,
+                    "t_in":   t_in,
+                    "current_premium": cur,
+                    "peak_premium":    pk[0] if pk else None,
+                    "peak_time":       pk[1] if pk else None,
+                    "pnl_now":  pnl_now,
+                    "pnl_peak": pnl_peak,
+                    "pct_to_t1": pct_to_t1,
+                    "confidence": r.get("confidence"),
+                })
+        except Exception as _e:
+            log.warning(f"  open-signals build failed: {_e}")
         return{"running":self.running,"signals":self.latest,"alerts":self.alerts[:50],
+            "open_signals": open_signals,
             "performance":get_perf(),
             "config":{"scan_interval":CONFIG["scan_interval_sec"],"target_min":CONFIG["target_points_min"],
                 "target_max":CONFIG["target_points_max"],"min_confidence":CONFIG["min_confidence"]},

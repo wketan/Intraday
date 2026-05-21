@@ -103,12 +103,20 @@ class SignalGenV2:
         ema20  = TA.ema(close, 20)
         ema50  = TA.ema(close, 50)
         atr    = TA.atr(df, 14)
+        # MACD (12, 26, 9) + Bollinger Bands (20, 2) — explicit ask from user
+        macd_line, macd_sig, macd_hist = TA.macd(close)
+        bb_upper, bb_mid, bb_lower    = TA.bb(close)
 
         vwap_now  = float(vwap.iloc[n])
         rsi_now   = float(rsi.iloc[n])     if not _isnan(rsi.iloc[n])   else 50.0
         ema20_now = float(ema20.iloc[n])
         ema50_now = float(ema50.iloc[n])
         atr_now   = float(atr.iloc[n])     if not _isnan(atr.iloc[n])   else 0.0
+        macd_hist_now  = float(macd_hist.iloc[n])  if not _isnan(macd_hist.iloc[n])  else 0.0
+        macd_hist_prev = float(macd_hist.iloc[n-1]) if n > 0 and not _isnan(macd_hist.iloc[n-1]) else 0.0
+        bb_upper_now = float(bb_upper.iloc[n]) if not _isnan(bb_upper.iloc[n]) else price
+        bb_lower_now = float(bb_lower.iloc[n]) if not _isnan(bb_lower.iloc[n]) else price
+        bb_mid_now   = float(bb_mid.iloc[n])   if not _isnan(bb_mid.iloc[n])   else price
 
         # ── Volume-substitute: range expansion ──────────────────────────
         bar_ranges = (df["high"] - df["low"]).iloc[max(0, n - 20):n]
@@ -158,7 +166,34 @@ class SignalGenV2:
             long_checks["range_expansion"] = False
             short_checks["range_expansion"] = False
 
-        trigger = cfg["trigger_score"]
+        # 5. MACD histogram — bullish when rising and positive,
+        #    bearish when falling and negative. A fresh crossover (sign flip
+        #    bar-over-bar) counts as a stronger confirmation but the binary
+        #    contribution is the same — confluence is about agreement, not
+        #    magnitude.
+        macd_bullish = macd_hist_now > 0 and macd_hist_now > macd_hist_prev
+        macd_bearish = macd_hist_now < 0 and macd_hist_now < macd_hist_prev
+        long_checks["macd_bullish"]  = macd_bullish
+        short_checks["macd_bearish"] = macd_bearish
+        if macd_bullish:  long_score  += 1
+        if macd_bearish:  short_score += 1
+
+        # 6. Bollinger Band positioning — price near the upper band on a
+        #    bullish day = trend strength, near lower band on a bearish day
+        #    = trend strength. (The mean-reversion read of "price at lower
+        #    band → buy" is dangerous in trending markets, so we use the
+        #    trend-confirming interpretation here.)
+        bb_width = bb_upper_now - bb_lower_now
+        bb_pct   = (price - bb_lower_now) / bb_width if bb_width > 0 else 0.5
+        long_checks["bb_upper_zone"]  = bb_pct >= 0.65  # upper third
+        short_checks["bb_lower_zone"] = bb_pct <= 0.35  # lower third
+        if long_checks["bb_upper_zone"]:  long_score  += 1
+        if short_checks["bb_lower_zone"]: short_score += 1
+
+        # With 6 checks, raise the trigger to 4 (was 3 for 4 checks). This
+        # keeps the bar at "two-thirds agreement" so we don't get a wave
+        # of low-quality signals from the new indicators.
+        trigger = max(int(cfg.get("trigger_score", 3)), 4)
 
         # ── Build diagnostics regardless of fire/skip ───────────────────
         diag = {
@@ -223,13 +258,17 @@ class SignalGenV2:
             if checks.get("rsi_bullish"):       reasons.append(f"RSI {rsi_now:.0f} > {cfg['rsi_long']:.0f}")
             if checks.get("ema_bullish"):       reasons.append(f"EMA20 ₹{ema20_now:.0f} > EMA50 ₹{ema50_now:.0f}")
             if checks.get("range_expansion"):   reasons.append(f"Range {range_ratio:.1f}× 20-bar avg")
+            if checks.get("macd_bullish"):      reasons.append(f"MACD histogram rising (+{macd_hist_now:.1f}, was {macd_hist_prev:.1f})")
+            if checks.get("bb_upper_zone"):     reasons.append(f"Price in upper BB zone ({bb_pct*100:.0f}% — trend confirmation)")
         else:
             if checks.get("close_below_vwap"): reasons.append(f"Close ₹{price:.0f} < VWAP ₹{vwap_now:.0f} ({vwap_dev_abs:+.2f}%)")
             if checks.get("rsi_bearish"):       reasons.append(f"RSI {rsi_now:.0f} < {cfg['rsi_short']:.0f}")
             if checks.get("ema_bearish"):       reasons.append(f"EMA20 ₹{ema20_now:.0f} < EMA50 ₹{ema50_now:.0f}")
             if checks.get("range_expansion"):   reasons.append(f"Range {range_ratio:.1f}× 20-bar avg")
+            if checks.get("macd_bearish"):      reasons.append(f"MACD histogram falling ({macd_hist_now:.1f}, was {macd_hist_prev:.1f})")
+            if checks.get("bb_lower_zone"):     reasons.append(f"Price in lower BB zone ({bb_pct*100:.0f}% — trend confirmation)")
 
-        diag["verdict"] = f"TRIGGER {direction} {score}/4"
+        diag["verdict"] = f"TRIGGER {direction} {score}/6"
         SignalGenV2.last_decision = diag
 
         return {
@@ -252,7 +291,9 @@ class SignalGenV2:
                 "ema50":        round(ema50_now, 2),
                 "atr":          round(atr_now, 2),
                 "range_ratio":  round(range_ratio, 2),
-                "score":        f"{score}/4",
+                "macd_hist":    round(macd_hist_now, 2),
+                "bb_pct":       round(bb_pct * 100, 1),
+                "score":        f"{score}/6",
             },
             "strategy":   "v2.1",
             "v2_score":   score,
