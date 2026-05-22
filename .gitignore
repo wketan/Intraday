@@ -10,3 +10,7 @@ data/
 reports/
 data_layer_verify.csv
 *.log
+
+_handoff_review/
+Intraday Engine.zip
+index.legacy.html
