@@ -479,7 +479,14 @@ class SlackAlert:
         exit_time = datetime.now(IST).strftime("%H:%M")
         result_label = ("Target 2 hit (+100%)" if result == "T2" else
                         "Target 1 hit (+50%)"  if result == "WIN" else
-                        "Stop loss hit (−35%)" if result == "LOSS" else result)
+                        "Stop loss hit"        if result == "LOSS" else result)
+        # Sign-guard: LOSS must read negative regardless of how pnl was passed.
+        raw = float(pnl or 0)
+        if result == "LOSS":                pnl_signed = -abs(raw)
+        elif result in ("WIN", "T1", "T2"): pnl_signed =  abs(raw)
+        else:                               pnl_signed =  raw
+        sign = "+" if pnl_signed >= 0 else "−"
+        amt = int(round(abs(pnl_signed)))
         msg = f"""{emoji} *TRADE CLOSED: {instrument}*
 ━━━━━━━━━━━━━━━━━━━━━
 📊 {direction} → *{result_label}*"""
@@ -488,7 +495,7 @@ class SlackAlert:
         if entry_time:
             msg += f"\n⏰ {entry_time} → {exit_time} IST"
         msg += f"""
-💰 P&L: *{"+" if pnl>=0 else ""}₹{pnl}*"""
+💰 P&L: *{sign}₹{amt:,}*"""
         if near_miss:
             msg += f"\n⚠️ Near-miss: {near_miss.get('hint','')}"
         msg += "\n━━━━━━━━━━━━━━━━━━━━━"
@@ -502,9 +509,16 @@ class SlackAlert:
         exit_time = datetime.now(IST).strftime("%H:%M")
         result_label = ("Target 2 hit (+100%)" if result == "T2" else
                         "Target 1 hit (+50%)"  if result == "WIN" else
-                        "Stop loss hit (−35%)" if result == "LOSS" else (result or "—"))
-        sign = "+" if pnl >= 0 else "−"
-        amt = int(round(abs(float(pnl or 0))))
+                        "Stop loss hit"       if result == "LOSS" else (result or "—"))
+        # Sign-guard: LOSS rows must show a negative number even if the caller
+        # accidentally passed a positive value (legacy paths could pass the
+        # absolute magnitude). Mirrors the guard in format_daily_summary_blocks.
+        raw = float(pnl or 0)
+        if result == "LOSS":                       pnl_signed = -abs(raw)
+        elif result in ("WIN", "T1", "T2"):        pnl_signed =  abs(raw)
+        else:                                      pnl_signed =  raw
+        sign = "+" if pnl_signed >= 0 else "−"
+        amt = int(round(abs(pnl_signed)))
         blocks = [
             {"type": "section", "text": {"type": "mrkdwn",
                 "text": f"{emoji} *Trade closed: {instrument} {direction}*  ·  *{result_label}*"}},
@@ -520,8 +534,8 @@ class SlackAlert:
             blocks.append({"type": "section", "text": {"type": "mrkdwn",
                 "text": f"⚠️ *Near-miss exit*\n"
                         f"Premium peaked at *₹{peak_amt}* at *{near_miss.get('peak_time','')}* — "
-                        f"that was *{int(near_miss.get('pct_to_t1', 0))}%* of the way to T1. "
-                        f"A breakeven SL move at half-T1 (now default) would have prevented this loss."}})
+                        f"that was *{int(near_miss.get('pct_to_t1', 0))}%* of the way to T1, "
+                        f"then reversed before the close trigger."}})
         return blocks
 
     @staticmethod
@@ -3072,17 +3086,19 @@ class PLTracker:
                     self._trough[s["id"]] = (cur_opt, now_hm)
 
                 # Apply SL tightening rules — they only MOVE SL up (tighter), never loosen.
-                # DEFAULT behaviour is breakeven-at-half-T1 even when the AI
-                # didn't explicitly request it: once the trade is halfway to
-                # T1, SL jumps to entry so a reversal stops out at zero loss
-                # instead of full SL. This single rule would have prevented
-                # the user's yesterday losses where premium peaked well into
-                # the favorable half before reversing.
+                # Default is NO tightening: the SL shown on the dashboard is the
+                # SL the engine uses. Earlier we silently tightened to breakeven
+                # at half-T1, but a single noisy quote could trip it and then a
+                # normal pullback to entry would record a LOSS — confusing the
+                # user who still sees the original SL on the card.
+                # Tightening only runs if the AI / config explicitly opts in.
                 new_sl = opt_sl
-                if (tighten in ("breakeven_at_half_t1", "none", "", None) and
-                        opt_t1 > opt_entry):
+                if (tighten == "breakeven_at_half_t1" and opt_t1 > opt_entry):
                     half_t1 = opt_entry + (opt_t1 - opt_entry) * 0.5
-                    if best >= half_t1:
+                    # Require a sustained breach: best AND current both at/above
+                    # half-T1 before we lock breakeven. Stops a single noisy tick
+                    # from silently shifting SL up to entry.
+                    if best >= half_t1 and cur_opt >= half_t1:
                         new_sl = max(new_sl, opt_entry)  # lock breakeven
                 elif tighten == "trailing_atr":
                     # 1× option-ATR ≈ delta × index-ATR, from stored indicators
@@ -3100,6 +3116,11 @@ class PLTracker:
 
             # Exit detection — prefer option-based levels. T2 wins over T1
             # so a fast surge to T2 is recorded as the bigger result.
+            # When SL fires, clamp the recorded exit at the SL level. Between
+            # 30s scans the premium can gap below SL; if we just used cur_opt
+            # we'd record a loss bigger than the SL itself, contradicting what
+            # the user saw on the dashboard. Real fills will differ, but the
+            # accounting matches the visible SL.
             result = None
             exit_opt = None
             if cur_opt is not None and opt_entry > 0:
@@ -3108,7 +3129,7 @@ class PLTracker:
                 elif opt_t1 > 0 and cur_opt >= opt_t1:
                     result = "WIN"; exit_opt = cur_opt
                 elif opt_sl > 0 and cur_opt <= opt_sl:
-                    result = "LOSS"; exit_opt = cur_opt
+                    result = "LOSS"; exit_opt = max(cur_opt, opt_sl)
             elif idx_px:
                 # Legacy fallback (no token) → use index levels (old behaviour) but
                 # approximate option exit at delta=0.4 for accounting.
@@ -3122,11 +3143,15 @@ class PLTracker:
 
             if result:
                 if cur_opt is not None and opt_entry > 0:
-                    pnl_per_share = (cur_opt - opt_entry)
+                    # Use the clamped exit_opt (which equals cur_opt for WIN/T1/T2
+                    # and max(cur_opt, opt_sl) for LOSS). That way the recorded
+                    # loss matches the SL the user saw on the dashboard.
+                    use_exit = exit_opt if exit_opt is not None else cur_opt
+                    pnl_per_share = (use_exit - opt_entry)
                     pnl_rs = round(pnl_per_share * qty, 0)
                     pnl_pts = round(pnl_per_share, 2)  # points here = rupees per share of premium
                     update_result(s["id"], idx_px or 0, result, pnl_pts, pnl_rs,
-                                  option_exit=cur_opt, option_entry=opt_entry,
+                                  option_exit=use_exit, option_entry=opt_entry,
                                   qty=qty, lots=opt_lots)
                 else:
                     # fallback: index points × lot_size (old behaviour, flagged inaccurate)
