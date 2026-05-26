@@ -2031,18 +2031,58 @@ html[data-theme="light"] .modal-card{
       const [busy, setBusy] = useState(false);
       const [err, setErr] = useState('');
       const [data, setData] = useState(null);
+      const [progressMsg, setProgressMsg] = useState('');
+      const pollRef = useRef(null);
 
       useEffect(() => {
-        if (open) { setData(null); setErr(''); }
+        if (open) { setData(null); setErr(''); setProgressMsg(''); }
+        return () => { if (pollRef.current) { clearTimeout(pollRef.current); pollRef.current = null; } };
       }, [open]);
 
       if (!open) return null;
 
       const toggleSym = (k) => setSyms(s => ({ ...s, [k]: !s[k] }));
+
+      const pollJob = async (jobId, attempt) => {
+        try {
+          const r = await apiFetch('/api/backtest/jobs/' + jobId);
+          if (!r.ok) {
+            const t = await r.text();
+            throw new Error('API ' + r.status + ' · ' + t.slice(0, 200));
+          }
+          const j = await r.json();
+          if (j.status === 'done' && j.result) {
+            setData(j.result);
+            setBusy(false);
+            setProgressMsg('');
+            return;
+          }
+          if (j.status === 'error') {
+            setErr(j.error || 'backtest job failed');
+            setBusy(false);
+            setProgressMsg('');
+            return;
+          }
+          setProgressMsg(j.progress || 'Working...');
+          // Cap at 10 minutes (200 polls × 3s) — backtest should never take longer
+          if (attempt > 200) {
+            setErr('Backtest timed out after 10 minutes');
+            setBusy(false);
+            setProgressMsg('');
+            return;
+          }
+          pollRef.current = setTimeout(() => pollJob(jobId, attempt + 1), 3000);
+        } catch (e) {
+          setErr(e.message || 'Poll failed');
+          setBusy(false);
+          setProgressMsg('');
+        }
+      };
+
       const run = async () => {
         const symbols = Object.keys(syms).filter(k => syms[k]);
         if (symbols.length === 0) { setErr('Pick at least one instrument'); return; }
-        setBusy(true); setErr(''); setData(null);
+        setBusy(true); setErr(''); setData(null); setProgressMsg('Starting backtest...');
         try {
           const r = await apiFetch('/api/backtest', {
             method: 'POST',
@@ -2053,12 +2093,13 @@ html[data-theme="light"] .modal-card{
             throw new Error('API ' + r.status + ' · ' + t.slice(0, 200));
           }
           const j = await r.json();
-          if (!j.ok) throw new Error(j.error || 'backtest failed');
-          setData(j);
+          if (!j.ok || !j.job_id) throw new Error(j.error || 'backtest spawn failed');
+          // Start polling for the job's progress + result
+          pollJob(j.job_id, 0);
         } catch (e) {
           setErr(e.message || 'Backtest failed');
-        } finally {
           setBusy(false);
+          setProgressMsg('');
         }
       };
 
@@ -2143,8 +2184,15 @@ html[data-theme="light"] .modal-card{
               {busy && !data && (
                 <div className="bt-running">
                   <span className="spinner"/>
-                  <div>Replaying {days} days across {Object.keys(syms).filter(k=>syms[k]).join(' · ')}…<br/>
-                    this fetches option premiums for every signal and can take 30–90 seconds</div>
+                  <div style={{textAlign:'center'}}>
+                    <div style={{color:'var(--ink-1)', fontWeight:600, marginBottom:6,
+                      fontFamily:'var(--font-mono)', fontSize:12, letterSpacing:'0.05em'}}>
+                      {progressMsg || 'Replaying ' + days + ' days…'}
+                    </div>
+                    <div style={{color:'var(--ink-3)', fontSize:10.5, letterSpacing:'0.04em'}}>
+                      {days >= 60 ? 'Long backtest — can take 3–5 minutes' : 'Typically 30–90 seconds · safe to leave this tab open'}
+                    </div>
+                  </div>
                 </div>
               )}
 

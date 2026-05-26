@@ -4781,29 +4781,203 @@ def start():
 def stop():
     return jsonify(engine.stop())
 
+# ── Async backtest job store ────────────────────────────────────────
+# In-memory only; persistent disk would be overkill since the backtest
+# is interactive and the user always sees the result before refreshing.
+_BACKTEST_JOBS = {}  # { job_id: { status, progress, result, started_at, error } }
+_BACKTEST_JOBS_LOCK = threading.Lock()
+
+
+def _run_backtest_job(job_id, days, budget, symbols):
+    """Long-running backtest body. Updates _BACKTEST_JOBS[job_id] as it goes
+    so the GET /api/backtest/jobs/<id> endpoint can stream progress.
+    Runs in a daemon thread spawned by the POST handler.
+    """
+    def _set(**kw):
+        with _BACKTEST_JOBS_LOCK:
+            _BACKTEST_JOBS[job_id].update(kw)
+
+    try:
+        from datetime import date, timedelta
+        try:
+            from backtest_v2 import run_backtest
+            import dataclasses
+        except Exception as e:
+            _set(status="error", error=f"backtest import failed: {e}")
+            return
+
+        to_date   = datetime.now(IST).date() - timedelta(days=1)
+        from_date = to_date - timedelta(days=days)
+
+        all_trades = []
+        by_symbol  = {}
+        diag_log   = {}
+        import io, contextlib
+        for sym_i, sym in enumerate(symbols):
+            _set(progress=f"Processing {sym} ({sym_i+1}/{len(symbols)})...")
+            buf = io.StringIO()
+            err_msg = None
+            try:
+                with contextlib.redirect_stdout(buf):
+                    ts = run_backtest(sym, from_date, to_date, budget=budget, verbose=False)
+            except Exception as e:
+                log.warning(f"  backtest {sym} crashed: {e}")
+                err_msg = f"{type(e).__name__}: {e}"
+                ts = []
+            captured = buf.getvalue()
+            diag_lines = []
+            for ln in captured.splitlines():
+                if any(k in ln for k in ("✗", "✓", "No spot bars", "Angel login",
+                                          "Got ", "Skip", "Backtest:")):
+                    diag_lines.append(ln.strip())
+            diag_log[sym] = {
+                "lines":  diag_lines[-12:],
+                "raw_signals": len(ts),
+                "error":  err_msg,
+            }
+            taken_w = [t for t in ts if t.bucket == "TAKEN_WIN"]
+            taken_l = [t for t in ts if t.bucket == "TAKEN_LOSS"]
+            taken_n = len(taken_w) + len(taken_l)
+            net = sum(t.net_pnl for t in taken_w + taken_l)
+            wr  = round(len(taken_w) / taken_n * 100, 1) if taken_n else 0.0
+            by_symbol[sym] = {
+                "trades": taken_n,
+                "wins":   len(taken_w),
+                "losses": len(taken_l),
+                "win_rate": wr,
+                "net_pnl":  round(net, 0),
+                "avg_win":  round(sum(t.net_pnl for t in taken_w) / len(taken_w), 0) if taken_w else 0,
+                "avg_loss": round(sum(t.net_pnl for t in taken_l) / len(taken_l), 0) if taken_l else 0,
+                "filtered": len([t for t in ts if t.bucket.startswith("FILTERED")]),
+            }
+            all_trades.extend(ts)
+
+        _set(progress="Aggregating results...")
+        taken = [t for t in all_trades if t.bucket in ("TAKEN_WIN", "TAKEN_LOSS")]
+        wins  = [t for t in taken if t.bucket == "TAKEN_WIN"]
+        losses = [t for t in taken if t.bucket == "TAKEN_LOSS"]
+        cum = 0.0; peak = 0.0; dd = 0.0
+        for t in sorted(taken, key=lambda x: (x.date, x.time)):
+            cum += t.net_pnl
+            peak = max(peak, cum)
+            dd = min(dd, cum - peak)
+        win_rate = round(len(wins) / len(taken) * 100, 1) if taken else 0.0
+        net_pnl = sum(t.net_pnl for t in taken)
+        avg_win  = (sum(t.net_pnl for t in wins) / len(wins))  if wins  else 0
+        avg_loss = (sum(t.net_pnl for t in losses) / len(losses)) if losses else 0
+        expectancy = round((win_rate/100) * avg_win + ((100-win_rate)/100) * avg_loss, 0)
+        ordered = sorted(taken, key=lambda x: (x.date, x.time))
+        curve = []; c = 0.0
+        for t in ordered:
+            c += t.net_pnl
+            curve.append({"date": t.date, "time": t.time, "pnl": round(c, 0)})
+        trades_out = [dataclasses.asdict(t) for t in all_trades[:500]]
+
+        _set(status="done", progress="Complete", result={
+            "ok": True,
+            "params": {"days": days, "from": str(from_date), "to": str(to_date),
+                       "symbols": symbols, "budget": budget},
+            "summary": {
+                "total_signals": len(all_trades),
+                "taken_count":   len(taken),
+                "filtered_count": len(all_trades) - len(taken),
+                "wins":          len(wins),
+                "losses":        len(losses),
+                "win_rate":      win_rate,
+                "net_pnl":       round(net_pnl, 0),
+                "avg_win":       round(avg_win, 0),
+                "avg_loss":      round(avg_loss, 0),
+                "expectancy":    expectancy,
+                "max_drawdown":  round(dd, 0),
+                "by_symbol":     by_symbol,
+                "equity_curve":  curve,
+                "diag":          diag_log,
+            },
+            "trades": trades_out,
+        })
+    except Exception as e:
+        log.error(f"backtest job {job_id} crashed: {e}", exc_info=True)
+        _set(status="error", error=f"{type(e).__name__}: {e}")
+
+
 @app.route("/api/backtest", methods=["POST"])
 @require_auth
 def api_backtest():
-    """Run a multi-day backtest of the v2 strategy across NIFTY/BANKNIFTY/
-    FINNIFTY and return JSON results.
+    """Start an async backtest job. Returns a job_id immediately; the client
+    polls /api/backtest/jobs/<job_id> for progress + final result.
 
     Body:
-      {
-        "days":       int (default 30, max 90),
-        "symbols":    ["NIFTY","BANKNIFTY","FINNIFTY"]  (default all 3),
-        "budget":     int (default current CONFIG['budget'])
-      }
+      { "days": int, "symbols": [...], "budget": int }
+    Response:
+      { "ok": true, "job_id": "<uuid>", "status": "pending" }
 
-    Returns:
-      {
-        "ok": true,
-        "summary": { ... aggregate stats per symbol + overall ... },
-        "trades":  [ ...per-trade rows, capped at 500... ],
-        "params":  { days, symbols, budget, range }
-      }
+    Backtest is run in a daemon thread so the HTTP response returns in
+    under a second, avoiding the Railway proxy's ~100s connection timeout
+    that was breaking 30+ day windows.
+    """
+    try:
+        body = flask_request.json or {}
+        days     = max(1, min(int(body.get("days", 30)), 90))
+        budget   = int(body.get("budget", CONFIG.get("budget", 50000)))
+        symbols  = body.get("symbols") or ["NIFTY", "BANKNIFTY", "FINNIFTY"]
+        symbols  = [s for s in symbols if s in INSTRUMENTS]
+        if not symbols:
+            return jsonify({"ok": False, "error": "No valid symbols"}), 400
 
-    Slow endpoint (data_layer fetches candles + option premiums from Angel/
-    NSE bhavcopy for every signal). Caller should set a long client timeout.
+        import uuid
+        job_id = uuid.uuid4().hex[:12]
+        with _BACKTEST_JOBS_LOCK:
+            _BACKTEST_JOBS[job_id] = {
+                "status": "pending", "progress": "Starting...",
+                "result": None, "error": None,
+                "started_at": datetime.now(IST).isoformat(),
+                "params": {"days": days, "symbols": symbols, "budget": budget},
+            }
+            # Garbage-collect jobs older than 30 minutes
+            cutoff = datetime.now(IST) - timedelta(minutes=30)
+            for jid in list(_BACKTEST_JOBS.keys()):
+                try:
+                    started = datetime.fromisoformat(_BACKTEST_JOBS[jid]["started_at"])
+                    if started < cutoff:
+                        _BACKTEST_JOBS.pop(jid, None)
+                except Exception:
+                    pass
+
+        threading.Thread(target=_run_backtest_job,
+                         args=(job_id, days, budget, symbols),
+                         daemon=True,
+                         name=f"Backtest-{job_id}").start()
+
+        return jsonify({"ok": True, "job_id": job_id, "status": "pending"})
+    except Exception as e:
+        log.error(f"  /api/backtest spawn error: {e}")
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@app.route("/api/backtest/jobs/<job_id>", methods=["GET"])
+@require_auth
+def api_backtest_job(job_id):
+    """Poll a running backtest job. Returns status / progress, plus the
+    final result once status='done'. Public-ish — same auth as POST."""
+    with _BACKTEST_JOBS_LOCK:
+        job = _BACKTEST_JOBS.get(job_id)
+        if not job:
+            return jsonify({"ok": False, "error": "Unknown job_id"}), 404
+        return jsonify({
+            "ok": True,
+            "job_id": job_id,
+            "status": job["status"],
+            "progress": job.get("progress"),
+            "error":   job.get("error"),
+            "result":  job.get("result"),
+            "started_at": job.get("started_at"),
+        })
+
+
+# Legacy synchronous path retained as a no-op stub — UI no longer calls this.
+def _api_backtest_legacy_unused():
+    """Run a multi-day backtest of the v2 strategy across NIFTY/BANKNIFTY/
+    FINNIFTY and return JSON results. (Replaced by async job pattern above.)
     """
     try:
         body = flask_request.json or {}
