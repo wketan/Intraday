@@ -166,6 +166,11 @@ def get_spot_bars(symbol: str, from_dt: datetime, to_dt: datetime,
     if rows and len(rows) > 1:
         df = pd.DataFrame([dict(r) for r in rows])
         df["ts"] = pd.to_datetime(df["ts"])
+        # Cache miss path strips tz; mirror that here so cache-hit results are
+        # naive-IST too. Stops pandas 2.x TypeError when downstream code
+        # subtracts a naive datetime from this column.
+        if getattr(df["ts"].dtype, "tz", None) is not None:
+            df["ts"] = df["ts"].dt.tz_localize(None)
         return df
 
     # Cache miss → try Angel One
@@ -195,8 +200,13 @@ def get_spot_bars(symbol: str, from_dt: datetime, to_dt: datetime,
     if df.empty:
         return pd.DataFrame()
 
-    # Filter to requested range
+    # Filter to requested range.
+    # Angel One returns IST-aware timestamps (UTC+05:30); from_dt / to_dt are
+    # naive datetimes. pandas 2.x refuses to compare tz-aware Series with naive
+    # bounds (TypeError). Strip tz so both sides are naive-IST.
     df["timestamp"] = pd.to_datetime(df["timestamp"])
+    if getattr(df["timestamp"].dtype, "tz", None) is not None:
+        df["timestamp"] = df["timestamp"].dt.tz_localize(None)
     df = df[(df["timestamp"] >= from_dt) & (df["timestamp"] <= to_dt)].copy()
     if df.empty:
         return df
