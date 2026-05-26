@@ -4826,12 +4826,32 @@ def api_backtest():
 
         all_trades = []
         by_symbol  = {}
+        diag_log   = {}   # { symbol: "captured stdout text" } — surfaced in API response
+        import io, contextlib
         for sym in symbols:
+            # Capture stdout so the user sees WHY a symbol returned 0 trades
+            # (Angel login failed, no spot bars, etc.) instead of an empty card.
+            buf = io.StringIO()
+            err_msg = None
             try:
-                ts = run_backtest(sym, from_date, to_date, budget=budget, verbose=False)
+                with contextlib.redirect_stdout(buf):
+                    ts = run_backtest(sym, from_date, to_date, budget=budget, verbose=False)
             except Exception as e:
                 log.warning(f"  backtest {sym} crashed: {e}")
+                err_msg = f"{type(e).__name__}: {e}"
                 ts = []
+            captured = buf.getvalue()
+            # Pull out the key diagnostic lines from the captured output
+            diag_lines = []
+            for ln in captured.splitlines():
+                if any(k in ln for k in ("✗", "✓", "No spot bars", "Angel login",
+                                          "Got ", "Skip", "Backtest:")):
+                    diag_lines.append(ln.strip())
+            diag_log[sym] = {
+                "lines":  diag_lines[-12:],  # last 12 diagnostic lines
+                "raw_signals": len(ts),
+                "error":  err_msg,
+            }
             # Compute per-symbol summary
             taken_w = [t for t in ts if t.bucket == "TAKEN_WIN"]
             taken_l = [t for t in ts if t.bucket == "TAKEN_LOSS"]
@@ -4895,6 +4915,7 @@ def api_backtest():
                 "max_drawdown":  round(dd, 0),
                 "by_symbol":     by_symbol,
                 "equity_curve":  curve,
+                "diag":          diag_log,
             },
             "trades": trades_out,
         })

@@ -2158,6 +2158,34 @@ html[data-theme="light"] .modal-card{
                 </div>
               )}
 
+              {data && summary && summary.taken_count === 0 && summary.diag && (
+                <div style={{padding:'14px 16px', borderRadius:12,
+                  background:'var(--warn-soft)', border:'1px solid var(--warn-border)',
+                  marginBottom:18, fontFamily:'var(--font-mono)', fontSize:11.5,
+                  color:'var(--ink-1)', lineHeight:1.6}}>
+                  <div style={{fontFamily:'var(--font-display)', fontWeight:600, fontSize:14,
+                    color:'var(--warn)', marginBottom:8}}>
+                    No trades fired — diagnostic log
+                  </div>
+                  {Object.entries(summary.diag).map(([sym, d]) => (
+                    <div key={sym} style={{marginBottom:10}}>
+                      <div style={{color:'var(--ink-2)', marginBottom:2}}><b>{sym}</b> · {d.raw_signals} signals</div>
+                      {d.error && <div style={{color:'var(--loss)'}}>error: {d.error}</div>}
+                      {(d.lines || []).map((ln, i) => (
+                        <div key={i} style={{color:'var(--ink-3)', fontSize:11,
+                          fontFamily:'var(--font-mono)', paddingLeft:10}}>{ln}</div>
+                      ))}
+                    </div>
+                  ))}
+                  <div style={{marginTop:10, paddingTop:10, borderTop:'1px solid var(--warn-border)',
+                    color:'var(--ink-2)', fontSize:11}}>
+                    Most common cause: Angel One historical fetch times out or returns empty
+                    for cloud-IP requests. Try a shorter window (7d or 30d) — if those also
+                    return 0, the data source itself is the bottleneck on Railway.
+                  </div>
+                </div>
+              )}
+
               {data && summary && (
                 <>
                   <div className="bt-stats">
