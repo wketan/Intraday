@@ -20,6 +20,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 # App code — only the files the server needs at runtime.
 COPY server.py .
 COPY backtest.py .
+COPY backtest_v2.py .
 COPY data_layer.py .
 COPY verify_data_layer.py .
 COPY signal_v2.py .
@@ -37,4 +38,4 @@ ENV PYTHONUNBUFFERED=1
 # Shell form — `sh -c` ensures ${PORT:-8080} expands at container start.
 # Single worker because the engine has in-process state (chain cache, regime, OI history).
 # Multiple workers would each run their own scan loop and double up on Angel One.
-CMD ["sh", "-c", "gunicorn server:app --bind 0.0.0.0:${PORT:-8080} --timeout 120 --workers 1 --threads 4"]
+CMD ["sh", "-c", "gunicorn server:app --bind 0.0.0.0:${PORT:-8080} --timeout 300 --workers 1 --threads 4"]
