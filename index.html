@@ -2253,31 +2253,9 @@ html[data-theme="light"] .modal-card{
         }
       };
 
-      // Auto-schedule: Mon-Fri 08:45 IST → start; every day 16:00 IST → stop
-      const lastAutoRef = useRef({});
-      useEffect(() => {
-        if (needsSetup) return;
-        const id = setInterval(() => {
-          if (!statusData) return;
-          const now = new Date();
-          const ist = new Date(now.getTime() + ((now.getTimezoneOffset() + 330) * 60000));
-          const day = ist.getDay();
-          const hh = ist.getHours();
-          const mm = ist.getMinutes();
-          const slot = ist.toISOString().slice(0,10) + 'T' + String(hh).padStart(2,'0') + ':' + String(mm).padStart(2,'0');
-          // 08:45 Mon-Fri → start if not running
-          if (day >= 1 && day <= 5 && hh === 8 && mm === 45 && !statusData.running && lastAutoRef.current['on'] !== slot) {
-            lastAutoRef.current['on'] = slot;
-            callEngine('/api/start');
-          }
-          // 16:00 daily → stop if running
-          if (hh === 16 && mm === 0 && statusData.running && lastAutoRef.current['off'] !== slot) {
-            lastAutoRef.current['off'] = slot;
-            callEngine('/api/stop');
-          }
-        }, 30000);
-        return () => clearInterval(id);
-      }, [statusData, needsSetup]);
+      // Auto-schedule lives on the server (see _scheduler in server.py).
+      // It runs 08:45/15:30 Mon-Fri IST regardless of whether the dashboard
+      // tab is open — so we don't need a duplicate client-side timer here.
 
       const saveProfile = (next) => {
         const newCap = +next.capital || capital;

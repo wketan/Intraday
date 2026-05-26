@@ -5780,6 +5780,68 @@ def _startup():
 
 threading.Thread(target=_startup, daemon=True, name="Startup").start()
 
+
+def _scheduler():
+    """Server-side auto on/off so the engine doesn't depend on a browser tab.
+
+    Mon-Fri 08:45 IST → engine.start() if not already running.
+    Mon-Fri 15:30 IST → engine.stop()  if currently running.
+
+    Wakes every 30 seconds, fires once per slot (dedup'd by date+slot key so
+    a restart inside the same minute doesn't double-fire).
+    """
+    import time as _t
+    _t.sleep(20)  # give _startup a head-start to log in
+    last_fired = {}  # { "YYYY-MM-DD-on" | "YYYY-MM-DD-off": True }
+    while True:
+        try:
+            now = datetime.now(IST)
+            day = now.weekday()       # Mon=0 ... Sun=6
+            day_key = now.strftime("%Y-%m-%d")
+            hh, mm = now.hour, now.minute
+
+            # ── Auto-ON: weekdays at 08:45 IST ────────────────────────────
+            if day <= 4 and hh == 8 and mm == 45:
+                key = f"{day_key}-on"
+                if not last_fired.get(key):
+                    last_fired[key] = True
+                    if not engine.running:
+                        log.info("⏰ Scheduler: auto-ON at 08:45 IST")
+                        try:
+                            engine.start()
+                            SlackAlert.send("⏰ *Engine auto-started* — 08:45 IST")
+                        except Exception as e:
+                            log.warning(f"⏰ auto-ON failed: {e}")
+                    else:
+                        log.info("⏰ Scheduler: 08:45 IST hit, engine already running")
+
+            # ── Auto-OFF: weekdays at 15:30 IST ───────────────────────────
+            if day <= 4 and hh == 15 and mm == 30:
+                key = f"{day_key}-off"
+                if not last_fired.get(key):
+                    last_fired[key] = True
+                    if engine.running:
+                        log.info("⏰ Scheduler: auto-OFF at 15:30 IST")
+                        try:
+                            engine.stop()
+                            SlackAlert.send("⏰ *Engine auto-stopped* — 15:30 IST · session closed")
+                        except Exception as e:
+                            log.warning(f"⏰ auto-OFF failed: {e}")
+                    else:
+                        log.info("⏰ Scheduler: 15:30 IST hit, engine already stopped")
+
+            # Garbage-collect old keys (yesterday and earlier) to keep dict bounded
+            cutoff = (now - timedelta(days=2)).strftime("%Y-%m-%d")
+            for k in list(last_fired.keys()):
+                if k[:10] < cutoff:
+                    last_fired.pop(k, None)
+        except Exception as e:
+            log.warning(f"⏰ Scheduler tick error: {e}")
+        _t.sleep(30)
+
+threading.Thread(target=_scheduler, daemon=True, name="Scheduler").start()
+
+
 if __name__ == "__main__":
     log.info("="*60)
     log.info("  INTRADAY OPTIONS SIGNAL ENGINE v4.0")
