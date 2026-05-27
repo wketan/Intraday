@@ -2043,7 +2043,8 @@ html[data-theme="light"] .modal-card{
 
       const toggleSym = (k) => setSyms(s => ({ ...s, [k]: !s[k] }));
 
-      const pollJob = async (jobId, attempt) => {
+      const pollJob = async (jobId, startedAt) => {
+        const elapsedSec = Math.floor((Date.now() - startedAt) / 1000);
         try {
           const r = await apiFetch('/api/backtest/jobs/' + jobId);
           if (!r.ok) {
@@ -2063,15 +2064,21 @@ html[data-theme="light"] .modal-card{
             setProgressMsg('');
             return;
           }
-          setProgressMsg(j.progress || 'Working...');
-          // Cap at 10 minutes (200 polls × 3s) — backtest should never take longer
-          if (attempt > 200) {
-            setErr('Backtest timed out after 10 minutes');
+          const mins = Math.floor(elapsedSec / 60);
+          const secs = elapsedSec % 60;
+          const elapsed = mins + 'm ' + String(secs).padStart(2,'0') + 's';
+          setProgressMsg((j.progress || 'Working...') + '  ·  ' + elapsed);
+          // Hard cap 25 minutes; server GC kicks in at 30 min anyway.
+          if (elapsedSec > 1500) {
+            setErr('Backtest still running after 25 minutes — check Railway logs');
             setBusy(false);
             setProgressMsg('');
             return;
           }
-          pollRef.current = setTimeout(() => pollJob(jobId, attempt + 1), 3000);
+          // Poll every 3s for the first minute (fast initial feedback), then
+          // every 6s once we know it's a long-running job.
+          const nextDelay = elapsedSec < 60 ? 3000 : 6000;
+          pollRef.current = setTimeout(() => pollJob(jobId, startedAt), nextDelay);
         } catch (e) {
           setErr(e.message || 'Poll failed');
           setBusy(false);
@@ -2095,7 +2102,7 @@ html[data-theme="light"] .modal-card{
           const j = await r.json();
           if (!j.ok || !j.job_id) throw new Error(j.error || 'backtest spawn failed');
           // Start polling for the job's progress + result
-          pollJob(j.job_id, 0);
+          pollJob(j.job_id, Date.now());
         } catch (e) {
           setErr(e.message || 'Backtest failed');
           setBusy(false);
