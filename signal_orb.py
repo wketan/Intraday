@@ -69,20 +69,31 @@ class SignalGenORB:
 
             # Breakout confirmation: current bar's range must expand vs
             # day's average bar range so far. Acts as a volume proxy on
-            # indices (where volume data is unreliable). 1.2× is gentle —
-            # not a strict filter, just kicks out lazy breakouts.
-            "breakout_range_mult": _env_float("ORB_BREAKOUT_RANGE_MULT", 1.2),
+            # indices (where volume data is unreliable). Tightened
+            # 1.2 → 1.5× after 60d backtest showed weak-range breakouts
+            # were dominantly false positives.
+            "breakout_range_mult": _env_float("ORB_BREAKOUT_RANGE_MULT", 1.5),
+
+            # Body strength: the bar that broke ORB must close strongly
+            # in the breakout direction (close in the upper 60% of its
+            # range for LONG breakouts, lower 60% for SHORT). Rejects
+            # wick-driven breakouts that close back near the middle.
+            "min_body_pct_of_range": _env_float("ORB_MIN_BODY_PCT_OF_RANGE", 0.60),
 
             # Earliest time to consider a breakout (after ORB completes).
             # Defaults to 09:30 IST = 9 hours + 30 min from midnight.
             "earliest_h":        _env_int  ("ORB_EARLIEST_H",     9),
             "earliest_m":        _env_int  ("ORB_EARLIEST_M",    30),
 
-            # Latest time to ENTER a new ORB trade. After this, no new
-            # signals fire — leaves enough runway to hit T1/T2 before
-            # the 15:30 close. Default 13:00.
-            "latest_h":          _env_int  ("ORB_LATEST_H",      13),
-            "latest_m":          _env_int  ("ORB_LATEST_M",       0),
+            # Latest time to ENTER a new ORB trade. Tightened 13:00 → 10:30
+            # after 60d NIFTY backtest showed late-day "breakouts" (e.g.
+            # 12:25 fires after 3-hour midday consolidation) systematically
+            # losing. Published ORB edge is in the first ~60 minutes after
+            # the range establishes; later breakouts are a different
+            # (and unprofitable) setup. Engine cap stays via the
+            # one-trade-per-day gate.
+            "latest_h":          _env_int  ("ORB_LATEST_H",      10),
+            "latest_m":          _env_int  ("ORB_LATEST_M",      30),
 
             # R:R levels
             "rr_target":         _env_float("ORB_RR_TARGET",     1.5),
@@ -214,6 +225,22 @@ class SignalGenORB:
             diag["verdict"] = "BREAKOUT_NO_RANGE_EXPANSION"
             SignalGenORB.last_decision = diag
             return None
+
+        # Body strength: the close must be in the breakout direction's
+        # half of the bar. Rejects wick fakeouts that close back near
+        # the middle of the bar (e.g. spike up, close mid-bar).
+        if cur_range > 0:
+            if broke_up:
+                # Close should be in the UPPER portion of the bar
+                close_pos = (cur_close - cur_low) / cur_range
+            else:
+                # Close should be in the LOWER portion of the bar
+                close_pos = (cur_high - cur_close) / cur_range
+            diag["close_pos_pct"] = round(close_pos * 100, 1)
+            if close_pos < cfg["min_body_pct_of_range"]:
+                diag["verdict"] = "WEAK_CLOSE_IN_BAR"
+                SignalGenORB.last_decision = diag
+                return None
 
         # ── Build the signal ─────────────────────────────────────────────
         if broke_up:
