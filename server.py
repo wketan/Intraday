@@ -4126,7 +4126,9 @@ class Engine:
             "open_signals": open_signals,
             "performance":get_perf(),
             "config":{"scan_interval":CONFIG["scan_interval_sec"],"target_min":CONFIG["target_points_min"],
-                "target_max":CONFIG["target_points_max"],"min_confidence":CONFIG["min_confidence"]},
+                "target_max":CONFIG["target_points_max"],"min_confidence":CONFIG["min_confidence"],
+                "strategy":CONFIG.get("strategy","v1"),
+                "enabled_instruments":os.environ.get("ENABLED_INSTRUMENTS","")},
             "research_mode": (_rm != "0"),
             "time":datetime.now(IST).strftime("%H:%M:%S"),
             "market_open":9<=datetime.now(IST).hour<16,
@@ -5603,8 +5605,8 @@ def api_strategy_set():
 
     if new_strategy is not None:
         s = str(new_strategy).lower()
-        if s not in ("v1", "v2"):
-            return jsonify({"error": "strategy must be 'v1' or 'v2'"}), 400
+        if s not in ("v1", "v2", "conductor"):
+            return jsonify({"error": "strategy must be 'v1', 'v2', or 'conductor'"}), 400
         CONFIG["strategy"] = s
         set_engine_state("strategy", s)
 
