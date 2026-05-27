@@ -139,13 +139,29 @@ def _simulate_forward(spot_df, start_idx: int, opt_entry: float, opt_sl: float,
                        max_bars: int = 24,
                        data_layer_mod=None,
                        symbol: str = "", strike: int = 0, opt_type: str = "",
-                       expiry: date = None, angel_client=None) -> tuple:
-    """Walk forward through `spot_df` bars looking up REAL option premium at each
-    timestamp. Exit when SL/T1/T2 hit or time runs out.
+                       expiry: date = None, angel_client=None,
+                       spot_sl: float = None, spot_t1: float = None,
+                       spot_t2: float = None) -> tuple:
+    """Walk forward through `spot_df` bars and exit on SL/T1/T2 hit or EOD.
+
+    Exit mode is dual:
+      • Premium-pct (opt_sl / opt_t1 / opt_t2 levels). Always checked.
+      • Spot-based  (spot_sl / spot_t1 / spot_t2 levels). Only checked if
+        ALL three are provided. ORB strategy uses these because its SL/T1/T2
+        are intrinsically spot-defined (opposite ORB boundary, 1.5R, 2.5R).
+        The premium-pct levels for ORB are still passed as a safety net
+        (caps the loss if spot stays inside the ORB range but the option
+        bleeds via theta).
+
+    When spot-based mode fires, we look up the option price at that bar to
+    compute the actual exit premium (delta + theta included naturally).
 
     Returns: (exit_price, exit_reason, bars_held, source_summary)
     """
     sources_used = []
+    use_spot_exits = (spot_sl is not None and spot_t1 is not None and spot_t2 is not None)
+    is_long = (direction == "LONG")
+
     for i in range(1, max_bars + 1):
         if start_idx + i >= len(spot_df):
             break
@@ -155,7 +171,6 @@ def _simulate_forward(spot_df, start_idx: int, opt_entry: float, opt_sl: float,
             bar_ts = datetime.fromisoformat(bar_ts.replace("Z", "").split("+")[0])
         # Stop if past market close
         if isinstance(bar_ts, datetime) and (bar_ts.hour > 15 or (bar_ts.hour == 15 and bar_ts.minute >= 15)):
-            # Force exit at end of day
             opt_now = data_layer_mod.get_option_premium_at(
                 symbol, strike, opt_type, expiry, bar_ts, angel_client=angel_client
             )
@@ -164,6 +179,32 @@ def _simulate_forward(spot_df, start_idx: int, opt_entry: float, opt_sl: float,
                 return opt_now["price"], "EOD_CLOSE", i, ",".join(sources_used)
             break
 
+        # ── Spot-based exit check (ORB-style) ─────────────────────────
+        # Look at the bar's high/low (intra-bar reach), not just close,
+        # so we catch the moment the level was hit. Then look up the
+        # option price at this 5-min timestamp for the actual exit value.
+        if use_spot_exits:
+            bar_hi = float(bar["high"])
+            bar_lo = float(bar["low"])
+            spot_hit = None
+            if is_long:
+                if bar_lo <= spot_sl:        spot_hit = ("SL_HIT_SPOT",  spot_sl)
+                elif bar_hi >= spot_t2:      spot_hit = ("T2_HIT_SPOT",  spot_t2)
+                elif bar_hi >= spot_t1:      spot_hit = ("T1_HIT_SPOT",  spot_t1)
+            else:
+                if bar_hi >= spot_sl:        spot_hit = ("SL_HIT_SPOT",  spot_sl)
+                elif bar_lo <= spot_t2:      spot_hit = ("T2_HIT_SPOT",  spot_t2)
+                elif bar_lo <= spot_t1:      spot_hit = ("T1_HIT_SPOT",  spot_t1)
+            if spot_hit:
+                opt_now = data_layer_mod.get_option_premium_at(
+                    symbol, strike, opt_type, expiry, bar_ts, angel_client=angel_client
+                )
+                if opt_now and opt_now.get("price") is not None:
+                    sources_used.append(opt_now.get("source", "?"))
+                    return float(opt_now["price"]), spot_hit[0], i, ",".join(sources_used[-3:])
+                # Fall through to premium check if no option price
+
+        # ── Premium-pct exit check (safety net for theta bleed) ──────
         opt_now = data_layer_mod.get_option_premium_at(
             symbol, strike, opt_type, expiry, bar_ts, angel_client=angel_client
         )
@@ -172,7 +213,6 @@ def _simulate_forward(spot_df, start_idx: int, opt_entry: float, opt_sl: float,
         sources_used.append(opt_now.get("source", "?"))
         price = float(opt_now["price"])
 
-        # Exit checks — premium-percentage mode (matches OptPicker v2 logic)
         if price <= opt_sl:
             return opt_sl, "SL_HIT", i, ",".join(sources_used[-3:])
         if price >= opt_t2:
@@ -364,10 +404,26 @@ def run_backtest(symbol: str, from_date: date, to_date: date,
             continue
         entry_source = entry_data.get("source", "?")
 
-        # Premium-pct exits (real prices, matches v2 OptPicker)
-        opt_sl = round(opt_entry * (1 - sl_pct), 2)
-        opt_t1 = round(opt_entry * (1 + t1_pct), 2)
-        opt_t2 = round(opt_entry * (1 + t2_pct), 2)
+        # ── Exit levels: strategy-aware ────────────────────────────────
+        # ORB: spot-based SL/T1/T2 (from the signal). Premium-pct levels
+        #      stay as a loose safety net (60%/100%/200%) so theta bleed
+        #      while spot stagnates inside ORB doesn't ride a winner to
+        #      zero — but spot exits should hit first on real moves.
+        # v2 / gamma: tight premium-pct (35%/50%/100%) — these strategies
+        #      don't have a structural spot-level exit, so the premium
+        #      cap is the primary stop.
+        if strategy == "orb":
+            opt_sl = round(opt_entry * (1 - 0.60), 2)
+            opt_t1 = round(opt_entry * (1 + 1.00), 2)
+            opt_t2 = round(opt_entry * (1 + 2.00), 2)
+            spot_sl = float(sig.get("sl"))
+            spot_t1 = float(sig.get("target1"))
+            spot_t2 = float(sig.get("target2"))
+        else:
+            opt_sl = round(opt_entry * (1 - sl_pct), 2)
+            opt_t1 = round(opt_entry * (1 + t1_pct), 2)
+            opt_t2 = round(opt_entry * (1 + t2_pct), 2)
+            spot_sl = spot_t1 = spot_t2 = None
 
         # Walk forward — pull REAL option price each bar, exit at SL/T1/T2/EOD
         exit_price, exit_reason, bars_held, exit_source = _simulate_forward(
@@ -375,6 +431,7 @@ def run_backtest(symbol: str, from_date: date, to_date: date,
             max_bars=24, data_layer_mod=data_layer,
             symbol=symbol.upper(), strike=strike, opt_type=opt_type,
             expiry=expiry, angel_client=client,
+            spot_sl=spot_sl, spot_t1=spot_t1, spot_t2=spot_t2,
         )
 
         # Position size (matches v1 OptPicker: 50% of budget, max 3 lots)
