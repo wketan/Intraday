@@ -1784,21 +1784,38 @@ class SignalGen:
     def __init__(self):
         self.tmin=CONFIG["target_points_min"];self.tmax=CONFIG["target_points_max"]
 
-    def analyze(self, df, weight_adj=None, blocked_windows=None):
+    def analyze(self, df, weight_adj=None, blocked_windows=None, symbol=None,
+                chain_analytics=None):
         """Score candle data into a directional signal.
 
-        Routes to v2 strategy (signal_v2.SignalGenV2) when CONFIG['strategy']=='v2'.
+        Routes to strategy named by CONFIG['strategy']. Supported:
+          • 'conductor' — 5-dim orthogonal confluence scout (production)
+          • 'v2'        — legacy 4-of-6 confluence (parked, anti-edge confirmed)
+          • 'v1'        — original heuristic (default fallback)
+
         Default v1 path stays unchanged — zero risk to live engine.
 
         weight_adj      — dict with -5..+5 deltas applied to the base contribution
-                          for each indicator family. Keys: rsi, macd, supertrend,
-                          vwap, ema, volume. Loaded from prior-day Claude EOD.
-                          (v1-only; v2 ignores it)
-        blocked_windows — list of "HH:MM-HH:MM" strings. If current IST falls in
-                          any window, return None. (v1-only; v2 uses regime.py)
+                          for each indicator family. (v1-only)
+        blocked_windows — list of "HH:MM-HH:MM" strings. (v1-only)
+        symbol          — instrument name (NIFTY/BANKNIFTY/FINNIFTY) — required
+                          by conductor & gamma analyzers
+        chain_analytics — live option-chain analytics (PCR, IV skew, OI velocity)
+                          for conductor's flow dimension. None means flow=0.
         """
-        # ── v2 dispatch (Phase 2) ─────────────────────────────────────────
         strategy = CONFIG.get("strategy", "v1").lower()
+
+        # ── Conductor dispatch (production) ───────────────────────────────
+        if strategy == "conductor":
+            try:
+                from conductor import Conductor
+                return Conductor.analyze(df, symbol=symbol or "",
+                                          chain_analytics=chain_analytics)
+            except Exception as e:
+                log.error(f"conductor strategy crashed — falling back to v1: {e}")
+                # fall through to v1 below
+
+        # ── v2 dispatch (Phase 2 legacy) ──────────────────────────────────
         if strategy == "v2":
             try:
                 from signal_v2 import SignalGenV2
@@ -2812,6 +2829,14 @@ class OptPicker:
             lots = max(1, min(int(max_capital / cost_1lot), 3))
         else:
             lots = 1
+        # ── Per-trade lot cap (env-tunable) ───────────────────────────
+        # During live verification of a new strategy we cap to 1 lot to
+        # limit per-trade max loss to ~₹2-3k. Once 3-5 days of live trades
+        # match backtest, remove the env var to let the picker scale back
+        # up to its computed sizing.
+        _max_lots_env = os.environ.get("MAX_LOTS_PER_TRADE", "").strip()
+        if _max_lots_env.isdigit():
+            lots = min(lots, max(1, int(_max_lots_env)))
         qty = lots * lot
         capital = round(e * qty)
 
@@ -3570,7 +3595,18 @@ class Engine:
                     log.info(f"🚫 Event blackout active: {ev.get('name')} ({ev.get('blackout',{})}) — skipping scan")
                     time.sleep(30); continue
 
+                # Filter to only instruments enabled by env flag.
+                # ENABLED_INSTRUMENTS="BANKNIFTY" → scan only BANKNIFTY.
+                # Used during the Conductor live-verification phase since
+                # backtest showed NIFTY/FINNIFTY lose on Conductor; only
+                # BANKNIFTY has confirmed edge. Default = all 3 (no filter).
+                _enabled_env = os.environ.get("ENABLED_INSTRUMENTS", "").strip()
+                _enabled = {x.strip().upper() for x in _enabled_env.split(",") if x.strip()} if _enabled_env else None
+
                 for name,inst in INSTRUMENTS.items():
+                    if _enabled and name not in _enabled:
+                        # Silent skip — only log once when the engine starts up
+                        continue
                     if name in avoid:
                         self.metrics["regime_blocked"] += 1
                         log.info(f"  {name} skipped — regime avoid list")
@@ -3597,8 +3633,30 @@ class Engine:
                         except Exception as e:
                             log.warning(f"  regime filter crashed (failing open): {e}")
 
+                    # For Conductor strategy: fetch chain analytics BEFORE
+                    # the signal call so the flow dimension can vote. v2/v1
+                    # don't use this — extra fetch is conditional.
+                    _chain_anal_for_sig = None
+                    if strategy == "conductor":
+                        # Try to get chain analytics from the recent cache (set
+                        # by an earlier scan within the last 30s). If miss,
+                        # we'll fetch the chain after the signal fires anyway.
+                        _cc = self._chain_cache.get(name, {})
+                        if (time.time() - _cc.get("ts", 0)) < 30:
+                            cached_chain = _cc.get("chain") or []
+                            atm_cached = _cc.get("atm")
+                            if cached_chain and atm_cached is not None:
+                                try:
+                                    _oi_d = self._compute_oi_delta(name)
+                                    _chain_anal_for_sig = OptPicker.chain_analytics(
+                                        cached_chain, atm_cached, oi_delta=_oi_d)
+                                except Exception:
+                                    _chain_anal_for_sig = None
+
                     sig=self.sgen.analyze(df, weight_adj=self._weight_adj,
-                                          blocked_windows=self._blocked_windows)
+                                          blocked_windows=self._blocked_windows,
+                                          symbol=name,
+                                          chain_analytics=_chain_anal_for_sig)
 
                     # ── Capture v2 diagnostic EVERY scan (signal or not) ──
                     # The v2 analyzer always populates SignalGenV2.last_decision
@@ -3912,6 +3970,28 @@ class Engine:
                                      f"loss cooldown active ({mins_left}m remaining)")
                             self._last_signal[name] = datetime.now(IST)
                             continue
+
+                        # ── Max open positions cap (env-tunable) ──────
+                        # During live-verification of a new strategy we cap
+                        # to 1 simultaneous open position. Keeps damage bounded
+                        # while we confirm backtest results hold live. Override
+                        # by setting MAX_OPEN_POSITIONS env var on Railway.
+                        _max_open = int(os.environ.get("MAX_OPEN_POSITIONS", "1") or 0)
+                        if _max_open > 0:
+                            try:
+                                today_str = datetime.now(IST).strftime("%Y-%m-%d")
+                                open_cnt_row = db_exec(
+                                    "SELECT COUNT(*) as cnt FROM signals "
+                                    "WHERE status='OPEN' AND date=?",
+                                    (today_str,), fetchone=True)
+                                open_cnt = int(dict(open_cnt_row).get("cnt", 0)) if open_cnt_row else 0
+                                if open_cnt >= _max_open:
+                                    log.info(f"⏸ {name} {sig['direction']} skipped — "
+                                             f"max open positions cap ({open_cnt}/{_max_open})")
+                                    self._last_signal[name] = datetime.now(IST)
+                                    continue
+                            except Exception as e:
+                                log.warning(f"  max_open check failed: {e}")
 
                         # ── Layer B: validation + sizing + SL rule ──
                         ai_result = SignalValidation.analyze(name, sig, opt, regime=regime,
