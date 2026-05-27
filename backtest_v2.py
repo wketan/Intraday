@@ -358,6 +358,10 @@ def run_backtest(symbol: str, from_date: date, to_date: date,
             # (trend/momentum/structure/pattern) — flow dimension scores 0
             # without chain data, so confluence requirement adapts automatically.
             sig = Analyzer.analyze(window, symbol=symbol.upper(), chain_analytics=None)
+        elif strategy == "scalper":
+            # Scalper-v2 needs the symbol to pick instrument-specific SL/T1
+            # (NIFTY uses 7/10/18, BANKNIFTY 25/40/65, FINNIFTY 10/14/25).
+            sig = Analyzer.analyze(window, symbol=symbol.upper())
         else:
             sig = Analyzer.analyze(window)
         if sig is None:
