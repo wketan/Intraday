@@ -5126,7 +5126,7 @@ def _api_backtest_legacy_unused():
                                           "Got ", "Skip", "Backtest:")):
                     diag_lines.append(ln.strip())
             diag_log[sym] = {
-                "lines":  diag_lines[-12:],  # last 12 diagnostic lines
+                "lines":  diag_lines[-20:],  # last 20 diagnostic lines
                 "raw_signals": len(ts),
                 "error":  err_msg,
             }

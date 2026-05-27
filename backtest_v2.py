@@ -324,6 +324,11 @@ def run_backtest(symbol: str, from_date: date, to_date: date,
     last_taken_ts = None     # 15-min cooldown only applies to TAKEN (v2)
     last_taken_date = None   # one-trade-per-day gate (ORB / gamma)
 
+    # Per-strategy rejection counter — surfaces WHICH filter is blocking
+    # the most bars when 0 signals fire. Printed at end of backtest as
+    # part of the diag_lines (see /api/backtest panel).
+    rejection_counter: dict = {}
+
     # Walk every bar (need at least 30 bars of history for analyze)
     n_total = len(spot_df)
     n_scanned = 0
@@ -365,6 +370,15 @@ def run_backtest(symbol: str, from_date: date, to_date: date,
         else:
             sig = Analyzer.analyze(window)
         if sig is None:
+            # Tally the rejection verdict so we can see which filter is the
+            # bottleneck on zero-signal runs. Each analyzer sets last_decision
+            # with a 'verdict' field — we just count occurrences.
+            try:
+                ld = getattr(Analyzer, "last_decision", {}) or {}
+                v = (ld.get("verdict") or "UNKNOWN").split(" ")[0][:40]
+                rejection_counter[v] = rejection_counter.get(v, 0) + 1
+            except Exception:
+                pass
             continue
         n_signals += 1
 
@@ -560,6 +574,17 @@ def run_backtest(symbol: str, from_date: date, to_date: date,
                   f"src={trade.price_source}")
 
     print(f"  ✓ Scanned {n_scanned} bars · {n_signals} v2 signals fired · {n_processed} priced trades")
+
+    # If nothing or very little fired, surface the top-5 rejection reasons
+    # so we can see WHICH filter is the bottleneck. Critical for iterating
+    # on strict strategies like scalper-v2.
+    if rejection_counter:
+        top = sorted(rejection_counter.items(), key=lambda kv: -kv[1])[:8]
+        total_rej = sum(rejection_counter.values())
+        print(f"  ✓ Top rejection reasons (of {total_rej} total):")
+        for verdict, cnt in top:
+            pct = (cnt / total_rej * 100) if total_rej else 0
+            print(f"  ✗ {verdict:35s} {cnt:6d} ({pct:5.1f}%)")
     return trades
 
 

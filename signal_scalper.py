@@ -82,6 +82,23 @@ class SignalGenScalper:
     """Stateless scalper analyzer with Sahi-style 8-filter stack."""
 
     last_decision: dict = {}
+    # Class-level rejection counter — increments on every analyze() call.
+    # Backtest dumps a summary so we can see which filter is the bottleneck
+    # without surfacing every per-bar verdict.
+    rejection_counter: dict = {}
+
+    @staticmethod
+    def _count_reject(verdict_root: str):
+        """Bump the rejection counter for this verdict family."""
+        # Take the first 30 chars to group similar verdicts together
+        key = (verdict_root or "UNKNOWN").split(" ")[0][:30]
+        SignalGenScalper.rejection_counter[key] = \
+            SignalGenScalper.rejection_counter.get(key, 0) + 1
+
+    @staticmethod
+    def reset_diagnostics():
+        """Clear the rejection counter — call at the start of each backtest run."""
+        SignalGenScalper.rejection_counter = {}
 
     @staticmethod
     def _config(symbol: str = "") -> dict:
