@@ -4941,11 +4941,11 @@ def api_backtest():
         symbols  = [s for s in symbols if s in INSTRUMENTS]
         if not symbols:
             return jsonify({"ok": False, "error": "No valid symbols"}), 400
-        # Strategy selector: 'v2' (default), 'orb', 'gamma', or 'conductor'
+        # Strategy selector: 'v2', 'orb', 'gamma', 'conductor', or 'scalper'
         strategy = str(body.get("strategy", "v2")).lower()
-        if strategy not in ("v2", "orb", "gamma", "conductor"):
+        if strategy not in ("v2", "orb", "gamma", "conductor", "scalper"):
             return jsonify({"ok": False,
-                            "error": f"Unknown strategy '{strategy}' (expected v2|orb|gamma|conductor)"}), 400
+                            "error": f"Unknown strategy '{strategy}' (expected v2|orb|gamma|conductor|scalper)"}), 400
 
         import uuid
         job_id = uuid.uuid4().hex[:12]

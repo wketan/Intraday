@@ -2169,6 +2169,7 @@ html[data-theme="light"] .modal-card{
                     {k: 'orb',       label: 'ORB-15',    title: 'Opening Range Breakout — 1 trade/day per instrument'},
                     {k: 'gamma',     label: 'Gamma',     title: 'Gamma Blast — expiry-day only'},
                     {k: 'conductor', label: 'Conductor', title: '5-dim AI-style discretionary scout — targets ₹1k+ EV/trade'},
+                    {k: 'scalper',   label: 'Scalper',   title: 'MACD/EMA crossover scalper — 5-10 pt targets, 15-min holds'},
                   ].map(s => (
                     <button key={s.k} type="button" title={s.title}
                       className={strategy === s.k ? 'on' : ''}

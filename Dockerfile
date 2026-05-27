@@ -26,6 +26,7 @@ COPY verify_data_layer.py .
 COPY signal_v2.py .
 COPY signal_orb.py .
 COPY signal_gamma.py .
+COPY signal_scalper.py .
 COPY conductor.py .
 COPY regime.py .
 COPY events.json .

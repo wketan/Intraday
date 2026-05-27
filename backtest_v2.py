@@ -274,6 +274,9 @@ def run_backtest(symbol: str, from_date: date, to_date: date,
     elif strategy == "conductor":
         from conductor import Conductor as Analyzer
         analyzer_label = "Conductor (5-dim AI)"
+    elif strategy == "scalper":
+        from signal_scalper import SignalGenScalper as Analyzer
+        analyzer_label = "Scalper (MACD/EMA crossover)"
     else:
         from signal_v2 import SignalGenV2 as Analyzer
         strategy = "v2"
@@ -402,6 +405,19 @@ def run_backtest(symbol: str, from_date: date, to_date: date,
                 would_be_taken, reason = False, "CONDUCTOR_MAX_2_PER_DAY"
             else:
                 would_be_taken, reason = True, "OK"
+        elif strategy == "scalper":
+            # Scalper: max 4 trades/day per instrument + 10-min cooldown
+            # after the last taken trade (don't re-fire on same crossover).
+            cur_d = ts.date()
+            todays = sum(1 for t in trades if t.date == cur_d.strftime("%Y-%m-%d")
+                         and t.instrument == symbol.upper()
+                         and t.bucket.startswith("TAKEN"))
+            if todays >= 4:
+                would_be_taken, reason = False, "SCALPER_MAX_4_PER_DAY"
+            elif last_taken_ts is not None and (ts - last_taken_ts).total_seconds() < 600:
+                would_be_taken, reason = False, "SCALPER_COOLDOWN_10MIN"
+            else:
+                would_be_taken, reason = True, "OK"
         else:
             would_be_taken, reason = True, "OK"
 
@@ -426,14 +442,14 @@ def run_backtest(symbol: str, from_date: date, to_date: date,
         entry_source = entry_data.get("source", "?")
 
         # ── Exit levels: strategy-aware ────────────────────────────────
-        # ORB / Conductor: spot-based SL/T1/T2 (from the signal). Premium-pct
-        #      levels stay as a loose safety net (60%/100%/200%) so theta
-        #      bleed while spot stagnates doesn't ride a winner to zero —
-        #      but spot exits should hit first on real moves.
+        # ORB / Conductor / Scalper: spot-based SL/T1/T2 (from the signal).
+        #   Premium-pct levels stay as a loose safety net (60%/100%/200%)
+        #   so theta bleed while spot stagnates doesn't ride a winner to
+        #   zero — but spot exits should hit first on real moves.
         # v2 / gamma: tight premium-pct (35%/50%/100%) — these strategies
         #      don't have a structural spot-level exit, so the premium
         #      cap is the primary stop.
-        if strategy in ("orb", "conductor"):
+        if strategy in ("orb", "conductor", "scalper"):
             opt_sl = round(opt_entry * (1 - 0.60), 2)
             opt_t1 = round(opt_entry * (1 + 1.00), 2)
             opt_t2 = round(opt_entry * (1 + 2.00), 2)
@@ -446,10 +462,16 @@ def run_backtest(symbol: str, from_date: date, to_date: date,
             opt_t2 = round(opt_entry * (1 + t2_pct), 2)
             spot_sl = spot_t1 = spot_t2 = None
 
+        # Scalper enforces a tight TIME STOP: max 3 bars (15 min) hold.
+        # If neither SL nor T1 hits in that window, exit at the last bar's
+        # option price. Critical for scalping — without it the strategy
+        # becomes a half-day-hold strategy with theta drag.
+        max_walk_bars = 3 if strategy == "scalper" else 24
+
         # Walk forward — pull REAL option price each bar, exit at SL/T1/T2/EOD
         exit_price, exit_reason, bars_held, exit_source = _simulate_forward(
             spot_df, i, opt_entry, opt_sl, opt_t1, opt_t2, sig["direction"],
-            max_bars=24, data_layer_mod=data_layer,
+            max_bars=max_walk_bars, data_layer_mod=data_layer,
             symbol=symbol.upper(), strike=strike, opt_type=opt_type,
             expiry=expiry, angel_client=client,
             spot_sl=spot_sl, spot_t1=spot_t1, spot_t2=spot_t2,
