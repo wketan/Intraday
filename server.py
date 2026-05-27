@@ -4801,10 +4801,18 @@ def _run_backtest_job(job_id, days, budget, symbols):
         from datetime import date, timedelta
         try:
             from backtest_v2 import run_backtest
+            import data_layer as _dl
             import dataclasses
         except Exception as e:
             _set(status="error", error=f"backtest import failed: {e}")
             return
+
+        # Clear the option-day cache at the start of every backtest run so we
+        # don't serve stale data from a previous job with different dates.
+        try:
+            _dl.reset_option_day_cache()
+        except Exception:
+            pass
 
         to_date   = datetime.now(IST).date() - timedelta(days=1)
         from_date = to_date - timedelta(days=days)

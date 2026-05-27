@@ -30,6 +30,7 @@ import math
 import os
 import sqlite3
 import json
+import threading
 import time as _time
 from dataclasses import dataclass
 from datetime import date as _date, datetime, timedelta, timezone
@@ -394,59 +395,135 @@ def get_option_premium_at(symbol: str, strike: float, opt_type: str,
     return _bs_interpolate(symbol, strike, opt_type, expiry_d, ts, angel_client)
 
 
-def _angel_option_lookup(angel_client, symbol, strike, opt_type, expiry_d, ts):
-    """Try to find this option's token via the instrument master, then fetch its
-    1-min candle covering `ts`. Returns a dict or None.
+# ── In-memory option-day cache ─────────────────────────────────────────
+# The backtest exit-walk previously did one Angel API call per 5-min bar
+# of every trade — for a 30-day backtest that's ~6,000 calls, each ~300ms,
+# making a 30-day run take 30+ minutes. We now fetch the FULL trading day
+# of 1-min bars in a single call per (strike, opt_type, expiry, day) tuple
+# and serve every per-timestamp lookup from this in-memory cache. The
+# backtest typically hits ~50 unique tuples for a 30-day window → 50 API
+# calls instead of 6,000.
+_OPTION_DAY_CACHE = {}      # { (sym,strike,type,expiry_d,day_d): pd.DataFrame }
+_OPTION_DAY_CACHE_LOCK = threading.Lock()
+_OPTION_DAY_CACHE_MAX = 300  # bound size — last 300 entries (LRU-ish via dict order)
+
+
+def reset_option_day_cache():
+    """Clear the in-memory option-day cache. Called by /api/backtest at the
+    start of every job so a stale snapshot from a prior run doesn't bleed
+    into a new one."""
+    with _OPTION_DAY_CACHE_LOCK:
+        _OPTION_DAY_CACHE.clear()
+
+
+def _option_day_bars(angel_client, symbol, strike, opt_type, expiry_d, day):
+    """Return DataFrame of 1-min option bars for the full trading day, cached.
+
+    Columns: ts, open, high, low, close, volume.
+    Returns empty DataFrame if the option's token can't be found (the negative
+    is also cached so we don't re-fetch the same dead contract every bar).
     """
+    if pd is None:
+        return None
+    key = (symbol.upper(), float(strike), opt_type.upper(), expiry_d, day)
+    with _OPTION_DAY_CACHE_LOCK:
+        if key in _OPTION_DAY_CACHE:
+            return _OPTION_DAY_CACHE[key]
+
     try:
-        from server import _master  # the global InstrumentMaster
+        from server import _master
         if not _master.ensure():
             return None
         prefix = symbol.upper()
-        # Master expiry format: "DDMMMYYYY" e.g. "07JAN2026"
         exp_master = expiry_d.strftime("%d%b%Y").upper()
-        key = (prefix, float(strike), opt_type.upper(), exp_master)
-        info = _master.nfo.get(key)
+        info = _master.nfo.get((prefix, float(strike), opt_type.upper(), exp_master))
         if not info:
-            return None
-        # Fetch a few minutes around `ts` (1-min interval)
+            # Negative cache — don't re-look-up a missing contract
+            with _OPTION_DAY_CACHE_LOCK:
+                _OPTION_DAY_CACHE[key] = pd.DataFrame()
+            return pd.DataFrame()
+
+        from_dt = datetime.combine(day, datetime.min.time()).replace(hour=9, minute=15)
+        to_dt   = datetime.combine(day, datetime.min.time()).replace(hour=15, minute=30)
         params = {
             "exchange": "NFO",
             "symboltoken": str(info["token"]),
             "interval": "ONE_MINUTE",
-            "fromdate": (ts - timedelta(minutes=5)).strftime("%Y-%m-%d %H:%M"),
-            "todate":   (ts + timedelta(minutes=5)).strftime("%Y-%m-%d %H:%M"),
+            "fromdate": from_dt.strftime("%Y-%m-%d %H:%M"),
+            "todate":   to_dt.strftime("%Y-%m-%d %H:%M"),
         }
         import concurrent.futures as _cf
         with _cf.ThreadPoolExecutor(max_workers=1) as _ex:
             try:
-                resp = _ex.submit(angel_client.api.getCandleData, params).result(timeout=12)
+                resp = _ex.submit(angel_client.api.getCandleData, params).result(timeout=15)
             except _cf.TimeoutError:
                 return None
-        if resp and resp.get("status") and resp.get("data"):
-            data = resp["data"]
-            if data:
-                # Pick the bar whose timestamp ≤ ts (use the closing 1-min OHLC)
-                # Angel returns [[ts, o, h, l, c, v], ...]
-                best = None
-                ts_target = ts.strftime("%Y-%m-%dT%H:%M")
-                for bar in data:
-                    bar_ts = str(bar[0])[:16]
-                    if bar_ts <= ts_target:
-                        best = bar
-                if best:
-                    return {
-                        "price":  float(best[4]),   # close
-                        "open":   float(best[1]),
-                        "high":   float(best[2]),
-                        "low":    float(best[3]),
-                        "volume": float(best[5]),
-                        "oi":     None, "iv": None,
-                        "source": "angel",
-                    }
+
+        if not (resp and resp.get("status") and resp.get("data")):
+            with _OPTION_DAY_CACHE_LOCK:
+                _OPTION_DAY_CACHE[key] = pd.DataFrame()
+            return pd.DataFrame()
+
+        rows = []
+        for bar in resp["data"]:
+            try:
+                rows.append({
+                    "ts":     pd.to_datetime(str(bar[0])[:19]),
+                    "open":   float(bar[1]),
+                    "high":   float(bar[2]),
+                    "low":    float(bar[3]),
+                    "close":  float(bar[4]),
+                    "volume": float(bar[5]),
+                })
+            except Exception:
+                continue
+        df = pd.DataFrame(rows)
+        if df.empty:
+            with _OPTION_DAY_CACHE_LOCK:
+                _OPTION_DAY_CACHE[key] = df
+            return df
+        df = df.sort_values("ts").reset_index(drop=True)
+        # Normalize to naive datetimes (matches what callers compare against)
+        if getattr(df["ts"].dtype, "tz", None) is not None:
+            df["ts"] = df["ts"].dt.tz_localize(None)
+
+        with _OPTION_DAY_CACHE_LOCK:
+            # LRU-ish: drop oldest if at cap
+            if len(_OPTION_DAY_CACHE) >= _OPTION_DAY_CACHE_MAX:
+                oldest = next(iter(_OPTION_DAY_CACHE))
+                _OPTION_DAY_CACHE.pop(oldest, None)
+            _OPTION_DAY_CACHE[key] = df
+        return df
     except Exception as e:
-        print(f"[data_layer] angel option lookup failed: {e}")
-    return None
+        print(f"[data_layer] option day fetch failed: {e}")
+        return None
+
+
+def _angel_option_lookup(angel_client, symbol, strike, opt_type, expiry_d, ts):
+    """Look up option price at exact timestamp `ts`. Serves from the day
+    cache after the first call per (strike, opt_type, expiry, day).
+    """
+    df = _option_day_bars(angel_client, symbol, strike, opt_type, expiry_d, ts.date())
+    if df is None or df.empty:
+        return None
+    target = pd.Timestamp(ts)
+    if getattr(target, "tz", None) is not None:
+        target = target.tz_localize(None)
+    # Pick the bar whose timestamp is ≤ target — that's the last known price
+    # at or before `ts` (matches the original per-bar fetch semantics).
+    mask = df["ts"] <= target
+    if not mask.any():
+        return None
+    bar = df.loc[mask].iloc[-1]
+    return {
+        "price":  float(bar["close"]),
+        "open":   float(bar["open"]),
+        "high":   float(bar["high"]),
+        "low":    float(bar["low"]),
+        "volume": float(bar["volume"]),
+        "oi":     None, "iv": None,
+        "source": "angel-day-cache",
+    }
 
 
 def get_nse_contract_day(symbol: str, strike: float, opt_type: str,
