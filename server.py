@@ -79,14 +79,15 @@ CONFIG = {
     #                  Estimated and ignores gamma/theta/vega. Kept for backward compat.
     "opt_exit_mode":     os.environ.get("OPT_EXIT_MODE", "premium_pct"),
     # ── SL/T1/T2 as % of option premium ────────────────────────────────
-    # Tightened from 0.35/0.50/1.00 → 0.30/0.45/0.90 after 30d backtest
-    # audit showed the old asymmetry (need 1.43× larger favorable move to
-    # win than adverse move to lose) was structurally biased to lose, given
-    # option delta ~0.4 and intraday theta bleed. New values make T1 more
-    # reachable and tighten the stop. T2 still pays 3× T1 in absolute terms.
-    "opt_sl_pct":        float(os.environ.get("OPT_SL_PCT", "0.30")),   # 30% premium loss = stop
-    "opt_t1_pct":        float(os.environ.get("OPT_T1_PCT", "0.45")),   # 45% premium gain = T1
-    "opt_t2_pct":        float(os.environ.get("OPT_T2_PCT", "0.90")),   # 90% premium gain = T2
+    # Reverted to original 0.35/0.50/1.00 after the 0.30/0.45/0.90 experiment
+    # made 30d NIFTY backtest WORSE (-₹17k → -₹92k). Hypothesis was wrong:
+    # tighter SL combined with later cutoff meant more late-day trades that
+    # didn't have time to reach T1 before EOD, exiting at deep theta-bled
+    # losses that blew up avg_loss from ₹1,424 → ₹2,089. v2 is structurally
+    # broken; tuning these doesn't help. Building ORB + gamma blast instead.
+    "opt_sl_pct":        float(os.environ.get("OPT_SL_PCT", "0.35")),   # 35% premium loss = stop
+    "opt_t1_pct":        float(os.environ.get("OPT_T1_PCT", "0.50")),   # 50% premium gain = T1
+    "opt_t2_pct":        float(os.environ.get("OPT_T2_PCT", "1.00")),   # 100% premium gain = T2
 
     # ── Strict greeks (step 15) ──────────────────────────────────────────────
     # When true: signals are REJECTED if Angel's getOptionGreek API does not
