@@ -818,12 +818,16 @@ def hydrate_runtime_config():
     """Apply persisted engine_state values over CONFIG defaults.
 
     Called once at boot, AND again whenever the dashboard mutates state via
-    POST /api/strategy. Precedence:
-        engine_state DB  >  env var  >  hardcoded default
+    POST /api/strategy. Precedence (UPDATED 2026-05-27):
+        STRATEGY env var (when explicitly set)  >  engine_state DB  >  hardcoded default
 
-    User-facing effect: toggle strategy from UI, hit Save, and the engine
-    loop's next scan picks up the new mode. No redeploy, no env vars.
+    Why env-overrides-DB: a Railway env var change wouldn't take effect
+    because SQLite still had a stale 'v1' from a prior /api/strategy POST.
+    Confusing for the operator. Now if STRATEGY=X is explicitly set on
+    Railway, we force-write it to the DB on boot. Once set, the dashboard
+    UI can still mutate via POST /api/strategy.
     """
+    # Step 1: hydrate from DB
     for key in ("strategy", "dry_run_v2"):
         v = get_engine_state(key)
         if v is None: continue
@@ -831,6 +835,16 @@ def hydrate_runtime_config():
             CONFIG[key] = (str(v).lower() == "true")
         else:
             CONFIG[key] = v
+    # Step 2: env-var override for strategy (if explicitly set, write through)
+    env_strategy = os.environ.get("STRATEGY", "").strip().lower()
+    if env_strategy and env_strategy in ("v1", "v2", "conductor"):
+        if CONFIG.get("strategy") != env_strategy:
+            log.info(f"🛠️  STRATEGY env var override: {CONFIG.get('strategy')} → {env_strategy}")
+            CONFIG["strategy"] = env_strategy
+            try:
+                set_engine_state("strategy", env_strategy)
+            except Exception as e:
+                log.warning(f"  engine_state write failed: {e}")
     log.info(f"🛠️  Runtime config hydrated: strategy={CONFIG.get('strategy')} "
              f"dry_run_v2={CONFIG.get('dry_run_v2')}")
 
