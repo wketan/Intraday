@@ -2165,9 +2165,10 @@ html[data-theme="light"] .modal-card{
                 <span className="label">Strategy</span>
                 <div className="bt-seg">
                   {[
-                    {k: 'v2',    label: 'v2',    title: 'Confluence (legacy, baseline)'},
-                    {k: 'orb',   label: 'ORB-15', title: 'Opening Range Breakout — 1 trade/day per instrument'},
-                    {k: 'gamma', label: 'Gamma', title: 'Gamma Blast — expiry-day only'},
+                    {k: 'v2',        label: 'v2',        title: 'Confluence (legacy, baseline)'},
+                    {k: 'orb',       label: 'ORB-15',    title: 'Opening Range Breakout — 1 trade/day per instrument'},
+                    {k: 'gamma',     label: 'Gamma',     title: 'Gamma Blast — expiry-day only'},
+                    {k: 'conductor', label: 'Conductor', title: '5-dim AI-style discretionary scout — targets ₹1k+ EV/trade'},
                   ].map(s => (
                     <button key={s.k} type="button" title={s.title}
                       className={strategy === s.k ? 'on' : ''}

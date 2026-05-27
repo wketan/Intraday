@@ -271,6 +271,9 @@ def run_backtest(symbol: str, from_date: date, to_date: date,
     elif strategy == "gamma":
         from signal_gamma import SignalGenGamma as Analyzer
         analyzer_label = "Gamma-Blast"
+    elif strategy == "conductor":
+        from conductor import Conductor as Analyzer
+        analyzer_label = "Conductor (5-dim AI)"
     else:
         from signal_v2 import SignalGenV2 as Analyzer
         strategy = "v2"
@@ -343,9 +346,15 @@ def run_backtest(symbol: str, from_date: date, to_date: date,
         window = spot_df.iloc[max(0, i - 59):i + 1].copy()
         if len(window) < 30:
             continue
-        # Gamma analyzer needs the symbol to check expiry-day rules per index.
+        # Strategy-specific analyzer args
         if strategy == "gamma":
             sig = Analyzer.analyze(window, symbol=symbol.upper())
+        elif strategy == "conductor":
+            # Conductor accepts chain_analytics; in backtest we pass None
+            # (no per-bar option chain). It still scores 4 of 5 dimensions
+            # (trend/momentum/structure/pattern) — flow dimension scores 0
+            # without chain data, so confluence requirement adapts automatically.
+            sig = Analyzer.analyze(window, symbol=symbol.upper(), chain_analytics=None)
         else:
             sig = Analyzer.analyze(window)
         if sig is None:
@@ -381,6 +390,18 @@ def run_backtest(symbol: str, from_date: date, to_date: date,
                 would_be_taken, reason = False, "GAMMA_MAX_2_PER_DAY"
             else:
                 would_be_taken, reason = True, "OK"
+        elif strategy == "conductor":
+            # Conductor: analyzer's 5-dim confluence is its own gate. Engine
+            # layer enforces max 2 trades per day per instrument (user's
+            # stated cadence target).
+            cur_d = ts.date()
+            todays = sum(1 for t in trades if t.date == cur_d.strftime("%Y-%m-%d")
+                         and t.instrument == symbol.upper()
+                         and t.bucket.startswith("TAKEN"))
+            if todays >= 2:
+                would_be_taken, reason = False, "CONDUCTOR_MAX_2_PER_DAY"
+            else:
+                would_be_taken, reason = True, "OK"
         else:
             would_be_taken, reason = True, "OK"
 
@@ -405,14 +426,14 @@ def run_backtest(symbol: str, from_date: date, to_date: date,
         entry_source = entry_data.get("source", "?")
 
         # ── Exit levels: strategy-aware ────────────────────────────────
-        # ORB: spot-based SL/T1/T2 (from the signal). Premium-pct levels
-        #      stay as a loose safety net (60%/100%/200%) so theta bleed
-        #      while spot stagnates inside ORB doesn't ride a winner to
-        #      zero — but spot exits should hit first on real moves.
+        # ORB / Conductor: spot-based SL/T1/T2 (from the signal). Premium-pct
+        #      levels stay as a loose safety net (60%/100%/200%) so theta
+        #      bleed while spot stagnates doesn't ride a winner to zero —
+        #      but spot exits should hit first on real moves.
         # v2 / gamma: tight premium-pct (35%/50%/100%) — these strategies
         #      don't have a structural spot-level exit, so the premium
         #      cap is the primary stop.
-        if strategy == "orb":
+        if strategy in ("orb", "conductor"):
             opt_sl = round(opt_entry * (1 - 0.60), 2)
             opt_t1 = round(opt_entry * (1 + 1.00), 2)
             opt_t2 = round(opt_entry * (1 + 2.00), 2)
