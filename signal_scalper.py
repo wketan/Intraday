@@ -109,29 +109,34 @@ class SignalGenScalper:
             "win2_end_h":           _env_int  ("SCALP_WIN2_END_H",     14),
             "win2_end_m":           _env_int  ("SCALP_WIN2_END_M",     45),
 
-            # ADX trend strength filter
+            # ADX trend strength filter (relaxed: 0 signals at 22 over 90d)
             "adx_period":           _env_int  ("SCALP_ADX_PERIOD",      7),
-            "adx_min":              _env_float("SCALP_ADX_MIN",       22.0),
+            "adx_min":              _env_float("SCALP_ADX_MIN",       18.0),
 
-            # ATR active gate (current vs 20-bar avg ratio)
+            # ATR active gate (relaxed: 0.70 was too strict — most bars have
+            # ATR somewhat below recent avg by design of EWMA)
             "atr_period":           _env_int  ("SCALP_ATR_PERIOD",      5),
             "atr_avg_period":       _env_int  ("SCALP_ATR_AVG_PERIOD", 20),
-            "atr_active_ratio":     _env_float("SCALP_ATR_ACTIVE_RATIO", 0.70),
+            "atr_active_ratio":     _env_float("SCALP_ATR_ACTIVE_RATIO", 0.50),
 
-            # RSI direction filter
+            # RSI direction filter (relaxed: 50 was too binary — give 5pt
+            # margin on either side)
             "rsi_period":           _env_int  ("SCALP_RSI_PERIOD",      9),
-            "rsi_long_min":         _env_float("SCALP_RSI_LONG_MIN",   50.0),
-            "rsi_short_max":        _env_float("SCALP_RSI_SHORT_MAX",  50.0),
+            "rsi_long_min":         _env_float("SCALP_RSI_LONG_MIN",   45.0),
+            "rsi_short_max":        _env_float("SCALP_RSI_SHORT_MAX",  55.0),
 
-            # Don't-chase filter: max distance from EMA21 (in ATR multiples)
-            "max_dist_from_ema_atr": _env_float("SCALP_MAX_DIST_FROM_EMA_ATR", 1.2),
+            # Don't-chase filter (relaxed: 1.2 ATR was too tight given a
+            # fresh crossover bar is itself ~1 ATR of move)
+            "max_dist_from_ema_atr": _env_float("SCALP_MAX_DIST_FROM_EMA_ATR", 2.0),
 
-            # HTF alignment proxy: use slow EMA(60) slope as 15-min trend
+            # HTF alignment (relaxed: strict positive/negative slope rejects
+            # the natural pause before a strong move continues — allow flat)
             "htf_ema_period":       _env_int  ("SCALP_HTF_EMA_PERIOD",  60),
             "htf_slope_lookback":   _env_int  ("SCALP_HTF_SLOPE_LOOKBACK", 5),
+            "htf_slope_tolerance":  _env_float("SCALP_HTF_SLOPE_TOL",    3.0),  # ±3 pts ≈ neutral
 
-            # Range/volume expansion on signal bar
-            "range_expansion_mult": _env_float("SCALP_RANGE_EXPANSION_MULT", 1.2),
+            # Range expansion (relaxed: just require the bar to be not-smaller)
+            "range_expansion_mult": _env_float("SCALP_RANGE_EXPANSION_MULT", 1.0),
             "range_avg_lookback":   _env_int  ("SCALP_RANGE_AVG_LOOKBACK",   3),
 
             # ── Instrument-specific exits ─────────────────────────────
@@ -415,15 +420,17 @@ class SignalGenScalper:
 
         # ════════════════════════════════════════════════════════════════
         # FILTER 7 — HTF ALIGNMENT (5-min EMA60 slope as 15-min proxy)
-        # 60 × 5-min bars ≈ 5 hours of data; slope over last 5 bars =
-        # 25 min trend direction.
+        # Relaxed: must not be CLEARLY against the signal. Slope within
+        # ±tolerance counts as neutral (allowed). Only blocks when slope
+        # is strongly counter-direction.
         # ════════════════════════════════════════════════════════════════
-        if direction == "LONG" and htf_slope_pts <= 0:
-            diag_base["verdict"] = "HTF_NOT_UP_FOR_LONG"
+        htf_tol = cfg["htf_slope_tolerance"]
+        if direction == "LONG" and htf_slope_pts < -htf_tol:
+            diag_base["verdict"] = f"HTF_STRONGLY_DOWN_BLOCKING_LONG ({htf_slope_pts:.1f}<-{htf_tol})"
             SignalGenScalper.last_decision = diag_base
             return None
-        if direction == "SHORT" and htf_slope_pts >= 0:
-            diag_base["verdict"] = "HTF_NOT_DOWN_FOR_SHORT"
+        if direction == "SHORT" and htf_slope_pts > htf_tol:
+            diag_base["verdict"] = f"HTF_STRONGLY_UP_BLOCKING_SHORT ({htf_slope_pts:.1f}>+{htf_tol})"
             SignalGenScalper.last_decision = diag_base
             return None
 
