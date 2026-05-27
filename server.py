@@ -4797,7 +4797,7 @@ _BACKTEST_JOBS = {}  # { job_id: { status, progress, result, started_at, error }
 _BACKTEST_JOBS_LOCK = threading.Lock()
 
 
-def _run_backtest_job(job_id, days, budget, symbols):
+def _run_backtest_job(job_id, days, budget, symbols, strategy="v2"):
     """Long-running backtest body. Updates _BACKTEST_JOBS[job_id] as it goes
     so the GET /api/backtest/jobs/<id> endpoint can stream progress.
     Runs in a daemon thread spawned by the POST handler.
@@ -4831,12 +4831,13 @@ def _run_backtest_job(job_id, days, budget, symbols):
         diag_log   = {}
         import io, contextlib
         for sym_i, sym in enumerate(symbols):
-            _set(progress=f"Processing {sym} ({sym_i+1}/{len(symbols)})...")
+            _set(progress=f"Processing {sym} ({sym_i+1}/{len(symbols)}) [{strategy}]...")
             buf = io.StringIO()
             err_msg = None
             try:
                 with contextlib.redirect_stdout(buf):
-                    ts = run_backtest(sym, from_date, to_date, budget=budget, verbose=False)
+                    ts = run_backtest(sym, from_date, to_date, budget=budget,
+                                       verbose=False, strategy=strategy)
             except Exception as e:
                 log.warning(f"  backtest {sym} crashed: {e}")
                 err_msg = f"{type(e).__name__}: {e}"
@@ -4893,7 +4894,7 @@ def _run_backtest_job(job_id, days, budget, symbols):
         _set(status="done", progress="Complete", result={
             "ok": True,
             "params": {"days": days, "from": str(from_date), "to": str(to_date),
-                       "symbols": symbols, "budget": budget},
+                       "symbols": symbols, "budget": budget, "strategy": strategy},
             "summary": {
                 "total_signals": len(all_trades),
                 "taken_count":   len(taken),
@@ -4940,6 +4941,11 @@ def api_backtest():
         symbols  = [s for s in symbols if s in INSTRUMENTS]
         if not symbols:
             return jsonify({"ok": False, "error": "No valid symbols"}), 400
+        # Strategy selector: 'v2' (default), 'orb', or 'gamma'
+        strategy = str(body.get("strategy", "v2")).lower()
+        if strategy not in ("v2", "orb", "gamma"):
+            return jsonify({"ok": False,
+                            "error": f"Unknown strategy '{strategy}' (expected v2|orb|gamma)"}), 400
 
         import uuid
         job_id = uuid.uuid4().hex[:12]
@@ -4948,7 +4954,8 @@ def api_backtest():
                 "status": "pending", "progress": "Starting...",
                 "result": None, "error": None,
                 "started_at": datetime.now(IST).isoformat(),
-                "params": {"days": days, "symbols": symbols, "budget": budget},
+                "params": {"days": days, "symbols": symbols, "budget": budget,
+                            "strategy": strategy},
             }
             # Garbage-collect jobs older than 30 minutes
             cutoff = datetime.now(IST) - timedelta(minutes=30)
@@ -4961,9 +4968,9 @@ def api_backtest():
                     pass
 
         threading.Thread(target=_run_backtest_job,
-                         args=(job_id, days, budget, symbols),
+                         args=(job_id, days, budget, symbols, strategy),
                          daemon=True,
-                         name=f"Backtest-{job_id}").start()
+                         name=f"Backtest-{job_id}-{strategy}").start()
 
         return jsonify({"ok": True, "job_id": job_id, "status": "pending"})
     except Exception as e:

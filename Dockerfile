@@ -24,6 +24,8 @@ COPY backtest_v2.py .
 COPY data_layer.py .
 COPY verify_data_layer.py .
 COPY signal_v2.py .
+COPY signal_orb.py .
+COPY signal_gamma.py .
 COPY regime.py .
 COPY events.json .
 COPY index.html .

@@ -188,27 +188,53 @@ def _simulate_forward(spot_df, start_idx: int, opt_entry: float, opt_sl: float,
 
 def run_backtest(symbol: str, from_date: date, to_date: date,
                  budget: float = 50000.0,
-                 verbose: bool = False) -> list[Trade]:
-    """Replay the v2 strategy + regime filter over the date range.
+                 verbose: bool = False,
+                 strategy: str = "v2") -> list[Trade]:
+    """Replay an intraday options strategy over the date range.
 
-    For each 5-min spot bar:
-      1. Run SignalGenV2.analyze(rolling_window)
+    Args:
+        strategy: which signal generator to run.
+                  - "v2"    → SignalGenV2 (4-of-6 confluence, with regime filter
+                              + 15-min same-direction cooldown)
+                  - "orb"   → SignalGenORB (Opening Range Breakout, 1 trade/day
+                              per instrument, no regime filter — strategy has
+                              its own time gates)
+                  - "gamma" → SignalGenGamma (expiry-day gamma blast, gated
+                              by the analyzer itself — only fires on expiry
+                              days 14:00-15:15 with compressed-range
+                              precondition; no separate regime filter)
+
+    Per bar:
+      1. Run <Strategy>.analyze(rolling_window)
       2. If signal fires:
-         a. Apply RegimeFilter to determine TAKEN or FILTERED + reason
+         a. Apply strategy-specific gates (regime / one-per-day / cooldown)
          b. Determine ATM strike, expiry
          c. Look up REAL option entry price via data_layer
-         d. Compute SL/T1/T2 via premium-pct mode (same as live engine)
-         e. Walk forward, look up REAL option price each bar, exit at SL/T1/T2/EOD
-         f. Classify into bucket: TAKEN_WIN / TAKEN_LOSS / FILTERED_WIN / FILTERED_LOSS
+         d. Compute SL/T1/T2 via premium-pct mode
+         e. Walk forward, look up REAL option price each bar, exit at
+            SL/T1/T2/EOD
+         f. Classify TAKEN_WIN / TAKEN_LOSS / FILTERED_WIN / FILTERED_LOSS
          g. Record Trade dataclass row
 
     Returns: list of Trade objects.
     """
     import pandas as pd
     from server import AngelClient, INSTRUMENTS, CONFIG, estimate_costs
-    from signal_v2 import SignalGenV2
     from regime import RegimeFilter
     import data_layer
+
+    # ── Pick the analyzer ─────────────────────────────────────────────
+    strategy = (strategy or "v2").lower()
+    if strategy == "orb":
+        from signal_orb import SignalGenORB as Analyzer
+        analyzer_label = "ORB-15"
+    elif strategy == "gamma":
+        from signal_gamma import SignalGenGamma as Analyzer
+        analyzer_label = "Gamma-Blast"
+    else:
+        from signal_v2 import SignalGenV2 as Analyzer
+        strategy = "v2"
+        analyzer_label = "v2-confluence"
 
     inst = INSTRUMENTS.get(symbol.upper())
     if not inst:
@@ -218,7 +244,7 @@ def run_backtest(symbol: str, from_date: date, to_date: date,
     lot = inst["lot_size"]
     prefix = inst["expiry_prefix"]
 
-    print(f"\n══ Backtest: {symbol}  {from_date} → {to_date} ══")
+    print(f"\n══ Backtest: {symbol} [{analyzer_label}]  {from_date} → {to_date} ══")
 
     # Boot Angel client for spot + option data
     print("  Logging into Angel One ...")
@@ -249,7 +275,8 @@ def run_backtest(symbol: str, from_date: date, to_date: date,
     t2_pct = float(CONFIG.get("opt_t2_pct", 1.00))
 
     trades: list[Trade] = []
-    last_taken_ts = None     # 15-min cooldown only applies to TAKEN
+    last_taken_ts = None     # 15-min cooldown only applies to TAKEN (v2)
+    last_taken_date = None   # one-trade-per-day gate (ORB / gamma)
 
     # Walk every bar (need at least 30 bars of history for analyze)
     n_total = len(spot_df)
@@ -276,21 +303,46 @@ def run_backtest(symbol: str, from_date: date, to_date: date,
         window = spot_df.iloc[max(0, i - 59):i + 1].copy()
         if len(window) < 30:
             continue
-        sig = SignalGenV2.analyze(window)
+        # Gamma analyzer needs the symbol to check expiry-day rules per index.
+        if strategy == "gamma":
+            sig = Analyzer.analyze(window, symbol=symbol.upper())
+        else:
+            sig = Analyzer.analyze(window)
         if sig is None:
             continue
         n_signals += 1
 
-        # Apply regime filter — determines TAKEN vs FILTERED
-        ok, reason = RegimeFilter.should_trade(angel_client=None, symbol=symbol.upper(), now=ts)
-
-        # Cooldown — only blocks TAKEN
-        if last_taken_ts is not None and (ts - last_taken_ts).total_seconds() < 900:
-            if ok:
-                ok = False
-                reason = "COOLDOWN_15MIN"
-
-        would_be_taken = ok
+        # ── Strategy-specific TAKEN/FILTERED gating ────────────────────
+        if strategy == "v2":
+            # v2: regime filter + 15-min same-direction cooldown
+            ok, reason = RegimeFilter.should_trade(
+                angel_client=None, symbol=symbol.upper(), now=ts)
+            if last_taken_ts is not None and (ts - last_taken_ts).total_seconds() < 900:
+                if ok:
+                    ok, reason = False, "COOLDOWN_15MIN"
+            would_be_taken = ok
+        elif strategy == "orb":
+            # ORB: one-trade-per-day per instrument. Analyzer's time gates
+            # (9:30 - 13:00) replace the regime cutoff. No volatility filter.
+            cur_d = ts.date()
+            if last_taken_date == cur_d:
+                would_be_taken, reason = False, "ORB_ONE_TRADE_PER_DAY"
+            else:
+                would_be_taken, reason = True, "OK"
+        elif strategy == "gamma":
+            # Gamma: analyzer already filtered to expiry-day + time window +
+            # compressed-day + body/range expansion. Max 2 trades per
+            # expiry day per instrument to cap exposure.
+            cur_d = ts.date()
+            todays = sum(1 for t in trades if t.date == cur_d.strftime("%Y-%m-%d")
+                         and t.instrument == symbol.upper()
+                         and t.bucket.startswith("TAKEN"))
+            if todays >= 2:
+                would_be_taken, reason = False, "GAMMA_MAX_2_PER_DAY"
+            else:
+                would_be_taken, reason = True, "OK"
+        else:
+            would_be_taken, reason = True, "OK"
 
         # Pick strike (ATM) + expiry
         spot = float(bar["close"])
@@ -343,6 +395,7 @@ def run_backtest(symbol: str, from_date: date, to_date: date,
 
         if would_be_taken:
             last_taken_ts = ts
+            last_taken_date = ts.date()
 
         ind = sig.get("indicators", {})
         # Pull NSE day context from the entry-data dict (always populated when

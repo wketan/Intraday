@@ -2028,6 +2028,7 @@ html[data-theme="light"] .modal-card{
     function BacktestModal({ open, onClose, budget }) {
       const [days, setDays] = useState(30);
       const [syms, setSyms] = useState({ NIFTY: true, BANKNIFTY: true, FINNIFTY: true });
+      const [strategy, setStrategy] = useState('v2');
       const [busy, setBusy] = useState(false);
       const [err, setErr] = useState('');
       const [data, setData] = useState(null);
@@ -2093,7 +2094,7 @@ html[data-theme="light"] .modal-card{
         try {
           const r = await apiFetch('/api/backtest', {
             method: 'POST',
-            body: JSON.stringify({ days, symbols, budget: budget || 50000 })
+            body: JSON.stringify({ days, symbols, budget: budget || 50000, strategy })
           });
           if (!r.ok) {
             const t = await r.text();
@@ -2160,6 +2161,20 @@ html[data-theme="light"] .modal-card{
             </div>
 
             <div className="bt-controls">
+              <div className="group">
+                <span className="label">Strategy</span>
+                <div className="bt-seg">
+                  {[
+                    {k: 'v2',    label: 'v2',    title: 'Confluence (legacy, baseline)'},
+                    {k: 'orb',   label: 'ORB-15', title: 'Opening Range Breakout — 1 trade/day per instrument'},
+                    {k: 'gamma', label: 'Gamma', title: 'Gamma Blast — expiry-day only'},
+                  ].map(s => (
+                    <button key={s.k} type="button" title={s.title}
+                      className={strategy === s.k ? 'on' : ''}
+                      onClick={() => setStrategy(s.k)}>{s.label}</button>
+                  ))}
+                </div>
+              </div>
               <div className="group">
                 <span className="label">Window</span>
                 <div className="bt-seg">
