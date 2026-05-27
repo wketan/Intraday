@@ -4034,11 +4034,13 @@ class Engine:
                 })
         except Exception as _e:
             log.warning(f"  open-signals build failed: {_e}")
+        _rm = os.getenv("INTRADAY_RESEARCH_MODE", "1").strip()
         return{"running":self.running,"signals":self.latest,"alerts":self.alerts[:50],
             "open_signals": open_signals,
             "performance":get_perf(),
             "config":{"scan_interval":CONFIG["scan_interval_sec"],"target_min":CONFIG["target_points_min"],
                 "target_max":CONFIG["target_points_max"],"min_confidence":CONFIG["min_confidence"]},
+            "research_mode": (_rm != "0"),
             "time":datetime.now(IST).strftime("%H:%M:%S"),
             "market_open":9<=datetime.now(IST).hour<16,
             "slack_enabled":CONFIG["slack_enabled"] and bool(CONFIG["slack_webhook"])}
@@ -5992,6 +5994,12 @@ def _scheduler():
 
     Wakes every 30 seconds, fires once per slot (dedup'd by date+slot key so
     a restart inside the same minute doesn't double-fire).
+
+    RESEARCH-MODE OVERRIDE: when env var INTRADAY_RESEARCH_MODE=1 is set
+    on Railway, the scheduler refuses to auto-start the engine (auto-off
+    still works as a safety net). Used while we're rebuilding the strategy
+    — stops the engine from quietly turning itself on tomorrow morning and
+    burning more capital on a strategy we've proven loses money.
     """
     import time as _t
     _t.sleep(20)  # give _startup a head-start to log in
@@ -6002,13 +6010,27 @@ def _scheduler():
             day = now.weekday()       # Mon=0 ... Sun=6
             day_key = now.strftime("%Y-%m-%d")
             hh, mm = now.hour, now.minute
+            # Default ON — strategy is under rebuild, do not auto-fire trades.
+            # Explicit override: set INTRADAY_RESEARCH_MODE=0 on Railway to re-enable
+            # auto-start after the new strategy passes backtest + live verification.
+            _rm = os.getenv("INTRADAY_RESEARCH_MODE", "1").strip()
+            research_mode = (_rm != "0")
 
             # ── Auto-ON: weekdays at 08:45 IST ────────────────────────────
             if day <= 4 and hh == 8 and mm == 45:
                 key = f"{day_key}-on"
                 if not last_fired.get(key):
                     last_fired[key] = True
-                    if not engine.running:
+                    if research_mode:
+                        log.info("⏰ Scheduler: 08:45 IST — RESEARCH MODE active, "
+                                 "refusing to auto-start. Set INTRADAY_RESEARCH_MODE=0 "
+                                 "on Railway to re-enable auto-start.")
+                        try:
+                            SlackAlert.send("🔬 *Engine auto-start blocked* — research mode on. "
+                                            "Strategy rebuild in progress; clear the flag on Railway when ready.")
+                        except Exception:
+                            pass
+                    elif not engine.running:
                         log.info("⏰ Scheduler: auto-ON at 08:45 IST")
                         try:
                             engine.start()
