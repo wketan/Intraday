@@ -53,9 +53,17 @@ class RegimeFilter:
             if now.weekday() == 0:   # 0 = Monday
                 return False, "MONDAY_BLOCK"
 
-        # ── Filter 2: No new entries after 12:30 IST ──────────────────
-        cutoff_h = int(os.environ.get("V2_NO_ENTRY_HOUR", "12"))
-        cutoff_m = int(os.environ.get("V2_NO_ENTRY_MINUTE", "30"))
+        # ── Filter 2: No new entries after 14:50 IST ──────────────────
+        # Originally 12:30, which blocked the 13:30-15:00 afternoon trend
+        # window — published research (Intraday Lab 2,122-trade NIFTY
+        # backtest, Zerodha Varsity) identifies this as the highest-edge
+        # intraday window. 30d backtest confirmed: the 12:30 cutoff was
+        # forcing entries into morning chop and locking out afternoon
+        # trends. Moved to 14:50 so we have ~40 min for the trade to play
+        # out before the 15:30 close and don't enter into close-positioning
+        # gamma noise.
+        cutoff_h = int(os.environ.get("V2_NO_ENTRY_HOUR", "14"))
+        cutoff_m = int(os.environ.get("V2_NO_ENTRY_MINUTE", "50"))
         if now.hour > cutoff_h or (now.hour == cutoff_h and now.minute >= cutoff_m):
             return False, f"AFTER_{cutoff_h:02d}{cutoff_m:02d}_NO_NEW_ENTRY"
 
