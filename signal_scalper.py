@@ -147,8 +147,11 @@ class SignalGenScalper:
             "max_dist_from_ema_atr": _env_float("SCALP_MAX_DIST_FROM_EMA_ATR", 2.0),
 
             # HTF alignment (relaxed: strict positive/negative slope rejects
-            # the natural pause before a strong move continues — allow flat)
-            "htf_ema_period":       _env_int  ("SCALP_HTF_EMA_PERIOD",  60),
+            # the natural pause before a strong move continues — allow flat).
+            # Period 30 (was 60) because backtest passes only 60-bar windows;
+            # EMA(60) needs 65+ bars so was rejecting 100% on INSUFFICIENT_BARS.
+            # EMA(30) × 5min = 150 min ≈ 2.5 hr "medium-term" trend filter.
+            "htf_ema_period":       _env_int  ("SCALP_HTF_EMA_PERIOD",  30),
             "htf_slope_lookback":   _env_int  ("SCALP_HTF_SLOPE_LOOKBACK", 5),
             "htf_slope_tolerance":  _env_float("SCALP_HTF_SLOPE_TOL",    3.0),  # ±3 pts ≈ neutral
 
