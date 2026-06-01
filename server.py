@@ -6162,6 +6162,15 @@ def _startup():
             # BUG FIX #1: Auto-start the scan engine so signals fire without
             # requiring a manual POST to /api/start from the dashboard.
             if not engine.running:
+                # Run the SAME strategy smoke-test as engine.start() so the
+                # auto-startup path can't silently bypass it. Without this,
+                # commit c489960's loud-fail guarantee wouldn't apply to the
+                # boot-time engine start (only to manual /api/start calls).
+                smoke_ok, smoke_err = engine._smoke_test_strategy()
+                if not smoke_ok:
+                    log.error(f"▶ Auto-startup: REFUSING TO START — strategy `{CONFIG.get('strategy','v1')}` smoke test failed: {smoke_err}")
+                    SlackAlert.send(f"⛔ *Auto-startup refused*\nStrategy `{CONFIG.get('strategy','v1')}` failed smoke test: `{smoke_err}`\nFix the bug and redeploy — engine is NOT scanning.")
+                    return
                 log.info("▶ Auto-startup: starting signal scan engine...")
                 engine.running = True
                 threading.Thread(target=engine._loop, daemon=True, name="ScanLoop").start()
