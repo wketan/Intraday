@@ -1798,6 +1798,11 @@ class SignalGen:
     def __init__(self):
         self.tmin=CONFIG["target_points_min"];self.tmax=CONFIG["target_points_max"]
 
+    # Class-level tracker so /api/status can surface which strategy actually
+    # ran on the most recent scan — the previous silent-fallback hid the fact
+    # that Conductor was crashing on every call and v1 was running instead.
+    last_dispatch: dict = {"strategy": None, "actually_ran": None, "error": None, "ts": None}
+
     def analyze(self, df, weight_adj=None, blocked_windows=None, symbol=None,
                 chain_analytics=None):
         """Score candle data into a directional signal.
@@ -1807,8 +1812,6 @@ class SignalGen:
           • 'v2'        — legacy 4-of-6 confluence (parked, anti-edge confirmed)
           • 'v1'        — original heuristic (default fallback)
 
-        Default v1 path stays unchanged — zero risk to live engine.
-
         weight_adj      — dict with -5..+5 deltas applied to the base contribution
                           for each indicator family. (v1-only)
         blocked_windows — list of "HH:MM-HH:MM" strings. (v1-only)
@@ -1816,27 +1819,57 @@ class SignalGen:
                           by conductor & gamma analyzers
         chain_analytics — live option-chain analytics (PCR, IV skew, OI velocity)
                           for conductor's flow dimension. None means flow=0.
+
+        DISPATCH POLICY (post-2026-06-01 bug):
+          • Normalize column name 'timestamp' → 'ts' once at the top. Live
+            AngelClient.candles produces 'timestamp'; backtest_v2 produces
+            'ts'. Conductor/ORB/Gamma/Scalper all read df['ts']. Without
+            this normalization, every live conductor call raised KeyError
+            and the silent fallback ran v1 instead — 2 weeks of zero alerts.
+          • NEVER silently fall back to v1 on strategy crash. Loud-fail
+            (log + return None) so the dashboard's signal stream stays
+            empty rather than secretly running the wrong code.
+          • Record actual run path in SignalGen.last_dispatch for /api/status.
         """
         strategy = CONFIG.get("strategy", "v1").lower()
+        SignalGen.last_dispatch = {
+            "strategy": strategy, "actually_ran": None,
+            "error": None, "ts": datetime.now(IST).strftime("%H:%M:%S")
+        }
+
+        # Column normalization: backtest passes 'ts', live passes 'timestamp'.
+        # Strategies were written against 'ts'. One line shields all of them.
+        if df is not None and not df.empty and "timestamp" in df.columns and "ts" not in df.columns:
+            df = df.rename(columns={"timestamp": "ts"})
 
         # ── Conductor dispatch (production) ───────────────────────────────
         if strategy == "conductor":
             try:
                 from conductor import Conductor
-                return Conductor.analyze(df, symbol=symbol or "",
-                                          chain_analytics=chain_analytics)
+                result = Conductor.analyze(df, symbol=symbol or "",
+                                            chain_analytics=chain_analytics)
+                SignalGen.last_dispatch["actually_ran"] = "conductor"
+                return result
             except Exception as e:
-                log.error(f"conductor strategy crashed — falling back to v1: {e}")
-                # fall through to v1 below
+                SignalGen.last_dispatch["actually_ran"] = None
+                SignalGen.last_dispatch["error"] = f"{type(e).__name__}: {e}"
+                log.error(f"❌ conductor crashed — NO fallback, returning None: {e}", exc_info=True)
+                return None  # loud-fail: do NOT run v1 silently
 
         # ── v2 dispatch (Phase 2 legacy) ──────────────────────────────────
         if strategy == "v2":
             try:
                 from signal_v2 import SignalGenV2
-                return SignalGenV2.analyze(df)
+                result = SignalGenV2.analyze(df)
+                SignalGen.last_dispatch["actually_ran"] = "v2"
+                return result
             except Exception as e:
-                log.error(f"v2 strategy crashed — falling back to v1: {e}")
-                # fall through to v1 below
+                SignalGen.last_dispatch["actually_ran"] = None
+                SignalGen.last_dispatch["error"] = f"{type(e).__name__}: {e}"
+                log.error(f"❌ v2 crashed — NO fallback, returning None: {e}", exc_info=True)
+                return None  # loud-fail
+
+        SignalGen.last_dispatch["actually_ran"] = "v1"
 
         if len(df)<30: return None
         # Time-window block (Layer C): "skip 11:30-12:30 today" type guidance
@@ -3333,10 +3366,64 @@ class Engine:
 
     def start(self):
         if not self.client.login(): return{"status":"error","message":"Login failed"}
+
+        # Smoke-test the configured strategy on a synthetic dataframe shaped
+        # like AngelClient.candles output (column='timestamp'). If the
+        # configured strategy can't even survive a single call, fail LOUD
+        # before claiming we're running — the previous silent fallback
+        # masked a 'timestamp' vs 'ts' KeyError for 2 weeks.
+        smoke_ok, smoke_err = self._smoke_test_strategy()
+        if not smoke_ok:
+            SlackAlert.send(f"⛔ *Engine refused to start*\nStrategy `{CONFIG.get('strategy','v1')}` failed smoke test: `{smoke_err}`\nFix the bug and redeploy — engine is NOT scanning.")
+            log.error(f"❌ Refusing to start: strategy smoke test failed: {smoke_err}")
+            return {"status":"error","message":f"Strategy {CONFIG.get('strategy','v1')} smoke test failed: {smoke_err}"}
+
         self.running=True
         threading.Thread(target=self._loop,daemon=True).start()
-        SlackAlert.send("🚀 *Signal Engine Started*\nScanning NIFTY, BANKNIFTY, FINNIFTY\nAlerts will arrive here when confidence ≥ 60%")
+        SlackAlert.send(f"🚀 *Signal Engine Started*\nStrategy: `{CONFIG.get('strategy','v1')}` (smoke-test passed)\nInstruments: {os.environ.get('ENABLED_INSTRUMENTS','NIFTY,BANKNIFTY,FINNIFTY')}")
         return{"status":"ok","message":"Engine started"}
+
+    def _smoke_test_strategy(self):
+        """Invoke the configured strategy on a synthetic dataframe that
+        mirrors the live AngelClient.candles shape (column='timestamp').
+
+        Returns (True, None) if the strategy returns either a dict or None
+        cleanly. Returns (False, error_msg) on any exception — the live
+        engine should refuse to start because every subsequent call will
+        hit the same bug.
+        """
+        try:
+            import pandas as pd
+            from datetime import datetime, timedelta
+            # 60 synthetic 5-min bars ending at "now-1min" in IST.
+            t0 = datetime.now(IST) - timedelta(minutes=60*5 + 1)
+            rows = []
+            base = 23000.0
+            for i in range(60):
+                ts = t0 + timedelta(minutes=5*i)
+                o = base + i * 0.5
+                h = o + 5
+                l = o - 5
+                c = o + 1
+                v = 1_000_000 + i * 1000
+                # Mirror live AngelClient.candles columns EXACTLY ('timestamp', not 'ts')
+                rows.append({"timestamp": ts, "open": o, "high": h, "low": l, "close": c, "volume": v})
+            df = pd.DataFrame(rows)
+            df["timestamp"] = pd.to_datetime(df["timestamp"])
+            # One call, configured strategy. None is OK; exception is not.
+            out = self.sgen.analyze(df, symbol="BANKNIFTY", chain_analytics=None)
+            if out is not None and not isinstance(out, dict):
+                return (False, f"strategy returned {type(out).__name__}, expected dict|None")
+            # Check the dispatch tracker — if configured strategy crashed
+            # internally, last_dispatch.error will be populated.
+            ld = SignalGen.last_dispatch or {}
+            if ld.get("error"):
+                return (False, ld["error"])
+            ran = ld.get("actually_ran") or "(unknown)"
+            log.info(f"✅ Strategy smoke test passed — '{ran}' ran cleanly on synthetic data")
+            return (True, None)
+        except Exception as e:
+            return (False, f"{type(e).__name__}: {e}")
 
     def stop(self):
         self.running=False;self.tracker.close_all()
@@ -4144,6 +4231,7 @@ class Engine:
                 "strategy":CONFIG.get("strategy","v1"),
                 "enabled_instruments":os.environ.get("ENABLED_INSTRUMENTS","")},
             "research_mode": (_rm != "0"),
+            "dispatch": dict(getattr(SignalGen, "last_dispatch", {}) or {}),
             "time":datetime.now(IST).strftime("%H:%M:%S"),
             "market_open":9<=datetime.now(IST).hour<16,
             "slack_enabled":CONFIG["slack_enabled"] and bool(CONFIG["slack_webhook"])}
