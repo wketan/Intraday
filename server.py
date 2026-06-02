@@ -1831,10 +1831,28 @@ class SignalGen:
             empty rather than secretly running the wrong code.
           • Record actual run path in SignalGen.last_dispatch for /api/status.
         """
-        strategy = CONFIG.get("strategy", "v1").lower()
+        # Per-instrument routing: INSTRUMENT_STRATEGIES env var lets us run
+        # different strategies per index simultaneously. Format:
+        #   "BANKNIFTY=conductor,NIFTY=scalper_v3,FINNIFTY=conductor"
+        # Falls through to CONFIG["strategy"] if symbol is not in the map.
+        # Lets us keep Conductor on trending BANKNIFTY while running a
+        # scalper on range-bound NIFTY without changing CONFIG globally.
+        strategy_global = CONFIG.get("strategy", "v1").lower()
+        strategy = strategy_global
+        per_instr_map = {}
+        per_env = os.environ.get("INSTRUMENT_STRATEGIES", "").strip()
+        if per_env:
+            for pair in per_env.split(","):
+                if "=" in pair:
+                    k, v = pair.split("=", 1)
+                    per_instr_map[k.strip().upper()] = v.strip().lower()
+        if symbol and symbol.upper() in per_instr_map:
+            strategy = per_instr_map[symbol.upper()]
+
         SignalGen.last_dispatch = {
             "strategy": strategy, "actually_ran": None,
-            "error": None, "ts": datetime.now(IST).strftime("%H:%M:%S")
+            "error": None, "ts": datetime.now(IST).strftime("%H:%M:%S"),
+            "symbol": symbol, "global_strategy": strategy_global,
         }
 
         # Column normalization: backtest passes 'ts', live passes 'timestamp'.
@@ -1842,7 +1860,7 @@ class SignalGen:
         if df is not None and not df.empty and "timestamp" in df.columns and "ts" not in df.columns:
             df = df.rename(columns={"timestamp": "ts"})
 
-        # ── Conductor dispatch (production) ───────────────────────────────
+        # ── Conductor dispatch (production for BANKNIFTY) ─────────────────
         if strategy == "conductor":
             try:
                 from conductor import Conductor
@@ -1855,6 +1873,34 @@ class SignalGen:
                 SignalGen.last_dispatch["error"] = f"{type(e).__name__}: {e}"
                 log.error(f"❌ conductor crashed — NO fallback, returning None: {e}", exc_info=True)
                 return None  # loud-fail: do NOT run v1 silently
+
+        # ── ScalperV3 dispatch (NIFTY scalp candidate) ────────────────────
+        if strategy in ("scalper_v3", "scalper3"):
+            try:
+                from signal_scalper_v3 import ScalperV3
+                result = ScalperV3.analyze(df, symbol=symbol or "",
+                                            chain_analytics=chain_analytics)
+                SignalGen.last_dispatch["actually_ran"] = "scalper_v3"
+                return result
+            except Exception as e:
+                SignalGen.last_dispatch["actually_ran"] = None
+                SignalGen.last_dispatch["error"] = f"{type(e).__name__}: {e}"
+                log.error(f"❌ scalper_v3 crashed — NO fallback, returning None: {e}", exc_info=True)
+                return None
+
+        # ── Reverter dispatch (NIFTY mean-reversion candidate) ───────────
+        if strategy == "reverter":
+            try:
+                from signal_reverter import Reverter
+                result = Reverter.analyze(df, symbol=symbol or "",
+                                           chain_analytics=chain_analytics)
+                SignalGen.last_dispatch["actually_ran"] = "reverter"
+                return result
+            except Exception as e:
+                SignalGen.last_dispatch["actually_ran"] = None
+                SignalGen.last_dispatch["error"] = f"{type(e).__name__}: {e}"
+                log.error(f"❌ reverter crashed — NO fallback, returning None: {e}", exc_info=True)
+                return None
 
         # ── v2 dispatch (Phase 2 legacy) ──────────────────────────────────
         if strategy == "v2":
@@ -3384,43 +3430,69 @@ class Engine:
         return{"status":"ok","message":"Engine started"}
 
     def _smoke_test_strategy(self):
-        """Invoke the configured strategy on a synthetic dataframe that
+        """Invoke EVERY configured strategy on a synthetic dataframe that
         mirrors the live AngelClient.candles shape (column='timestamp').
 
-        Returns (True, None) if the strategy returns either a dict or None
-        cleanly. Returns (False, error_msg) on any exception — the live
-        engine should refuse to start because every subsequent call will
-        hit the same bug.
+        Covers both the global CONFIG['strategy'] and each per-instrument
+        override in INSTRUMENT_STRATEGIES. Each strategy must return a
+        dict or None cleanly — any exception fails the smoke test.
+
+        Returns (True, None) if all configured strategies survive their
+        call. Returns (False, error_msg) on first failure — engine
+        refuses to start because the same bug would fire on every scan.
         """
         try:
             import pandas as pd
             from datetime import datetime, timedelta
-            # 60 synthetic 5-min bars ending at "now-1min" in IST.
             t0 = datetime.now(IST) - timedelta(minutes=60*5 + 1)
             rows = []
-            base = 23000.0
             for i in range(60):
                 ts = t0 + timedelta(minutes=5*i)
-                o = base + i * 0.5
-                h = o + 5
-                l = o - 5
-                c = o + 1
-                v = 1_000_000 + i * 1000
-                # Mirror live AngelClient.candles columns EXACTLY ('timestamp', not 'ts')
-                rows.append({"timestamp": ts, "open": o, "high": h, "low": l, "close": c, "volume": v})
+                o = 23000.0 + i * 0.5
+                rows.append({"timestamp": ts, "open": o, "high": o + 5, "low": o - 5,
+                              "close": o + 1, "volume": 1_000_000 + i * 1000})
             df = pd.DataFrame(rows)
             df["timestamp"] = pd.to_datetime(df["timestamp"])
-            # One call, configured strategy. None is OK; exception is not.
-            out = self.sgen.analyze(df, symbol="BANKNIFTY", chain_analytics=None)
-            if out is not None and not isinstance(out, dict):
-                return (False, f"strategy returned {type(out).__name__}, expected dict|None")
-            # Check the dispatch tracker — if configured strategy crashed
-            # internally, last_dispatch.error will be populated.
-            ld = SignalGen.last_dispatch or {}
-            if ld.get("error"):
-                return (False, ld["error"])
-            ran = ld.get("actually_ran") or "(unknown)"
-            log.info(f"✅ Strategy smoke test passed — '{ran}' ran cleanly on synthetic data")
+
+            # Build the set of (strategy, symbol) pairs to smoke test:
+            # 1. The global CONFIG strategy (BANKNIFTY default symbol).
+            # 2. Each instrument-specific override.
+            global_strategy = CONFIG.get("strategy", "v1").lower()
+            pairs = [(global_strategy, "BANKNIFTY")]
+            per_env = os.environ.get("INSTRUMENT_STRATEGIES", "").strip()
+            seen = {("BANKNIFTY", global_strategy)}
+            if per_env:
+                for raw in per_env.split(","):
+                    if "=" in raw:
+                        sym, strat = raw.split("=", 1)
+                        sym = sym.strip().upper()
+                        strat = strat.strip().lower()
+                        if (sym, strat) not in seen:
+                            pairs.append((strat, sym))
+                            seen.add((sym, strat))
+
+            failures = []
+            for strat, sym in pairs:
+                # Temporarily force CONFIG.strategy for this probe so the
+                # dispatch routes to `strat` even when no INSTRUMENT_STRATEGIES
+                # override applies (e.g. probing the global strategy).
+                prev_global = CONFIG.get("strategy")
+                CONFIG["strategy"] = strat
+                try:
+                    out = self.sgen.analyze(df, symbol=sym, chain_analytics=None)
+                finally:
+                    if prev_global is not None:
+                        CONFIG["strategy"] = prev_global
+                if out is not None and not isinstance(out, dict):
+                    failures.append(f"{strat}/{sym}: returned {type(out).__name__}")
+                    continue
+                ld = SignalGen.last_dispatch or {}
+                if ld.get("error"):
+                    failures.append(f"{strat}/{sym}: {ld['error']}")
+                    continue
+                log.info(f"✅ Smoke test '{strat}' on {sym}: ran cleanly (actually_ran={ld.get('actually_ran')})")
+            if failures:
+                return (False, "; ".join(failures))
             return (True, None)
         except Exception as e:
             return (False, f"{type(e).__name__}: {e}")
@@ -5125,11 +5197,12 @@ def api_backtest():
         symbols  = [s for s in symbols if s in INSTRUMENTS]
         if not symbols:
             return jsonify({"ok": False, "error": "No valid symbols"}), 400
-        # Strategy selector: 'v2', 'orb', 'gamma', 'conductor', or 'scalper'
+        # Strategy selector
         strategy = str(body.get("strategy", "v2")).lower()
-        if strategy not in ("v2", "orb", "gamma", "conductor", "scalper"):
+        _allowed = ("v2", "orb", "gamma", "conductor", "scalper", "scalper_v3", "reverter")
+        if strategy not in _allowed:
             return jsonify({"ok": False,
-                            "error": f"Unknown strategy '{strategy}' (expected v2|orb|gamma|conductor|scalper)"}), 400
+                            "error": f"Unknown strategy '{strategy}' (expected {'|'.join(_allowed)})"}), 400
 
         import uuid
         job_id = uuid.uuid4().hex[:12]
@@ -5707,8 +5780,8 @@ def api_strategy_set():
 
     if new_strategy is not None:
         s = str(new_strategy).lower()
-        if s not in ("v1", "v2", "conductor"):
-            return jsonify({"error": "strategy must be 'v1', 'v2', or 'conductor'"}), 400
+        if s not in ("v1", "v2", "conductor", "scalper_v3", "reverter"):
+            return jsonify({"error": "strategy must be 'v1', 'v2', 'conductor', 'scalper_v3', or 'reverter'"}), 400
         CONFIG["strategy"] = s
         set_engine_state("strategy", s)
 

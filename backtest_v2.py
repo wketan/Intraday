@@ -277,6 +277,13 @@ def run_backtest(symbol: str, from_date: date, to_date: date,
     elif strategy == "scalper":
         from signal_scalper import SignalGenScalper as Analyzer
         analyzer_label = "Scalper (MACD/EMA crossover)"
+    elif strategy in ("scalper_v3", "scalper3"):
+        from signal_scalper_v3 import ScalperV3 as Analyzer
+        strategy = "scalper_v3"
+        analyzer_label = "ScalperV3 (price-action scalp for NIFTY)"
+    elif strategy == "reverter":
+        from signal_reverter import Reverter as Analyzer
+        analyzer_label = "Reverter (VWAP mean-reversion for NIFTY)"
     else:
         from signal_v2 import SignalGenV2 as Analyzer
         strategy = "v2"
@@ -367,6 +374,9 @@ def run_backtest(symbol: str, from_date: date, to_date: date,
             # Scalper-v2 needs the symbol to pick instrument-specific SL/T1
             # (NIFTY uses 7/10/18, BANKNIFTY 25/40/65, FINNIFTY 10/14/25).
             sig = Analyzer.analyze(window, symbol=symbol.upper())
+        elif strategy in ("scalper_v3", "reverter"):
+            # Both pass symbol so the ₹-target gate uses the right lot size.
+            sig = Analyzer.analyze(window, symbol=symbol.upper(), chain_analytics=None)
         else:
             sig = Analyzer.analyze(window)
         if sig is None:
@@ -436,6 +446,32 @@ def run_backtest(symbol: str, from_date: date, to_date: date,
                 would_be_taken, reason = False, "SCALPER_COOLDOWN_10MIN"
             else:
                 would_be_taken, reason = True, "OK"
+        elif strategy == "scalper_v3":
+            # ScalperV3: max 4 trades/day per instrument + 10-min cooldown.
+            # Same caps as scalper since the hold horizon is similar.
+            cur_d = ts.date()
+            todays = sum(1 for t in trades if t.date == cur_d.strftime("%Y-%m-%d")
+                         and t.instrument == symbol.upper()
+                         and t.bucket.startswith("TAKEN"))
+            if todays >= 4:
+                would_be_taken, reason = False, "SCALPERV3_MAX_4_PER_DAY"
+            elif last_taken_ts is not None and (ts - last_taken_ts).total_seconds() < 600:
+                would_be_taken, reason = False, "SCALPERV3_COOLDOWN_10MIN"
+            else:
+                would_be_taken, reason = True, "OK"
+        elif strategy == "reverter":
+            # Reverter: max 3 trades/day per instrument + 15-min cooldown
+            # (longer than scalper since VWAP-fade trades take longer).
+            cur_d = ts.date()
+            todays = sum(1 for t in trades if t.date == cur_d.strftime("%Y-%m-%d")
+                         and t.instrument == symbol.upper()
+                         and t.bucket.startswith("TAKEN"))
+            if todays >= 3:
+                would_be_taken, reason = False, "REVERTER_MAX_3_PER_DAY"
+            elif last_taken_ts is not None and (ts - last_taken_ts).total_seconds() < 900:
+                would_be_taken, reason = False, "REVERTER_COOLDOWN_15MIN"
+            else:
+                would_be_taken, reason = True, "OK"
         else:
             would_be_taken, reason = True, "OK"
 
@@ -467,7 +503,7 @@ def run_backtest(symbol: str, from_date: date, to_date: date,
         # v2 / gamma: tight premium-pct (35%/50%/100%) — these strategies
         #      don't have a structural spot-level exit, so the premium
         #      cap is the primary stop.
-        if strategy in ("orb", "conductor", "scalper"):
+        if strategy in ("orb", "conductor", "scalper", "scalper_v3", "reverter"):
             opt_sl = round(opt_entry * (1 - 0.60), 2)
             opt_t1 = round(opt_entry * (1 + 1.00), 2)
             opt_t2 = round(opt_entry * (1 + 2.00), 2)
@@ -480,11 +516,15 @@ def run_backtest(symbol: str, from_date: date, to_date: date,
             opt_t2 = round(opt_entry * (1 + t2_pct), 2)
             spot_sl = spot_t1 = spot_t2 = None
 
-        # Scalper enforces a tight TIME STOP: max 3 bars (15 min) hold.
-        # If neither SL nor T1 hits in that window, exit at the last bar's
-        # option price. Critical for scalping — without it the strategy
-        # becomes a half-day-hold strategy with theta drag.
-        max_walk_bars = 3 if strategy == "scalper" else 24
+        # Scalper enforces a tight TIME STOP: max 3 bars (15 min) hold for
+        # scalper/scalper_v3 (scalp targets need fast moves). Reverter
+        # mean-revert can take longer; 8 bars (40 min) is the cap.
+        if strategy in ("scalper", "scalper_v3"):
+            max_walk_bars = 3
+        elif strategy == "reverter":
+            max_walk_bars = 8
+        else:
+            max_walk_bars = 24
 
         # Walk forward — pull REAL option price each bar, exit at SL/T1/T2/EOD
         exit_price, exit_reason, bars_held, exit_source = _simulate_forward(

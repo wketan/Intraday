@@ -2170,6 +2170,8 @@ html[data-theme="light"] .modal-card{
                     {k: 'gamma',     label: 'Gamma',     title: 'Gamma Blast — expiry-day only'},
                     {k: 'conductor', label: 'Conductor', title: '5-dim AI-style discretionary scout — targets ₹1k+ EV/trade'},
                     {k: 'scalper',   label: 'Scalper',   title: 'MACD/EMA crossover scalper — 5-10 pt targets, 15-min holds'},
+                    {k: 'scalper_v3',label: 'Scalper v3',title: 'Price-action scalp: VWAP bounce / pivot bounce / 3-bar reversal. Tuned for NIFTY.'},
+                    {k: 'reverter',  label: 'Reverter',  title: 'Mean reversion: VWAP fade + RSI extreme + reversal candle. Tuned for range-bound NIFTY.'},
                   ].map(s => (
                     <button key={s.k} type="button" title={s.title}
                       className={strategy === s.k ? 'on' : ''}
