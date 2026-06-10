@@ -263,6 +263,11 @@ def run_backtest(symbol: str, from_date: date, to_date: date,
     from regime import RegimeFilter
     import data_layer
 
+    # Stale option bars from a prior run in the same process must never
+    # bleed into this one (the /api/backtest path already does this; the
+    # CLI path didn't).
+    data_layer.reset_option_day_cache()
+
     # ── Pick the analyzer ─────────────────────────────────────────────
     strategy = (strategy or "v2").lower()
     if strategy == "orb":
@@ -481,9 +486,16 @@ def run_backtest(symbol: str, from_date: date, to_date: date,
         opt_type = "CE" if sig["direction"] == "LONG" else "PE"
         expiry = _next_expiry_after(ts, symbol.upper())
 
-        # Look up REAL entry premium
+        # Look up REAL entry premium.
+        # Fill at ts+5min, NOT ts: the signal is computed from this 5-min
+        # bar's CLOSE, which only exists once the bar ends (ts is the bar's
+        # START). Filling at ts bought the option BEFORE the move that
+        # triggered the signal — a one-bar lookahead that inflated every
+        # momentum entry. ts+5min is the first minute the signal is
+        # actually knowable live.
+        entry_fill_ts = ts + timedelta(minutes=5)
         entry_data = data_layer.get_option_premium_at(
-            symbol.upper(), strike, opt_type, expiry, ts, angel_client=client
+            symbol.upper(), strike, opt_type, expiry, entry_fill_ts, angel_client=client
         )
         if entry_data is None or entry_data.get("price") is None or entry_data.get("price") <= 0:
             # Can't price this trade — skip
@@ -887,6 +899,10 @@ def main():
                         help="Override: YYYY-MM-DD start date")
     parser.add_argument("--to-date", type=str, default=None,
                         help="Override: YYYY-MM-DD end date")
+    parser.add_argument("--strategy", type=str, default="v2",
+                        choices=["v2", "orb", "gamma", "conductor", "scalper",
+                                 "scalper_v3", "reverter"],
+                        help="Signal generator to backtest (default v2)")
     parser.add_argument("--budget", type=float, default=50000.0,
                         help="Account size in ₹ for position sizing (default 50000)")
     parser.add_argument("--csv", type=str, default="backtest_journal.csv",
@@ -913,7 +929,8 @@ def main():
     all_trades: list[Trade] = []
     for sym in instruments:
         trades = run_backtest(sym, from_date, to_date,
-                              budget=args.budget, verbose=args.verbose)
+                              budget=args.budget, verbose=args.verbose,
+                              strategy=args.strategy)
         all_trades.extend(trades)
 
     if not all_trades:

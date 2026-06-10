@@ -3373,6 +3373,10 @@ class Engine:
         # Chain cache: 30s TTL per instrument. Now stores raw chain for delta recomputes.
         # { name: {ts, ts_str, chain, opt, atm} }
         self._chain_cache={}
+        # Last time we Slack-alerted a chain-fetch failure, per instrument
+        # (rate-limits the warning to once per 15 min; the failure itself
+        # skips the signal every cycle until the chain comes back).
+        self._chain_fail_alerted = {}
         # OI + Volume history: rolling 12 snapshots (~6 min at 30s per fetch) per strike.
         # { name: { (strike, type): deque([{oi, volume, ltp, ts}, ...], maxlen=12) } }
         self._oi_history = {}
@@ -3962,7 +3966,22 @@ class Engine:
                                          f"OI_shift={chain_anal.get('oi_shift_signal','?')}")
                         except Exception as ce:
                             self.metrics["chain_failures"] += 1
-                            log.warning(f"  Chain fetch failed for {name}: {ce}")
+                            log.error(f"  Chain fetch failed for {name}: {ce} — "
+                                      f"holding back {sig.get('direction')} signal this cycle, "
+                                      f"will retry next scan")
+                            # An alert without a tradeable option (no strike/token)
+                            # can't be acted on — but skipping silently all day is
+                            # the 2-week-Conductor-bug pattern. Slack the failure,
+                            # rate-limited to once per 15 min per instrument.
+                            _last_warn = self._chain_fail_alerted.get(name, 0)
+                            if now_ts - _last_warn > 900:
+                                self._chain_fail_alerted[name] = now_ts
+                                SlackAlert.send(
+                                    f"⚠️ {name}: option chain fetch FAILED — a live "
+                                    f"{sig.get('direction')} signal (conf {sig.get('confidence','?')}) "
+                                    f"is being held back. Retrying every scan; this warning "
+                                    f"repeats at most every 15 min. Error: {ce}")
+                            continue
 
                     # ════════════════════════════════════════════════════════
                     # STEP 1b: Option chain confidence boost
