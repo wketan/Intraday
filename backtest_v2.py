@@ -289,6 +289,12 @@ def run_backtest(symbol: str, from_date: date, to_date: date,
     elif strategy == "reverter":
         from signal_reverter import Reverter as Analyzer
         analyzer_label = "Reverter (VWAP mean-reversion for NIFTY)"
+    elif strategy == "nifty_windows":
+        from signal_nifty_regime import NiftyWindows as Analyzer
+        analyzer_label = "NiftyWindows (Conductor, vol windows only)"
+    elif strategy == "deadzone_fade":
+        from signal_nifty_regime import DeadzoneFade as Analyzer
+        analyzer_label = "DeadzoneFade (VWAP fade, 11:00-13:15 only)"
     else:
         from signal_v2 import SignalGenV2 as Analyzer
         strategy = "v2"
@@ -379,8 +385,8 @@ def run_backtest(symbol: str, from_date: date, to_date: date,
             # Scalper-v2 needs the symbol to pick instrument-specific SL/T1
             # (NIFTY uses 7/10/18, BANKNIFTY 25/40/65, FINNIFTY 10/14/25).
             sig = Analyzer.analyze(window, symbol=symbol.upper())
-        elif strategy in ("scalper_v3", "reverter"):
-            # Both pass symbol so the ₹-target gate uses the right lot size.
+        elif strategy in ("scalper_v3", "reverter", "nifty_windows", "deadzone_fade"):
+            # All pass symbol so the ₹-target gate uses the right lot size.
             sig = Analyzer.analyze(window, symbol=symbol.upper(), chain_analytics=None)
         else:
             sig = Analyzer.analyze(window)
@@ -426,10 +432,10 @@ def run_backtest(symbol: str, from_date: date, to_date: date,
                 would_be_taken, reason = False, "GAMMA_MAX_2_PER_DAY"
             else:
                 would_be_taken, reason = True, "OK"
-        elif strategy == "conductor":
-            # Conductor: analyzer's 5-dim confluence is its own gate. Engine
-            # layer enforces max 2 trades per day per instrument (user's
-            # stated cadence target).
+        elif strategy in ("conductor", "nifty_windows"):
+            # Conductor (and its windowed NIFTY variant): analyzer's 5-dim
+            # confluence is its own gate. Engine layer enforces max 2 trades
+            # per day per instrument (user's stated cadence target).
             cur_d = ts.date()
             todays = sum(1 for t in trades if t.date == cur_d.strftime("%Y-%m-%d")
                          and t.instrument == symbol.upper()
@@ -464,9 +470,9 @@ def run_backtest(symbol: str, from_date: date, to_date: date,
                 would_be_taken, reason = False, "SCALPERV3_COOLDOWN_10MIN"
             else:
                 would_be_taken, reason = True, "OK"
-        elif strategy == "reverter":
-            # Reverter: max 3 trades/day per instrument + 15-min cooldown
-            # (longer than scalper since VWAP-fade trades take longer).
+        elif strategy in ("reverter", "deadzone_fade"):
+            # Reverter (and its dead-zone variant): max 3 trades/day per
+            # instrument + 15-min cooldown (VWAP-fade trades take longer).
             cur_d = ts.date()
             todays = sum(1 for t in trades if t.date == cur_d.strftime("%Y-%m-%d")
                          and t.instrument == symbol.upper()
@@ -515,7 +521,8 @@ def run_backtest(symbol: str, from_date: date, to_date: date,
         # v2 / gamma: tight premium-pct (35%/50%/100%) — these strategies
         #      don't have a structural spot-level exit, so the premium
         #      cap is the primary stop.
-        if strategy in ("orb", "conductor", "scalper", "scalper_v3", "reverter"):
+        if strategy in ("orb", "conductor", "scalper", "scalper_v3", "reverter",
+                        "nifty_windows", "deadzone_fade"):
             opt_sl = round(opt_entry * (1 - 0.60), 2)
             opt_t1 = round(opt_entry * (1 + 1.00), 2)
             opt_t2 = round(opt_entry * (1 + 2.00), 2)
@@ -533,7 +540,7 @@ def run_backtest(symbol: str, from_date: date, to_date: date,
         # mean-revert can take longer; 8 bars (40 min) is the cap.
         if strategy in ("scalper", "scalper_v3"):
             max_walk_bars = 3
-        elif strategy == "reverter":
+        elif strategy in ("reverter", "deadzone_fade"):
             max_walk_bars = 8
         else:
             max_walk_bars = 24
@@ -901,7 +908,8 @@ def main():
                         help="Override: YYYY-MM-DD end date")
     parser.add_argument("--strategy", type=str, default="v2",
                         choices=["v2", "orb", "gamma", "conductor", "scalper",
-                                 "scalper_v3", "reverter"],
+                                 "scalper_v3", "reverter", "nifty_windows",
+                                 "deadzone_fade"],
                         help="Signal generator to backtest (default v2)")
     parser.add_argument("--budget", type=float, default=50000.0,
                         help="Account size in ₹ for position sizing (default 50000)")

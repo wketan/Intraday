@@ -2172,6 +2172,8 @@ html[data-theme="light"] .modal-card{
                     {k: 'scalper',   label: 'Scalper',   title: 'MACD/EMA crossover scalper — 5-10 pt targets, 15-min holds'},
                     {k: 'scalper_v3',label: 'Scalper v3',title: 'Price-action scalp: VWAP bounce / pivot bounce / 3-bar reversal. Tuned for NIFTY.'},
                     {k: 'reverter',  label: 'Reverter',  title: 'Mean reversion: VWAP fade + RSI extreme + reversal candle. Tuned for range-bound NIFTY.'},
+                    {k: 'nifty_windows', label: 'N-Windows', title: 'Conductor confluence, fires only in volatile 09:30-11:00 / 13:30-14:45 windows (U-shape regime).'},
+                    {k: 'deadzone_fade', label: 'DZ-Fade', title: 'Reverter VWAP fade, fires only inside the 11:00-13:15 midday dead zone (U-shape regime).'},
                   ].map(s => (
                     <button key={s.k} type="button" title={s.title}
                       className={strategy === s.k ? 'on' : ''}

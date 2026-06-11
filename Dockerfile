@@ -29,6 +29,7 @@ COPY signal_gamma.py .
 COPY signal_scalper.py .
 COPY signal_scalper_v3.py .
 COPY signal_reverter.py .
+COPY signal_nifty_regime.py .
 COPY conductor.py .
 COPY regime.py .
 COPY events.json .

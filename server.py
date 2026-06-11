@@ -1902,6 +1902,34 @@ class SignalGen:
                 log.error(f"❌ reverter crashed — NO fallback, returning None: {e}", exc_info=True)
                 return None
 
+        # ── NiftyWindows dispatch (NIFTY: Conductor in vol windows) ──────
+        if strategy == "nifty_windows":
+            try:
+                from signal_nifty_regime import NiftyWindows
+                result = NiftyWindows.analyze(df, symbol=symbol or "",
+                                              chain_analytics=chain_analytics)
+                SignalGen.last_dispatch["actually_ran"] = "nifty_windows"
+                return result
+            except Exception as e:
+                SignalGen.last_dispatch["actually_ran"] = None
+                SignalGen.last_dispatch["error"] = f"{type(e).__name__}: {e}"
+                log.error(f"❌ nifty_windows crashed — NO fallback, returning None: {e}", exc_info=True)
+                return None
+
+        # ── DeadzoneFade dispatch (NIFTY: VWAP fade in 11:00-13:15) ──────
+        if strategy == "deadzone_fade":
+            try:
+                from signal_nifty_regime import DeadzoneFade
+                result = DeadzoneFade.analyze(df, symbol=symbol or "",
+                                              chain_analytics=chain_analytics)
+                SignalGen.last_dispatch["actually_ran"] = "deadzone_fade"
+                return result
+            except Exception as e:
+                SignalGen.last_dispatch["actually_ran"] = None
+                SignalGen.last_dispatch["error"] = f"{type(e).__name__}: {e}"
+                log.error(f"❌ deadzone_fade crashed — NO fallback, returning None: {e}", exc_info=True)
+                return None
+
         # ── v2 dispatch (Phase 2 legacy) ──────────────────────────────────
         if strategy == "v2":
             try:
@@ -5218,7 +5246,8 @@ def api_backtest():
             return jsonify({"ok": False, "error": "No valid symbols"}), 400
         # Strategy selector
         strategy = str(body.get("strategy", "v2")).lower()
-        _allowed = ("v2", "orb", "gamma", "conductor", "scalper", "scalper_v3", "reverter")
+        _allowed = ("v2", "orb", "gamma", "conductor", "scalper", "scalper_v3",
+                    "reverter", "nifty_windows", "deadzone_fade")
         if strategy not in _allowed:
             return jsonify({"ok": False,
                             "error": f"Unknown strategy '{strategy}' (expected {'|'.join(_allowed)})"}), 400
@@ -5799,8 +5828,9 @@ def api_strategy_set():
 
     if new_strategy is not None:
         s = str(new_strategy).lower()
-        if s not in ("v1", "v2", "conductor", "scalper_v3", "reverter"):
-            return jsonify({"error": "strategy must be 'v1', 'v2', 'conductor', 'scalper_v3', or 'reverter'"}), 400
+        if s not in ("v1", "v2", "conductor", "scalper_v3", "reverter",
+                     "nifty_windows", "deadzone_fade"):
+            return jsonify({"error": "strategy must be 'v1', 'v2', 'conductor', 'scalper_v3', 'reverter', 'nifty_windows', or 'deadzone_fade'"}), 400
         CONFIG["strategy"] = s
         set_engine_state("strategy", s)
 
