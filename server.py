@@ -479,7 +479,7 @@ class SlackAlert:
         return msg
     
     @staticmethod
-    def format_close(instrument, direction, result, pnl, option=None, entry_time=None, near_miss=None):
+    def format_close(instrument, direction, result, pnl, option=None, entry_time=None, near_miss=None, journey=None):
         emoji = ("🎯" if result == "T2" else
                  "✅" if result == "WIN" else
                  "❌" if result == "LOSS" else "⊙")
@@ -503,13 +503,31 @@ class SlackAlert:
             msg += f"\n⏰ {entry_time} → {exit_time} IST"
         msg += f"""
 💰 P&L: *{sign}₹{amt:,}*"""
+        if journey and journey.get("entry"):
+            msg += "\n" + SlackAlert._journey_line(journey)
         if near_miss:
             msg += f"\n⚠️ Near-miss: {near_miss.get('hint','')}"
         msg += "\n━━━━━━━━━━━━━━━━━━━━━"
         return msg
 
     @staticmethod
-    def format_close_blocks(instrument, direction, result, pnl, option=None, entry_time=None, near_miss=None):
+    def _journey_line(j):
+        """One-line premium journey: entry → peak (+%) at HH:MM → low at HH:MM → exit."""
+        e = float(j["entry"])
+        parts = [f"entry ₹{e:.0f}"]
+        if j.get("peak") is not None:
+            pct = (float(j["peak"]) - e) / e * 100 if e else 0
+            parts.append(f"peak ₹{float(j['peak']):.0f} ({'+' if pct >= 0 else ''}{pct:.0f}%)"
+                         + (f" at {j['peak_time']}" if j.get("peak_time") else ""))
+        if j.get("trough") is not None:
+            parts.append(f"low ₹{float(j['trough']):.0f}"
+                         + (f" at {j['trough_time']}" if j.get("trough_time") else ""))
+        if j.get("exit") is not None:
+            parts.append(f"exit ₹{float(j['exit']):.0f}")
+        return "📈 Journey: " + " → ".join(parts)
+
+    @staticmethod
+    def format_close_blocks(instrument, direction, result, pnl, option=None, entry_time=None, near_miss=None, journey=None):
         emoji = ("🎯" if result == "T2" else
                  "✅" if result == "WIN" else
                  "❌" if result == "LOSS" else "⊙")
@@ -536,6 +554,9 @@ class SlackAlert:
                 {"type": "mrkdwn", "text": f"🏷 *Outcome*\n{result}"},
             ]},
         ]
+        if journey and journey.get("entry"):
+            blocks.append({"type": "section", "text": {"type": "mrkdwn",
+                "text": f"*Premium journey*\n{SlackAlert._journey_line(journey)}"}})
         if near_miss:
             peak_amt = int(round(float(near_miss.get('peak') or 0)))
             blocks.append({"type": "section", "text": {"type": "mrkdwn",
@@ -3170,6 +3191,14 @@ class PLTracker:
         # ALL instruments for LOSS_COOLDOWN_MIN minutes. Same for LONG.
         self._loss_cooldown = {}  # { "LONG" | "SHORT": datetime_until }
         self.LOSS_COOLDOWN_MIN = 60
+        # Two-tick exit confirmation (2026-06-12 phantom-SL incident): a
+        # single bad quote closed a live winner as a -₹11k SL. An exit
+        # condition must hold on TWO consecutive 30s checks before we close.
+        # { sig_id: result_str_seen_last_tick }
+        self._exit_pending = {}
+        # Signals we've already loud-alerted as unpriceable (missing/broken
+        # option token) — alert once per signal, never auto-close them.
+        self._unpriced_alerted = set()
 
     def _current_option_price(self, token):
         """Fetch current option price via FULL mode depth; fall back to LTP."""
@@ -3283,16 +3312,36 @@ class PLTracker:
                     result = "WIN"; exit_opt = cur_opt
                 elif opt_sl > 0 and cur_opt <= opt_sl:
                     result = "LOSS"; exit_opt = max(cur_opt, opt_sl)
-            elif idx_px:
-                # Legacy fallback (no token) → use index levels (old behaviour) but
-                # approximate option exit at delta=0.4 for accounting.
-                d = s["direction"]; entry = s["index_entry"]; sl = s["index_sl"]; t1 = s["index_target1"]
-                if d == "LONG":
-                    if idx_px >= t1: result = "WIN"
-                    elif idx_px <= sl: result = "LOSS"
+
+                # Two-tick confirmation: never close on a single quote. A lone
+                # bad tick (2026-06-12: phantom ₹244 print on an option really
+                # trading ₹867) must not book a result. Condition has to hold
+                # on two consecutive 30s checks; one clean tick resets it.
+                if result:
+                    if self._exit_pending.get(s["id"]) != result:
+                        self._exit_pending[s["id"]] = result
+                        log.warning(f"  ⏳ {s['instrument']} #{s['id']}: {result} condition "
+                                    f"at opt ₹{cur_opt} — awaiting confirming tick before close")
+                        result = None; exit_opt = None
                 else:
-                    if idx_px <= t1: result = "WIN"
-                    elif idx_px >= sl: result = "LOSS"
+                    self._exit_pending.pop(s["id"], None)
+            elif idx_px:
+                # No option price (missing token or fetch failure). We used to
+                # close on INDEX levels with delta-faked option P&L — that
+                # fabricated the 2026-06-12 phantom -₹10,982 "SL hit" on a
+                # trade that was in profit. NEVER fabricate a close: keep the
+                # row OPEN, tell the operator loudly (once), let EOD close_all
+                # sweep it if pricing never recovers.
+                if s["id"] not in self._unpriced_alerted:
+                    self._unpriced_alerted.add(s["id"])
+                    log.error(f"  ⚠️ {s['instrument']} #{s['id']}: cannot price option "
+                              f"(token={'MISSING' if not token else repr(token)}) — "
+                              f"auto-close DISABLED for this signal")
+                    SlackAlert.send(
+                        f"⚠️ *{s['instrument']} {s['direction']}* (signal #{s['id']}): the engine "
+                        f"cannot fetch this option's price ({'no token stored' if not token else 'quote fetch failing'}). "
+                        f"It will NOT auto-close or book P&L for this trade — manage it manually "
+                        f"from the live chart.")
 
             if result:
                 if cur_opt is not None and opt_entry > 0:
@@ -3344,13 +3393,26 @@ class PLTracker:
                 log.info(f"{emoji} {s['instrument']} {s['direction']} → {result} | ₹{pnl_rs} (opt exit ₹{cur_opt})"
                          + (f" · peak ₹{pk[0]} at {pk[1]}" if pk else ""))
                 opt_dict = {"symbol": s.get("option_symbol", "")} if s.get("option_symbol") else None
+                # Entry time: timestamp column is "YYYY-MM-DD HH:MM:SS" — the
+                # old [:5] slice produced "2026-" in alerts. Take the HH:MM part.
+                _ts_raw = str(s.get("timestamp") or "")
+                entry_hm = _ts_raw.split(" ")[1][:5] if " " in _ts_raw else _ts_raw[:5]
+                # Premium journey: entry → peak (when) → trough (when) → exit,
+                # so the operator can see what happened BETWEEN entry and exit
+                # and judge whether an earlier manual exit was available.
+                journey = {
+                    "entry": opt_entry if opt_entry > 0 else None,
+                    "exit": exit_opt if exit_opt is not None else cur_opt,
+                    "peak": pk[0] if pk else None, "peak_time": pk[1] if pk else None,
+                    "trough": tr[0] if tr else None, "trough_time": tr[1] if tr else None,
+                }
                 SlackAlert.send(
                     SlackAlert.format_close(s["instrument"], s["direction"], result, pnl_rs,
-                                            option=opt_dict, entry_time=s.get("timestamp", "")[:5],
-                                            near_miss=near_miss),
+                                            option=opt_dict, entry_time=entry_hm,
+                                            near_miss=near_miss, journey=journey),
                     blocks=SlackAlert.format_close_blocks(s["instrument"], s["direction"], result, pnl_rs,
-                                                          option=opt_dict, entry_time=s.get("timestamp", "")[:5],
-                                                          near_miss=near_miss),
+                                                          option=opt_dict, entry_time=entry_hm,
+                                                          near_miss=near_miss, journey=journey),
                 )
                 self._best_premium.pop(s["id"], None)
                 self._peak.pop(s["id"], None)
@@ -3595,7 +3657,8 @@ class Engine:
             today = datetime.now(IST).strftime("%Y-%m-%d")
             row = db_exec(
                 "SELECT COUNT(*) as cnt, COALESCE(SUM(pnl_rupees),0) as pnl "
-                "FROM signals WHERE date=?", (today,), fetchone=True)
+                "FROM signals WHERE date=? AND COALESCE(status,'') != 'VOIDED'",
+                (today,), fetchone=True)
             row = dict(row) if row else {"cnt": 0, "pnl": 0}
             cnt = int(row.get("cnt") or 0)
             pnl = float(row.get("pnl") or 0)
@@ -5772,6 +5835,35 @@ def api_metrics():
         },
         "time": datetime.now(IST).strftime("%H:%M:%S"),
     })
+
+
+@app.route("/api/signals/<int:sig_id>/void", methods=["POST"])
+@require_auth
+def api_void_signal(sig_id):
+    """Void a phantom/erroneous trade record (e.g. a close booked off a bad
+    quote). Sets status=VOIDED and zeroes its P&L so it no longer counts
+    toward the kill-switch, stats, or daily summary — then unlatches the
+    kill-switch and clears loss cooldowns so the engine can resume.
+    Does NOT touch any real broker position (the engine never holds one)."""
+    row = db_exec("SELECT * FROM signals WHERE id=?", (sig_id,), fetchone=True)
+    if not row:
+        return jsonify({"error": f"signal {sig_id} not found"}), 404
+    prev = dict(row)
+    db_exec("UPDATE signals SET status='VOIDED', result='VOIDED', pnl_rupees=0, "
+            "pnl_rupees_net=0, pnl_points=0 WHERE id=?", (sig_id,))
+    engine._killswitch_tripped = False
+    try:
+        engine.tracker._loss_cooldown.clear()
+        engine.tracker._exit_pending.pop(sig_id, None)
+    except Exception:
+        pass
+    log.info(f"🩹 Signal #{sig_id} VOIDED by operator (was {prev.get('result')} "
+             f"₹{prev.get('pnl_rupees')}) — killswitch unlatched, cooldowns cleared")
+    SlackAlert.send(f"🩹 Trade record #{sig_id} ({prev.get('instrument')} {prev.get('direction')}, "
+                    f"booked {prev.get('result')} ₹{prev.get('pnl_rupees')}) was VOIDED — "
+                    f"phantom close removed from today's stats. Kill-switch re-armed and unblocked.")
+    return jsonify({"ok": True, "voided": sig_id,
+                    "was": {"result": prev.get("result"), "pnl_rupees": prev.get("pnl_rupees")}})
 
 
 @app.route("/api/killswitch", methods=["POST"])
