@@ -1950,11 +1950,14 @@ html[data-theme="light"] .modal-card{
         }
       }, [open, capital, userName]);
       if (!open) return null;
-      const presets = [25000, 50000, 100000, 200000];
+      const presets = [20000, 50000, 100000, 200000];
       const save = () => {
         setServer(serverUrl);
         setAuthToken(token);
-        onSave({ capital: val, name });
+        // Clamp once on save — clamping on every keystroke made the field
+        // impossible to edit (clearing it snapped straight back to 5000).
+        const cap = Math.max(5000, Math.min(5000000, +val || capital));
+        onSave({ capital: cap, name });
         onClose();
       };
       return (
@@ -1975,15 +1978,15 @@ html[data-theme="light"] .modal-card{
                   <span className="modal-curr">₹</span>
                   <input
                     className="modal-input" type="number"
-                    min={5000} max={5000000} step={5000}
+                    min={5000} max={5000000} step={1000}
                     value={val}
-                    onChange={(e)=>setVal(Math.max(5000, Math.min(5000000, +e.target.value || 0)))}
+                    onChange={(e)=>setVal(e.target.value)}
                   />
                 </div>
                 <div className="modal-presets">
                   {presets.map(p => (
                     <button key={p} type="button"
-                      className={'modal-preset' + (val === p ? ' on' : '')}
+                      className={'modal-preset' + (+val === p ? ' on' : '')}
                       onClick={()=>setVal(p)}>
                       ₹{(p/1000)}k{p >= 200000 ? '+' : ''}
                     </button>
