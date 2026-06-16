@@ -1951,6 +1951,20 @@ class SignalGen:
                 log.error(f"❌ deadzone_fade crashed — NO fallback, returning None: {e}", exc_info=True)
                 return None
 
+        # ── PatternScanner dispatch (chart patterns — UNVALIDATED) ───────
+        if strategy == "patterns":
+            try:
+                from signal_patterns import PatternScanner
+                result = PatternScanner.analyze(df, symbol=symbol or "",
+                                                chain_analytics=chain_analytics)
+                SignalGen.last_dispatch["actually_ran"] = "patterns"
+                return result
+            except Exception as e:
+                SignalGen.last_dispatch["actually_ran"] = None
+                SignalGen.last_dispatch["error"] = f"{type(e).__name__}: {e}"
+                log.error(f"❌ patterns crashed — NO fallback, returning None: {e}", exc_info=True)
+                return None
+
         # ── v2 dispatch (Phase 2 legacy) ──────────────────────────────────
         if strategy == "v2":
             try:
@@ -5310,7 +5324,7 @@ def api_backtest():
         # Strategy selector
         strategy = str(body.get("strategy", "v2")).lower()
         _allowed = ("v2", "orb", "gamma", "conductor", "scalper", "scalper_v3",
-                    "reverter", "nifty_windows", "deadzone_fade")
+                    "reverter", "nifty_windows", "deadzone_fade", "patterns")
         if strategy not in _allowed:
             return jsonify({"ok": False,
                             "error": f"Unknown strategy '{strategy}' (expected {'|'.join(_allowed)})"}), 400
@@ -5921,8 +5935,8 @@ def api_strategy_set():
     if new_strategy is not None:
         s = str(new_strategy).lower()
         if s not in ("v1", "v2", "conductor", "scalper_v3", "reverter",
-                     "nifty_windows", "deadzone_fade"):
-            return jsonify({"error": "strategy must be 'v1', 'v2', 'conductor', 'scalper_v3', 'reverter', 'nifty_windows', or 'deadzone_fade'"}), 400
+                     "nifty_windows", "deadzone_fade", "patterns"):
+            return jsonify({"error": "strategy must be 'v1', 'v2', 'conductor', 'scalper_v3', 'reverter', 'nifty_windows', 'deadzone_fade', or 'patterns'"}), 400
         CONFIG["strategy"] = s
         set_engine_state("strategy", s)
 

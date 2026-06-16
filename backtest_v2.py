@@ -295,6 +295,9 @@ def run_backtest(symbol: str, from_date: date, to_date: date,
     elif strategy == "deadzone_fade":
         from signal_nifty_regime import DeadzoneFade as Analyzer
         analyzer_label = "DeadzoneFade (VWAP fade, 11:00-13:15 only)"
+    elif strategy == "patterns":
+        from signal_patterns import PatternScanner as Analyzer
+        analyzer_label = "PatternScanner (H&S, double top/bottom, triangle, flag)"
     else:
         from signal_v2 import SignalGenV2 as Analyzer
         strategy = "v2"
@@ -385,7 +388,7 @@ def run_backtest(symbol: str, from_date: date, to_date: date,
             # Scalper-v2 needs the symbol to pick instrument-specific SL/T1
             # (NIFTY uses 7/10/18, BANKNIFTY 25/40/65, FINNIFTY 10/14/25).
             sig = Analyzer.analyze(window, symbol=symbol.upper())
-        elif strategy in ("scalper_v3", "reverter", "nifty_windows", "deadzone_fade"):
+        elif strategy in ("scalper_v3", "reverter", "nifty_windows", "deadzone_fade", "patterns"):
             # All pass symbol so the ₹-target gate uses the right lot size.
             sig = Analyzer.analyze(window, symbol=symbol.upper(), chain_analytics=None)
         else:
@@ -470,9 +473,9 @@ def run_backtest(symbol: str, from_date: date, to_date: date,
                 would_be_taken, reason = False, "SCALPERV3_COOLDOWN_10MIN"
             else:
                 would_be_taken, reason = True, "OK"
-        elif strategy in ("reverter", "deadzone_fade"):
-            # Reverter (and its dead-zone variant): max 3 trades/day per
-            # instrument + 15-min cooldown (VWAP-fade trades take longer).
+        elif strategy in ("reverter", "deadzone_fade", "patterns"):
+            # Reverter / dead-zone / pattern scanner: max 3 trades/day per
+            # instrument + 15-min cooldown (breakout/fade trades take longer).
             cur_d = ts.date()
             todays = sum(1 for t in trades if t.date == cur_d.strftime("%Y-%m-%d")
                          and t.instrument == symbol.upper()
@@ -522,7 +525,7 @@ def run_backtest(symbol: str, from_date: date, to_date: date,
         #      don't have a structural spot-level exit, so the premium
         #      cap is the primary stop.
         if strategy in ("orb", "conductor", "scalper", "scalper_v3", "reverter",
-                        "nifty_windows", "deadzone_fade"):
+                        "nifty_windows", "deadzone_fade", "patterns"):
             opt_sl = round(opt_entry * (1 - 0.60), 2)
             opt_t1 = round(opt_entry * (1 + 1.00), 2)
             opt_t2 = round(opt_entry * (1 + 2.00), 2)
@@ -540,7 +543,7 @@ def run_backtest(symbol: str, from_date: date, to_date: date,
         # mean-revert can take longer; 8 bars (40 min) is the cap.
         if strategy in ("scalper", "scalper_v3"):
             max_walk_bars = 3
-        elif strategy in ("reverter", "deadzone_fade"):
+        elif strategy in ("reverter", "deadzone_fade", "patterns"):
             max_walk_bars = 8
         else:
             max_walk_bars = 24
@@ -909,7 +912,7 @@ def main():
     parser.add_argument("--strategy", type=str, default="v2",
                         choices=["v2", "orb", "gamma", "conductor", "scalper",
                                  "scalper_v3", "reverter", "nifty_windows",
-                                 "deadzone_fade"],
+                                 "deadzone_fade", "patterns"],
                         help="Signal generator to backtest (default v2)")
     parser.add_argument("--budget", type=float, default=50000.0,
                         help="Account size in ₹ for position sizing (default 50000)")
