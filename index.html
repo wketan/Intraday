@@ -2625,12 +2625,20 @@ html[data-theme="light"] .modal-card{
         const marketOpen = isWeekday && ((hh > 9) || (hh === 9 && mm >= 15)) && (hh < 16);
         const preCutoff = marketOpen && (hh < 12 || (hh === 12 && mm < 30));
         const tripped = eng.killswitch_tripped;
+        // Recognized production strategies. The gate is green when a known
+        // strategy is configured, and genuinely red only if it's unset or a
+        // typo (which would silently fall back to v1 on the backend). It used
+        // to be hard-coded to `=== 'v2'`, leaving it permanently red once we
+        // moved to conductor — a false alarm on a live dashboard.
+        const KNOWN_STRATS = ['v1','v2','conductor','scalper','scalper_v3',
+                              'reverter','nifty_windows','deadzone_fade'];
+        const strat = eng.strategy || '';
         return [
           { label: 'Market open', ok: marketOpen, note: marketOpen ? 'In session' : 'Outside hours' },
           { label: 'Pre-cutoff',  ok: preCutoff, note: preCutoff ? 'Before 12:30' : 'After 12:30' },
           { label: 'Engine',      ok: eng.running, note: eng.running ? 'Running' : 'Stopped' },
           { label: 'Kill-switch', ok: !tripped, note: tripped ? 'Tripped' : 'Clear' },
-          { label: 'Strategy',    ok: eng.strategy === 'v2', note: 'v' + (eng.strategy || '?') },
+          { label: 'Strategy',    ok: KNOWN_STRATS.includes(strat), note: strat ? strat.replace(/_/g,' ') : 'not set' },
         ];
       }, [metricsData]);
 
