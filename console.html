@@ -1,0 +1,448 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Intraday Console</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet"/>
+<script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<style>
+/* ═══════════ FLUX — card-less trading console ═══════════ */
+:root{
+  --ui:'Inter',system-ui,-apple-system,sans-serif;
+  --mono:'JetBrains Mono',ui-monospace,'SF Mono',Consolas,monospace;
+  --ease:cubic-bezier(.22,1,.36,1);
+}
+:root,html[data-theme="dark"]{
+  --bg:#06080e; --bg2:#0a0e17; --rail:#080b12;
+  --ink:#e9eef8; --ink2:#9aa6bd; --ink3:#5e6880; --ink4:#3a4358;
+  --hair:rgba(255,255,255,0.07); --hair2:rgba(255,255,255,0.04);
+  --hover:rgba(255,255,255,0.035);
+  --accent:#5b8cff; --accent-soft:rgba(91,140,255,0.14);
+  --win:#34d399; --win-soft:rgba(52,211,153,0.13);
+  --loss:#fb7185; --loss-soft:rgba(251,113,133,0.13);
+  --warn:#fbbf24; --warn-soft:rgba(251,191,36,0.13);
+  --glow:0 0 40px rgba(91,140,255,0.10);
+}
+html[data-theme="light"]{
+  --bg:#f3f5fa; --bg2:#ffffff; --rail:#ffffff;
+  --ink:#0f1626; --ink2:#48506a; --ink3:#7b8398; --ink4:#aab1c2;
+  --hair:rgba(15,22,38,0.10); --hair2:rgba(15,22,38,0.055);
+  --hover:rgba(15,22,38,0.035);
+  --accent:#3b6fe0; --accent-soft:rgba(59,111,224,0.10);
+  --win:#15976a; --win-soft:rgba(21,151,106,0.10);
+  --loss:#d4344e; --loss-soft:rgba(212,52,78,0.09);
+  --warn:#b07d1a; --warn-soft:rgba(176,125,26,0.10);
+  --glow:0 10px 40px rgba(15,22,38,0.08);
+}
+*{box-sizing:border-box;}
+html,body{margin:0;padding:0;background:var(--bg);color:var(--ink);min-height:100vh;}
+body{font-family:var(--ui);-webkit-font-smoothing:antialiased;overflow-x:hidden;
+  transition:background .35s var(--ease),color .35s var(--ease);}
+button{font-family:inherit;cursor:pointer;}
+.mono{font-family:var(--mono);font-feature-settings:'tnum';}
+::selection{background:var(--accent-soft);}
+
+/* shell: rail + main */
+.shell{display:grid;grid-template-columns:64px 1fr;min-height:100vh;}
+.rail{position:sticky;top:0;height:100vh;background:var(--rail);border-right:1px solid var(--hair);
+  display:flex;flex-direction:column;align-items:center;gap:10px;padding:14px 0;z-index:30;}
+.rail .logo{width:38px;height:38px;border-radius:11px;background:linear-gradient(135deg,var(--accent),#22d3ee);
+  display:grid;place-items:center;color:#06080e;font-weight:800;font-size:18px;letter-spacing:-.04em;box-shadow:var(--glow);}
+.rail .rspace{flex:1;}
+.rail .rbtn{width:40px;height:40px;border-radius:11px;border:1px solid transparent;background:transparent;color:var(--ink3);
+  display:grid;place-items:center;transition:all .15s var(--ease);}
+.rail .rbtn:hover{color:var(--ink);background:var(--hover);}
+.rail .rbtn.on{color:var(--accent);background:var(--accent-soft);}
+.rail .rbtn svg{width:19px;height:19px;}
+.rail .rdot{width:9px;height:9px;border-radius:50%;background:var(--ink4);}
+.rail .rdot.live{background:var(--win);box-shadow:0 0 9px var(--win);animation:bp 2.4s infinite;}
+.rail .rdot.off{background:var(--loss);}
+.rail .ava{width:40px;height:40px;border-radius:12px;border:0;background:linear-gradient(135deg,#22d3ee,var(--accent));
+  color:#06080e;font-weight:700;font-size:14px;}
+@keyframes bp{0%,100%{opacity:1;}50%{opacity:.4;}}
+
+.main{min-width:0;padding:0 30px 70px;max-width:1400px;}
+
+/* ticker bar */
+.ticker{display:flex;align-items:center;gap:0;height:58px;border-bottom:1px solid var(--hair);
+  position:sticky;top:0;background:color-mix(in srgb,var(--bg) 88%,transparent);
+  backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);z-index:20;margin:0 -30px 0;padding:0 30px;}
+.tk{display:flex;align-items:baseline;gap:9px;padding:0 20px;border-right:1px solid var(--hair2);white-space:nowrap;}
+.tk:first-child{padding-left:0;}
+.tk .nm{font-size:10px;font-weight:700;letter-spacing:.08em;color:var(--ink3);text-transform:uppercase;}
+.tk .px{font-family:var(--mono);font-size:14px;font-weight:600;color:var(--ink);}
+.tk .ch{font-family:var(--mono);font-size:11px;font-weight:600;}
+.tk .ch.up{color:var(--win);}.tk .ch.dn{color:var(--loss);}
+.tk-right{margin-left:auto;display:flex;align-items:center;gap:14px;padding-right:0;border:0;}
+.tk-clock{font-family:var(--mono);font-size:13px;color:var(--ink2);}
+.tk-clock b{color:var(--ink);}
+.epill{display:inline-flex;align-items:center;gap:7px;font-family:var(--mono);font-size:10px;font-weight:600;
+  letter-spacing:.06em;text-transform:uppercase;padding:5px 10px;border-radius:8px;border:1px solid var(--hair);color:var(--ink2);}
+.epill .d{width:7px;height:7px;border-radius:50%;background:var(--ink4);}
+.epill.live{color:var(--win);border-color:var(--win-soft);background:var(--win-soft);}
+.epill.live .d{background:var(--win);box-shadow:0 0 7px var(--win);animation:bp 2.4s infinite;}
+.epill.off{color:var(--loss);border-color:var(--loss-soft);background:var(--loss-soft);}
+.epill.off .d{background:var(--loss);}
+.cta{appearance:none;border:0;border-radius:9px;padding:8px 16px;font-size:11px;font-weight:700;letter-spacing:.03em;
+  background:linear-gradient(135deg,var(--accent),#22d3ee);color:#06080e;transition:all .15s var(--ease);}
+.cta:hover{filter:brightness(1.08);}.cta:active{transform:scale(.96);}
+.cta.stop{background:var(--loss-soft);color:var(--loss);}
+.ghost{appearance:none;border:1px solid var(--hair);background:transparent;color:var(--ink2);border-radius:9px;padding:8px 14px;font-size:11px;font-weight:600;transition:all .15s var(--ease);}
+.ghost:hover{color:var(--ink);border-color:var(--ink3);}
+
+/* section micro-label */
+.slab{display:flex;align-items:center;gap:10px;font-family:var(--mono);font-size:10px;font-weight:600;
+  letter-spacing:.16em;text-transform:uppercase;color:var(--ink3);margin:0 0 16px;}
+.slab::before{content:'';width:16px;height:2px;background:var(--accent);border-radius:2px;}
+.slab .r{margin-left:auto;font-size:9.5px;letter-spacing:.06em;color:var(--ink4);}
+
+/* HERO — card-less giant P&L */
+.hero{padding:38px 0 30px;border-bottom:1px solid var(--hair);position:relative;}
+.hero .lab{font-family:var(--mono);font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--ink3);margin-bottom:10px;}
+.hero .big{font-family:var(--mono);font-weight:700;font-size:clamp(52px,9vw,104px);line-height:.92;letter-spacing:-.04em;
+  display:flex;align-items:baseline;gap:.06em;}
+.hero .big .cur{font-size:.4em;color:var(--ink3);font-weight:600;}
+.hero .big.win{color:var(--win);}.hero .big.loss{color:var(--loss);}
+.hero .sub{font-family:var(--mono);font-size:12px;color:var(--ink3);margin-top:14px;letter-spacing:.03em;}
+.hero .sub b{color:var(--ink);}
+.hero .chart{position:absolute;right:0;top:30px;bottom:30px;width:46%;max-width:560px;opacity:.9;pointer-events:none;}
+.hero .stats{display:flex;flex-wrap:wrap;gap:0;margin-top:26px;border-top:1px solid var(--hair2);padding-top:20px;}
+.stat{padding:0 28px;border-right:1px solid var(--hair2);min-width:0;}
+.stat:first-child{padding-left:0;}.stat:last-child{border-right:0;}
+.stat .k{font-family:var(--mono);font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink3);margin-bottom:6px;}
+.stat .v{font-family:var(--mono);font-size:22px;font-weight:600;color:var(--ink);letter-spacing:-.01em;}
+.stat .v.win{color:var(--win);}.stat .v.loss{color:var(--loss);}.stat .v.accent{color:var(--accent);}
+
+/* BODY grid */
+.body{display:grid;grid-template-columns:1fr 340px;gap:34px;margin-top:34px;}
+.col{min-width:0;}
+
+/* signals list — terminal style, no boxes */
+.tbl{width:100%;}
+.tbl .hr{display:grid;grid-template-columns:54px minmax(0,1fr) 66px auto auto;gap:18px;
+  font-family:var(--mono);font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink4);
+  padding:0 6px 11px;border-bottom:1px solid var(--hair);}
+.tbl .hr .r{text-align:right;}
+.row{display:grid;grid-template-columns:54px minmax(0,1fr) 66px auto auto;gap:18px;align-items:center;
+  padding:13px 6px;border-bottom:1px solid var(--hair2);transition:background .12s var(--ease);}
+.row:hover{background:var(--hover);}
+.row .t{font-family:var(--mono);font-size:11px;color:var(--ink3);}
+.row .ins{min-width:0;}
+.row .ins .s{font-weight:600;font-size:13px;color:var(--ink);}
+.row .ins .c{font-family:var(--mono);font-size:11px;letter-spacing:.02em;color:var(--ink3);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.chip{display:inline-block;font-family:var(--mono);font-size:9.5px;font-weight:700;letter-spacing:.04em;padding:2px 8px;border-radius:6px;}
+.chip.long{background:var(--win-soft);color:var(--win);}
+.chip.short{background:var(--loss-soft);color:var(--loss);}
+.row .px{font-family:var(--mono);font-size:11px;color:var(--ink2);white-space:nowrap;}
+.row .px b{color:var(--ink);}
+.row .pnl{font-family:var(--mono);font-size:14px;font-weight:700;text-align:right;white-space:nowrap;}
+.row .pnl.win{color:var(--win);}.row .pnl.loss{color:var(--loss);}.row .pnl.open{color:var(--accent);}.row .pnl.flat{color:var(--ink3);}
+.row .pnl .st{display:block;font-size:8.5px;font-weight:600;letter-spacing:.08em;color:var(--ink4);margin-top:2px;text-transform:uppercase;}
+.empty{padding:48px 0;text-align:center;font-family:var(--mono);font-size:11px;letter-spacing:.05em;text-transform:uppercase;color:var(--ink4);}
+
+/* side rail content */
+.side{display:flex;flex-direction:column;gap:34px;}
+.posrow,.gaterow,.feedrow{display:flex;align-items:center;gap:10px;padding:11px 0;border-bottom:1px solid var(--hair2);}
+.posrow:last-child,.gaterow:last-child,.feedrow:last-child{border-bottom:0;}
+.posrow .s{font-weight:600;font-size:12.5px;color:var(--ink);}
+.posrow .meta{font-family:var(--mono);font-size:10px;color:var(--ink3);margin-left:auto;}
+.posrow .pnl{font-family:var(--mono);font-size:13px;font-weight:700;margin-left:auto;}
+.posrow .pnl.win{color:var(--win);}.posrow .pnl.loss{color:var(--loss);}
+.gaterow .ic{width:18px;height:18px;border-radius:6px;display:grid;place-items:center;flex-shrink:0;}
+.gaterow.ok .ic{background:var(--win-soft);color:var(--win);}
+.gaterow.bad .ic{background:var(--loss-soft);color:var(--loss);}
+.gaterow .gl{font-size:12px;color:var(--ink);font-weight:500;}
+.gaterow .gn{font-family:var(--mono);font-size:10px;color:var(--ink3);margin-left:auto;}
+.feedrow{align-items:flex-start;gap:12px;}
+.feedrow .ft{font-family:var(--mono);font-size:10px;color:var(--ink3);white-space:nowrap;flex-shrink:0;padding-top:1px;}
+.feedrow .fm{font-size:12px;color:var(--ink2);line-height:1.5;min-width:0;overflow-wrap:break-word;}
+.feed-wrap{max-height:340px;overflow-y:auto;scrollbar-width:thin;scrollbar-color:var(--ink4) transparent;}
+.feed-wrap::-webkit-scrollbar{width:4px;}.feed-wrap::-webkit-scrollbar-thumb{background:var(--ink4);border-radius:4px;}
+
+/* setup */
+.setup{position:fixed;inset:0;z-index:100;display:grid;place-items:center;padding:24px;background:var(--bg);}
+.scard{width:min(460px,100%);}
+.scard .logo{width:46px;height:46px;border-radius:13px;background:linear-gradient(135deg,var(--accent),#22d3ee);display:grid;place-items:center;color:#06080e;font-weight:800;font-size:21px;box-shadow:var(--glow);margin-bottom:20px;}
+.scard h1{font-size:27px;font-weight:800;letter-spacing:-.025em;margin:0 0 8px;}
+.scard h1 em{font-style:normal;color:var(--accent);}
+.scard p{color:var(--ink2);font-size:13px;line-height:1.55;margin:0 0 24px;}
+.fld{margin-bottom:16px;}
+.fld label{font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink3);font-weight:600;display:block;margin-bottom:9px;}
+.fld input{width:100%;background:var(--bg2);border:1px solid var(--hair);border-radius:11px;padding:13px 15px;color:var(--ink);font-family:var(--mono);font-size:13px;outline:none;transition:all .15s var(--ease);}
+.fld input:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft);}
+.serr{font-family:var(--mono);font-size:11px;color:var(--loss);background:var(--loss-soft);border:1px solid var(--loss-soft);border-radius:9px;padding:9px 12px;margin-bottom:16px;}
+.spin{width:14px;height:14px;border:2px solid var(--hair);border-top-color:var(--accent);border-radius:50%;animation:sp .8s linear infinite;display:inline-block;vertical-align:-2px;margin-right:7px;}
+@keyframes sp{to{transform:rotate(360deg);}}
+
+/* entrance */
+@keyframes fin{from{opacity:0;transform:translateY(10px);}to{opacity:1;transform:none;}}
+.hero,.body{animation:fin .5s var(--ease) both;}
+.body{animation-delay:.08s;}
+.row{animation:fin .4s var(--ease) both;}
+
+@media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important;}}
+@media(max-width:1080px){ .body{grid-template-columns:1fr;} .hero .chart{display:none;} }
+@media(max-width:680px){
+  .shell{grid-template-columns:1fr;}
+  .rail{position:fixed;bottom:0;top:auto;left:0;right:0;height:58px;width:100%;flex-direction:row;border-right:0;border-top:1px solid var(--hair);padding:0 14px;}
+  .rail .logo{display:none;}.rail .rspace{flex:1;}
+  .main{padding:0 16px 88px;}
+  .ticker{margin:0 -16px;padding:0 16px;gap:0;overflow-x:auto;}
+  .tk{padding:0 14px;}
+  .tk-right{position:static;}
+  .hero .big{font-size:clamp(44px,15vw,72px);}
+  .stat{padding:0 16px;}.stat:first-child{padding-left:0;}
+  .tbl .hr,.row{grid-template-columns:50px 1fr auto;gap:10px;}
+  .tbl .hr .colpx,.row .px,.tbl .hr .colside,.row .chipcell{display:none;}
+}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel" data-presets="react">
+const {useState,useEffect,useMemo,useRef} = React;
+
+/* ── connection (reuses the same localStorage keys as the main dashboard) ── */
+const DEFAULT_SERVER = '';
+const getServer = () => localStorage.getItem('signal_server_url') || DEFAULT_SERVER;
+const setServer = (u) => localStorage.setItem('signal_server_url', (u||'').replace(/\/$/,''));
+const getToken = () => localStorage.getItem('signal_auth_token') || '';
+const setToken = (t) => { if(t) localStorage.setItem('signal_auth_token', t.trim()); };
+const API = (p) => { const b=getServer(); return b ? b+p : p; };
+function apiFetch(path, opts={}){
+  const headers = Object.assign({}, opts.headers||{});
+  const tok = getToken(); if(tok) headers['X-Auth-Token']=tok;
+  if(opts.body && !headers['Content-Type']) headers['Content-Type']='application/json';
+  return fetch(API(path), Object.assign({credentials:'include'}, opts, {headers}));
+}
+async function apiJSON(path, opts){ const r=await apiFetch(path,opts); if(!r.ok) throw new Error(r.status); return r.json(); }
+const todayISO = () => { const n=new Date(); const ist=new Date(n.getTime()+((n.getTimezoneOffset()+330)*60000)); return ist.toISOString().slice(0,10); };
+const fmt = (n) => Math.abs(Math.round(n)).toLocaleString('en-IN');
+// "BANKNIFTY30JUN2656500PE" → "30 JUN 26 · 56500 PE"  (returns raw if it doesn't match)
+function humanizeOpt(sym){
+  if(!sym) return '';
+  const m=String(sym).toUpperCase().match(/^([A-Z]+?)(\d{2})([A-Z]{3})(\d{2})(\d+)(CE|PE)$/);
+  return m ? `${m[2]} ${m[3]} ${m[4]} · ${m[5]} ${m[6]}` : String(sym);
+}
+
+function usePoll(path, ms, enabled){
+  const [data,setData]=useState(null);
+  useEffect(()=>{
+    if(!enabled) return; let live=true;
+    const go=async()=>{ try{ const d=await apiJSON(path); if(live) setData(d); }catch(e){} };
+    go(); const id=setInterval(go,ms); return ()=>{live=false;clearInterval(id);};
+  },[path,ms,enabled]);
+  return data;
+}
+function useTheme(){
+  const [t,setT]=useState(()=>localStorage.getItem('ie-theme')||'dark');
+  useEffect(()=>{document.documentElement.setAttribute('data-theme',t);localStorage.setItem('ie-theme',t);},[t]);
+  return [t,()=>setT(x=>x==='dark'?'light':'dark')];
+}
+const sgn = (s)=>{ const raw=(s.pnl_rupees_net!=null?+s.pnl_rupees_net:+s.pnl_rupees)||0;
+  if(s.result==='LOSS') return -Math.abs(raw); if(['WIN','T1','T2'].includes(s.result)) return Math.abs(raw); return raw; };
+const isWin = (r)=>['WIN','T1','T2'].includes(r);
+
+/* ── icons ── */
+const Ico = ({d})=>(<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d={d}/></svg>);
+const I={ grid:"M3 3h7v7H3zM14 3h7v7h-7zM14 14h7v7h-7zM3 14h7v7H3z", chart:"M3 3v18h18M7 14l4-4 3 3 5-6",
+  flask:"M9 3h6M10 3v6l-5 9a2 2 0 002 3h10a2 2 0 002-3l-5-9V3", sun:"M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4",
+  moon:"M21 12.8A9 9 0 1111.2 3 7 7 0 0021 12.8z", check:"M20 6L9 17l-5-5", x:"M18 6L6 18M6 6l12 12" };
+
+/* ── area chart ── */
+function Area({pts,color}){
+  if(!pts||pts.length<2) return null;
+  const W=560,H=120,vs=pts.map(p=>p.v),mn=Math.min(...vs,0),mx=Math.max(...vs,0),rng=(mx-mn)||1;
+  const X=i=>(i/(pts.length-1))*W, Y=v=>H-((v-mn)/rng)*H;
+  const line=pts.map((p,i)=>`${i?'L':'M'}${X(i).toFixed(1)} ${Y(p.v).toFixed(1)}`).join(' ');
+  const area=`${line} L${W} ${H} L0 ${H} Z`;
+  return (<svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" style={{width:'100%',height:'100%'}}>
+    <defs><linearGradient id="ag" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stopColor={color} stopOpacity="0.22"/><stop offset="100%" stopColor={color} stopOpacity="0"/></linearGradient></defs>
+    <path d={area} fill="url(#ag)"/><path d={line} fill="none" stroke={color} strokeWidth="2"/>
+  </svg>);
+}
+
+/* ── Setup ── */
+function Setup({onDone}){
+  const [name,setName]=useState(localStorage.getItem('ie-user')||'');
+  const [url,setUrl]=useState(getServer());
+  const [tok,setTok]=useState(getToken());
+  const [err,setErr]=useState(''),[busy,setBusy]=useState(false);
+  const go=async()=>{ setBusy(true);setErr('');
+    try{ setServer(url); setToken(tok); if(name)localStorage.setItem('ie-user',name);
+      const r=await apiFetch('/api/ping'); if(!r.ok) throw new Error('Ping failed ('+r.status+')'); onDone();
+    }catch(e){ setErr(e.message||'Could not reach server'); } finally{ setBusy(false); } };
+  return (<div className="setup"><div className="scard">
+    <div className="logo">I</div>
+    <h1>Intraday <em>Console</em></h1>
+    <p>Connect to your engine. Reuses the same server &amp; token as your main dashboard — leave URL blank to use this page's origin.</p>
+    {err&&<div className="serr">{err}</div>}
+    <div className="fld"><label>Your name</label><input value={name} onChange={e=>setName(e.target.value)} placeholder="Ketan"/></div>
+    <div className="fld"><label>Server URL</label><input value={url} onChange={e=>setUrl(e.target.value)} placeholder="https://intraday.up.railway.app"/></div>
+    <div className="fld"><label>Auth token</label><input type="password" value={tok} onChange={e=>setTok(e.target.value)} onKeyDown={e=>e.key==='Enter'&&go()} placeholder="Server AUTH_TOKEN"/></div>
+    <button className="cta" style={{width:'100%',padding:'13px'}} onClick={go} disabled={busy||!tok.trim()}>{busy?<><span className="spin"/>Connecting…</>:'Connect'}</button>
+  </div></div>);
+}
+
+function App(){
+  const [theme,toggle]=useTheme();
+  const [needsSetup,setNeedsSetup]=useState(()=>!getToken());
+  const [clock,setClock]=useState('');
+  useEffect(()=>{ const t=()=>{const n=new Date();const ist=new Date(n.getTime()+((n.getTimezoneOffset()+330)*60000));
+    setClock(ist.toTimeString().slice(0,8));}; t(); const id=setInterval(t,1000); return ()=>clearInterval(id); },[]);
+
+  const status=usePoll('/api/status',5000,!needsSetup);
+  const perf=usePoll('/api/performance',12000,!needsSetup);
+  const ltp=usePoll('/api/ltp',6000,!needsSetup);
+  const hist=usePoll('/api/history?limit=50&date='+todayISO(),15000,!needsSetup);
+  const metrics=usePoll('/api/metrics',15000,!needsSetup);
+  const [busy,setBusy]=useState(false);
+
+  const eng = !status?'idle':(status.running?'live':'off');
+  const open=(status&&status.open_signals)||[];
+  const alerts=(status&&status.alerts)||[];
+  const rows=Array.isArray(hist)?hist.filter(s=>s.date===todayISO()):[];
+  const closed=rows.filter(s=>s.status==='CLOSED');
+
+  const equity=useMemo(()=>{ const o=closed.slice().sort((a,b)=>(a.timestamp||'').localeCompare(b.timestamp||''));
+    let c=0;const p=[{t:0,v:0}]; o.forEach((s,i)=>{c+=sgn(s);p.push({t:i+1,v:c});}); return p; },[hist]);
+  const realized=closed.reduce((a,s)=>a+sgn(s),0);
+  const unreal=open.reduce((a,s)=>a+(+s.pnl_now||0),0);
+  const net=realized+unreal;
+  const pa=perf||{};
+  const wins=pa.wins||0, losses=pa.losses||0, cl=wins+losses;
+  const wr=pa.win_rate!=null?pa.win_rate:(cl?(wins/cl)*100:0);
+  const exp=cl?((wr/100)*(pa.avg_win||0)+((100-wr)/100)*(pa.avg_loss||0)):0;
+  const cap=+localStorage.getItem('ie-capital')||20000;
+  const maxDD=useMemo(()=>{let pk=0,dd=0;equity.forEach(p=>{pk=Math.max(pk,p.v);dd=Math.min(dd,p.v-pk);});return dd;},[equity]);
+
+  const tickers=['NIFTY','BANKNIFTY','FINNIFTY'].map(c=>{const p=(ltp&&ltp.prices&&ltp.prices[c])||{};return{c,ltp:p.ltp,pct:p.pct,chg:p.chg};});
+
+  const gates=useMemo(()=>{ const m=metrics||{},e=m.engine||{};
+    const n=new Date();const ist=new Date(n.getTime()+((n.getTimezoneOffset()+330)*60000));
+    const hh=ist.getHours(),mm=ist.getMinutes(),wd=ist.getDay();
+    const mo=wd>=1&&wd<=5&&((hh>9)||(hh===9&&mm>=15))&&(hh<16);
+    const pc=mo&&(hh<12||(hh===12&&mm<30));
+    const KNOWN=['v1','v2','conductor','scalper','scalper_v3','reverter','nifty_windows','deadzone_fade','patterns'];
+    return [
+      {l:'Market',ok:mo,n:mo?'In session':'Closed'},
+      {l:'Pre-cutoff',ok:pc,n:pc?'Before 12:30':'After 12:30'},
+      {l:'Engine',ok:!!e.running,n:e.running?'Running':'Stopped'},
+      {l:'Kill-switch',ok:!e.killswitch_tripped,n:e.killswitch_tripped?'Tripped':'Clear'},
+      {l:'Strategy',ok:KNOWN.includes(e.strategy),n:(e.strategy||'—')},
+    ];
+  },[metrics]);
+
+  const engCall=async(p)=>{ setBusy(true); try{ await apiFetch(p,{method:'POST',body:'{}'}); }catch(e){} finally{ setBusy(false); } };
+
+  if(needsSetup) return <Setup onDone={()=>setNeedsSetup(false)}/>;
+
+  const day=(()=>{const n=new Date();const ist=new Date(n.getTime()+((n.getTimezoneOffset()+330)*60000));
+    return ist.toLocaleDateString('en-GB',{weekday:'short',day:'2-digit',month:'short'}).toUpperCase();})();
+
+  return (<div className="shell">
+    <nav className="rail">
+      <div className="logo">I</div>
+      <button className="rbtn on" title="Overview"><Ico d={I.grid}/></button>
+      <button className="rbtn" title="Signals"><Ico d={I.chart}/></button>
+      <button className="rbtn" title="Backtest"><Ico d={I.flask}/></button>
+      <div className="rspace"/>
+      <button className="rbtn" onClick={toggle} title="Theme"><Ico d={theme==='dark'?I.sun:I.moon}/></button>
+      <div className={'rdot '+eng} title={'Engine '+eng}/>
+      <button className="ava" title="Profile">{(localStorage.getItem('ie-user')||'K')[0].toUpperCase()}</button>
+    </nav>
+
+    <main className="main">
+      <div className="ticker">
+        {tickers.map(t=>(<div className="tk" key={t.c}>
+          <span className="nm">{t.c==='BANKNIFTY'?'BNF':t.c==='FINNIFTY'?'FIN':'NIFTY'}</span>
+          <span className="px mono">{t.ltp?(+t.ltp).toLocaleString('en-IN'):'—'}</span>
+          <span className={'ch '+((t.pct||0)>=0?'up':'dn')}>{t.pct!=null?((t.pct>=0?'+':'')+(+t.pct).toFixed(2)+'%'):''}</span>
+        </div>))}
+        <div className="tk tk-right">
+          <span className="tk-clock mono"><b>{clock}</b> IST</span>
+          <span className={'epill '+eng}><span className="d"/>{eng==='live'?'Engine live':eng==='off'?'Engine off':'Connecting'}</span>
+          {eng==='live'
+            ? <button className="cta stop" onClick={()=>engCall('/api/stop')} disabled={busy}>Stop</button>
+            : <button className="cta" onClick={()=>engCall('/api/start')} disabled={busy}>Start</button>}
+        </div>
+      </div>
+
+      <section className="hero">
+        <div className="chart"><Area pts={equity} color={net>=0?'var(--win)':'var(--loss)'}/></div>
+        <div className="lab">{day} · Today · Net P&amp;L</div>
+        <div className={'big '+(net>=0?'win':'loss')}>
+          <span className="cur">₹</span>{net>=0?'':'−'}{fmt(net)}
+        </div>
+        <div className="sub">{closed.length} closed · {open.length} open · <b>{net>=0?'+':'−'}{(Math.abs(net)/cap*100).toFixed(2)}%</b> of ₹{fmt(cap)} capital</div>
+        <div className="stats">
+          <div className="stat"><div className="k">Win rate</div><div className="v">{wr.toFixed(1)}%</div></div>
+          <div className="stat"><div className="k">Expectancy</div><div className={'v '+(exp>=0?'win':'loss')}>{exp>=0?'+':'−'}₹{fmt(exp)}</div></div>
+          <div className="stat"><div className="k">Trades (all)</div><div className="v">{cl}</div></div>
+          <div className="stat"><div className="k">Max DD today</div><div className="v loss">{maxDD?('−₹'+fmt(maxDD)):'₹0'}</div></div>
+          <div className="stat"><div className="k">Capital</div><div className="v accent">₹{fmt(cap)}</div></div>
+        </div>
+      </section>
+
+      <div className="body">
+        <div className="col">
+          <div className="slab">Signals <span className="r">{rows.length} today</span></div>
+          <div className="tbl">
+            <div className="hr"><span>Time</span><span>Instrument</span><span className="colside">Side</span><span className="colpx">Entry → Exit</span><span className="r">P&amp;L</span></div>
+            {rows.length===0 && <div className="empty">No signals today · engine scanning</div>}
+            {rows.slice(0,40).map((s,i)=>{
+              const open=s.status==='OPEN'; const pnl=open?(+s.pnl_now||0):sgn(s);
+              const cls=open?'open':(isWin(s.result)?'win':(s.result==='LOSS'?'loss':'flat'));
+              const t=(s.timestamp||'').slice(11,16)||(s.time||'—');
+              return (<div className="row" key={s.id||i} style={{animationDelay:(i*0.02)+'s'}}>
+                <span className="t">{t}</span>
+                <div className="ins"><div className="s">{s.instrument||'—'}</div><div className="c">{humanizeOpt(s.option_symbol)||(s.strike?(s.strike+' '+(s.option_type||'')):'')}</div></div>
+                <span className="chipcell"><span className={'chip '+((s.direction||'')==='LONG'?'long':'short')}>{s.direction||'—'}</span></span>
+                <span className="px">{s.option_entry?<>₹<b>{(+s.option_entry).toFixed(1)}</b>{(s.option_exit?(' → ₹'+(+s.option_exit).toFixed(1)):'')}</>:'—'}</span>
+                <span className={'pnl '+cls}>{open?'':((pnl>=0?'+':'−'))}₹{fmt(pnl)}<span className="st">{open?'OPEN':(s.result||s.status)}</span></span>
+              </div>);
+            })}
+          </div>
+        </div>
+
+        <aside className="col side">
+          <div>
+            <div className="slab">Open positions <span className="r">{open.length}</span></div>
+            {open.length===0 && <div className="empty" style={{padding:'24px 0'}}>Flat · watching</div>}
+            {open.map((p,i)=>{const v=+p.pnl_now||0;return(<div className="posrow" key={i}>
+              <div><div className="s">{p.instrument||'—'}</div></div>
+              <span className={'pnl '+(v>=0?'win':'loss')}>{v>=0?'+':'−'}₹{fmt(v)}</span>
+            </div>);})}
+          </div>
+          <div>
+            <div className="slab">Pre-trade gates</div>
+            {gates.map((g,i)=>(<div className={'gaterow '+(g.ok?'ok':'bad')} key={i}>
+              <span className="ic"><svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d={g.ok?I.check:I.x}/></svg></span>
+              <span className="gl">{g.l}</span><span className="gn">{g.n}</span>
+            </div>))}
+          </div>
+          <div>
+            <div className="slab">Live feed</div>
+            <div className="feed-wrap">
+              {(!alerts||alerts.length===0)&&<div className="empty" style={{padding:'24px 0'}}>Quiet</div>}
+              {alerts.slice(0,30).map((a,i)=>(<div className="feedrow" key={i}>
+                <span className="ft">{a.time||a.ts||''}</span>
+                <span className="fm">{a.msg||a.message||a.text||(typeof a==='string'?a:JSON.stringify(a))}</span>
+              </div>))}
+            </div>
+          </div>
+        </aside>
+      </div>
+    </main>
+  </div>);
+}
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+</script>
+</body>
+</html>
