@@ -92,6 +92,17 @@ button{font-family:inherit;cursor:pointer;}input{font-family:inherit;}
 .tk .rowx{display:flex;align-items:baseline;gap:8px;}
 .tk .px{font-family:var(--mono);font-size:15px;font-weight:700;}
 .tk .ch{font-family:var(--mono);font-size:11px;font-weight:600;}
+/* news-style auto-scrolling ticker tape */
+.tape{flex:1;min-width:0;overflow:hidden;display:flex;align-items:center;height:100%;
+  -webkit-mask-image:linear-gradient(90deg,transparent,#000 3%,#000 94%,transparent);mask-image:linear-gradient(90deg,transparent,#000 3%,#000 94%,transparent);}
+.tape-track{display:inline-flex;align-items:center;flex:none;white-space:nowrap;animation:marq 30s linear infinite;}
+.tape:hover .tape-track{animation-play-state:paused;}
+@keyframes marq{from{transform:translateX(0);}to{transform:translateX(-50%);}}
+.tkm{display:inline-flex;align-items:baseline;gap:9px;padding:0 2px;white-space:nowrap;}
+.tkm .nm{font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.14em;color:var(--ink3);}
+.tkm .px{font-family:var(--mono);font-size:14.5px;font-weight:700;}
+.tkm .ch{font-family:var(--mono);font-size:11px;font-weight:600;}
+.tkm .sep{color:var(--ink4);padding:0 12px;}
 .top-r{margin-left:auto;display:flex;align-items:center;gap:12px;}
 .clock{font-family:var(--mono);font-size:13px;color:var(--ink2);letter-spacing:.04em;}.clock b{color:var(--ink);}
 .led{display:inline-flex;align-items:center;gap:8px;font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;padding:8px 12px;border-radius:8px;border:1px solid var(--line);color:var(--ink2);}
@@ -104,6 +115,16 @@ button{font-family:inherit;cursor:pointer;}input{font-family:inherit;}
 .btn.stop{background:var(--dn-soft);color:var(--dn);border-color:var(--dn-soft);}
 .ib{width:40px;height:40px;border-radius:8px;border:1px solid var(--line);background:var(--panel2);color:var(--ink2);display:grid;place-items:center;transition:all .18s var(--e);}
 .ib:hover{color:var(--ink);}.ib svg{width:17px;height:17px;}
+.ib.on{color:var(--lime);border-color:var(--lime-soft);background:var(--lime-soft);}
+
+/* new-signal toast */
+.toast{position:fixed;top:14px;left:50%;transform:translateX(-50%);z-index:200;max-width:92%;cursor:pointer;
+  background:var(--raised);border:1px solid var(--lime);border-left:4px solid var(--lime);border-radius:13px;padding:13px 18px;
+  box-shadow:0 18px 44px -14px rgba(0,0,0,.8),0 0 26px -8px var(--lime-gl);animation:toastin .35s var(--e);}
+.toast .tt{font-weight:700;font-size:13.5px;color:var(--ink);letter-spacing:-.01em;}
+.toast .tb{font-family:var(--mono);font-size:11px;color:var(--ink2);margin-top:3px;}
+@keyframes toastin{from{opacity:0;transform:translate(-50%,-14px);}to{opacity:1;transform:translate(-50%,0);}}
+@media(max-width:680px){.toast{top:calc(10px + env(safe-area-inset-top));width:92%;}}
 
 /* nav tabs */
 .tabs{display:flex;gap:0;padding:22px 0 2px;border-bottom:1px solid var(--line);margin-bottom:22px;}
@@ -272,10 +293,11 @@ button{font-family:inherit;cursor:pointer;}input{font-family:inherit;}
 @media(max-width:1180px){.g-chart,.g-sig,.g-sigs,.g-open,.g-gates,.g-feed,.g6{grid-column:span 12;}.g-kpi{grid-column:span 6;}}
 @media(max-width:680px){
   .shell{grid-template-columns:1fr;}
+  /* solid bg + NO backdrop-filter: iOS Safari has a WebKit bug where a
+     position:fixed element with backdrop-filter scrolls away with the page. */
   .rail{position:fixed;bottom:0;top:auto;left:0;right:0;height:auto;width:100%;flex-direction:row;gap:2px;
     justify-content:space-around;align-items:stretch;padding:9px 6px;padding-bottom:calc(9px + env(safe-area-inset-bottom));
-    border-right:0;border-top:1px solid var(--line);
-    background:color-mix(in srgb,var(--bg) 90%,transparent);backdrop-filter:blur(20px) saturate(1.2);-webkit-backdrop-filter:blur(20px) saturate(1.2);}
+    border-right:0;border-top:1px solid var(--line);background:var(--bg);box-shadow:0 -10px 26px -12px rgba(0,0,0,0.85);}
   .rail .logo,.rail .ava,.rail .rspace{display:none;}
   .rbtn,.rail .estat{position:relative;flex:1;width:auto;height:auto;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;gap:6px;border-radius:11px;padding:7px 0 3px;}
   .rbtn svg{width:23px;height:23px;}
@@ -287,8 +309,9 @@ button{font-family:inherit;cursor:pointer;}input{font-family:inherit;}
   .rail .estat .rdot{width:8px;height:8px;margin-top:7px;}
   .rail .estat.live .blabel{color:var(--up);}.rail .estat.off .blabel{color:var(--dn);}
   .main{padding:0 15px 104px;}
-  .top{margin:0 -15px;padding:0 15px;overflow-x:auto;height:60px;}
-  .top-r{gap:9px;}
+  .top{margin:0 -15px;padding:0 15px;overflow:hidden;height:58px;}
+  .top-r{gap:8px;}
+  .clock{display:none;}
   .g-kpi{grid-column:span 6;}
   .tbl .hr,.row{grid-template-columns:46px 1fr auto;}
   .tbl .hr .cs,.row .cside,.tbl .hr .cp,.row .cpx{display:none;}
@@ -335,7 +358,8 @@ function useCountUp(target,ms=650){const [v,setV]=useState(target||0);const ref=
 const Ico=({d})=>(<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d={d}/></svg>);
 const I={grid:"M3 3h7v7H3zM14 3h7v7h-7zM14 14h7v7h-7zM3 14h7v7H3z",list:"M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01",
   layers:"M12 2l9 5-9 5-9-5 9-5zM3 12l9 5 9-5M3 17l9 5 9-5",sun:"M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4",
-  moon:"M21 12.8A9 9 0 1111.2 3 7 7 0 0021 12.8z",check:"M20 6L9 17l-5-5",x:"M18 6L6 18M6 6l12 12",up:"M7 17L17 7M17 7H8M17 7v9",down:"M7 7l10 10M17 17H8M17 17V8"};
+  moon:"M21 12.8A9 9 0 1111.2 3 7 7 0 0021 12.8z",check:"M20 6L9 17l-5-5",x:"M18 6L6 18M6 6l12 12",up:"M7 17L17 7M17 7H8M17 7v9",down:"M7 7l10 10M17 17H8M17 17V8",
+  bell:"M18 8a6 6 0 10-12 0c0 7-3 9-3 9h18s-3-2-3-9M13.7 21a2 2 0 01-3.4 0",belloff:"M8.7 3A6 6 0 0118 8c0 2 .4 3.6 .9 4.8M18 17H3s3-2 3-9M1 1l22 22M13.7 21a2 2 0 01-3.4 0"};
 
 function Area({pts,color,h=120}){if(!pts||pts.length<2)return null;
   const W=560,H=h,vs=pts.map(p=>p.v),mn=Math.min(...vs,0),mx=Math.max(...vs,0),rng=(mx-mn)||1;
@@ -438,6 +462,10 @@ function App(){
   const [needsSetup,setNeedsSetup]=useState(()=>!getToken());
   const [view,setView]=useState('overview');const [clock,setClock]=useState('');
   useEffect(()=>{const t=()=>setClock(istNow().toTimeString().slice(0,8));t();const id=setInterval(t,1000);return()=>clearInterval(id);},[]);
+  useEffect(()=>{ if('serviceWorker' in navigator){ navigator.serviceWorker.register('sw.js').catch(()=>{}); } },[]);
+  const [toast,setToast]=useState(null);
+  const [notify,setNotify]=useState(()=>localStorage.getItem('ie-notify')==='1');
+  const audioRef=useRef(null),lastAlert=useRef(undefined),toastT=useRef(null);
 
   const status=usePoll('/api/status',5000,!needsSetup);
   const perf=usePoll('/api/performance',12000,!needsSetup);
@@ -470,7 +498,28 @@ function App(){
       {l:'Kill-switch',ok:!e.killswitch_tripped,n:e.killswitch_tripped?'Tripped':'Clear'},{l:'Strategy',ok:KNOWN.includes(strat),n:strat}];},[metrics,status]);
 
   const engCall=async(p)=>{setBusy(true);try{await apiFetch(p,{method:'POST',body:'{}'});}catch(e){}finally{setBusy(false);}};
-  if(needsSetup)return <Setup onDone={()=>setNeedsSetup(false)}/>;
+
+  /* ── new-trade alert system ── */
+  const ensureAudio=()=>{try{if(!audioRef.current){const AC=window.AudioContext||window.webkitAudioContext;if(AC)audioRef.current=new AC();}if(audioRef.current&&audioRef.current.state==='suspended')audioRef.current.resume();}catch(e){}};
+  const beep=()=>{try{const c=audioRef.current;if(!c)return;[0,0.18].forEach((t,i)=>{const o=c.createOscillator(),g=c.createGain();o.connect(g);g.connect(c.destination);o.type='sine';o.frequency.value=i?1175:880;const s=c.currentTime+t;g.gain.setValueAtTime(0.0001,s);g.gain.exponentialRampToValueAtTime(0.3,s+0.02);g.gain.exponentialRampToValueAtTime(0.0001,s+0.16);o.start(s);o.stop(s+0.18);});}catch(e){}};
+  const showToast=(tt,tb,ms)=>{setToast({tt,tb});clearTimeout(toastT.current);toastT.current=setTimeout(()=>setToast(null),ms||6000);};
+  const fireAlert=(a)=>{const s=a.signal||{},o=a.option||{},dir=(s.direction||'').toUpperCase();
+    const tt=`${a.instrument||'Signal'}${dir?(' '+dir):''}${o.action?(' · '+o.action):''}`;
+    const tb=`${humanizeOpt(o.symbol)||''}${o.entry?(' @ ₹'+(+o.entry).toFixed(1)):''}${(s.confidence_ai_adj||s.confidence)?(' · conf '+(s.confidence_ai_adj||s.confidence)):''}`;
+    showToast(tt,tb,7000);beep();try{navigator.vibrate&&navigator.vibrate([60,40,60]);}catch(e){}
+    if(notify&&'serviceWorker'in navigator&&'Notification'in window&&Notification.permission==='granted'){
+      navigator.serviceWorker.ready.then(r=>r.showNotification(tt,{body:tb,icon:'icon-192.png',badge:'icon-192.png',tag:'ie-signal',renotify:true})).catch(()=>{});}};
+  const toggleNotify=async()=>{ensureAudio();
+    if(notify){setNotify(false);localStorage.setItem('ie-notify','0');showToast('Alerts off','',2500);return;}
+    if(!('Notification'in window)){showToast('Not supported','This browser has no notifications',4000);return;}
+    let p=Notification.permission;if(p==='default'){try{p=await Notification.requestPermission();}catch(e){}}
+    if(p==='granted'){setNotify(true);localStorage.setItem('ie-notify','1');showToast('Alerts on','You’ll be pinged when a new trade is found',4000);}
+    else{showToast('Notifications blocked','Enable in iOS Settings → this app → Notifications',5500);}};
+  useEffect(()=>{const top=alerts&&alerts[0];const id=top&&(top.id!=null?top.id:top.iso_ts);if(id==null)return;
+    if(lastAlert.current===undefined){lastAlert.current=id;return;}
+    if(id!==lastAlert.current){lastAlert.current=id;fireAlert(top);}},[alerts]);
+
+  if(needsSetup)return <Setup onDone={()=>{setNeedsSetup(false);ensureAudio();}}/>;
   const day=istNow().toLocaleDateString('en-GB',{weekday:'short',day:'2-digit',month:'short'}).toUpperCase();
   const NAV=[['overview',I.grid,'Overview'],['signals',I.list,'Signals'],['chain',I.layers,'Chain']];
 
@@ -510,6 +559,7 @@ function App(){
           <span className={'pnl '+cls}>{o?'':((pnl>=0?'+':'−'))}₹{fmt(pnl)}<span className="st">{o?'OPEN':(s.result||s.status)}</span></span></div>);})}</div></section>);
 
   return(<div className="shell">
+    {toast&&<div className="toast" onClick={()=>setToast(null)}><div className="tt">{toast.tt}</div>{toast.tb&&<div className="tb">{toast.tb}</div>}</div>}
     <nav className="rail"><div className="logo">I</div>
       {NAV.map(([id,icon,label])=>(<button key={id} className={'rbtn '+(view===id?'on':'')} onClick={()=>setView(id)} aria-label={label}><Ico d={icon}/><span className="tip">{label}</span><span className="blabel">{label}</span></button>))}
       <div className="rspace"/>
@@ -518,12 +568,17 @@ function App(){
       <button className="ava" title="Profile">{(localStorage.getItem('ie-user')||'K')[0].toUpperCase()}</button></nav>
     <main className="main">
       <div className="top">
-        {tickers.map(t=>(<div className="tk" key={t.c}><span className="nm">{t.c==='BANKNIFTY'?'BANKNIFTY':t.c==='FINNIFTY'?'FINNIFTY':'NIFTY'}</span>
-          <span className="rowx"><span className="px mono">{t.ltp?(+t.ltp).toLocaleString('en-IN'):'—'}</span>
-          <span className={'ch mono '+((t.pct||0)>=0?'up':'dn')}>{t.pct!=null?((t.pct>=0?'+':'')+(+t.pct).toFixed(2)+'%'):''}</span></span></div>))}
+        <div className="tape"><div className="tape-track">
+          {[...tickers,...tickers,...tickers,...tickers,...tickers,...tickers].map((t,i)=>(<span className="tkm" key={i}>
+            <span className="nm">{t.c}</span>
+            <span className="px mono">{t.ltp?(+t.ltp).toLocaleString('en-IN'):'—'}</span>
+            <span className={'ch mono '+((t.pct||0)>=0?'up':'dn')}>{t.pct!=null?((t.pct>=0?'+':'')+(+t.pct).toFixed(2)+'%'):'—'}</span>
+            <span className="sep">/</span></span>))}
+        </div></div>
         <div className="top-r"><span className="clock mono"><b>{clock}</b> IST</span>
           <span className={'led '+eng}><span className="d"/>{eng==='live'?'Engine live':eng==='off'?'Engine off':'Connecting'}</span>
           {eng==='live'?<button className="btn stop" onClick={()=>engCall('/api/stop')} disabled={busy}>Stop</button>:<button className="btn go" onClick={()=>engCall('/api/start')} disabled={busy}>Start</button>}
+          <button className={'ib'+(notify?' on':'')} onClick={toggleNotify} aria-label="Alerts" title={notify?'Alerts on':'Enable alerts'}><Ico d={notify?I.bell:I.belloff}/></button>
           <button className="ib" onClick={toggle} aria-label="Theme"><Ico d={theme==='dark'?I.sun:I.moon}/></button></div>
       </div>
       <div className="tabs">{NAV.map(([id,icon,label])=>(<button key={id} className={'tab '+(view===id?'on':'')} onClick={()=>setView(id)}>{label}</button>))}</div>
