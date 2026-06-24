@@ -77,6 +77,8 @@ button{font-family:inherit;cursor:pointer;}input{font-family:inherit;}
 .rdot.live{background:var(--up);box-shadow:0 0 11px var(--up);animation:bp 2.2s infinite;}
 .rdot.off{background:var(--dn);}
 .ava{width:42px;height:42px;border-radius:10px;border:1px solid var(--line);background:var(--panel2);color:var(--ink);font-weight:700;font-size:15px;}
+.blabel{display:none;}
+.estat{display:grid;place-items:center;width:46px;height:46px;}
 @keyframes bp{0%,100%{opacity:1;}50%{opacity:.25;}}
 
 .main{min-width:0;padding:0 28px 96px;max-width:1640px;}
@@ -270,9 +272,21 @@ button{font-family:inherit;cursor:pointer;}input{font-family:inherit;}
 @media(max-width:1180px){.g-chart,.g-sig,.g-sigs,.g-open,.g-gates,.g-feed,.g6{grid-column:span 12;}.g-kpi{grid-column:span 6;}}
 @media(max-width:680px){
   .shell{grid-template-columns:1fr;}
-  .rail{position:fixed;bottom:0;top:auto;left:0;right:0;height:62px;width:100%;flex-direction:row;gap:4px;padding:0 12px;border-right:0;border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom);}
-  .rail .logo,.ava{display:none;}.rail .rspace{flex:1;}.rbtn.on::before{display:none;}.rbtn .tip{display:none;}
-  .main{padding:0 15px 90px;}
+  .rail{position:fixed;bottom:0;top:auto;left:0;right:0;height:auto;width:100%;flex-direction:row;gap:2px;
+    justify-content:space-around;align-items:stretch;padding:9px 6px;padding-bottom:calc(9px + env(safe-area-inset-bottom));
+    border-right:0;border-top:1px solid var(--line);
+    background:color-mix(in srgb,var(--bg) 90%,transparent);backdrop-filter:blur(20px) saturate(1.2);-webkit-backdrop-filter:blur(20px) saturate(1.2);}
+  .rail .logo,.rail .ava,.rail .rspace{display:none;}
+  .rbtn,.rail .estat{position:relative;flex:1;width:auto;height:auto;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;gap:6px;border-radius:11px;padding:7px 0 3px;}
+  .rbtn svg{width:23px;height:23px;}
+  .rbtn .tip{display:none;}
+  .blabel{display:block;font-family:var(--mono);font-size:8.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;line-height:1;color:var(--ink3);}
+  .rbtn.on{background:transparent;border-color:transparent;color:var(--lime);}
+  .rbtn.on .blabel{color:var(--lime);}
+  .rbtn.on::before{display:block;content:'';position:absolute;top:-9px;left:50%;transform:translateX(-50%);width:30px;height:3px;border-radius:0 0 4px 4px;background:var(--lime);box-shadow:0 0 9px var(--lime);}
+  .rail .estat .rdot{width:8px;height:8px;margin-top:7px;}
+  .rail .estat.live .blabel{color:var(--up);}.rail .estat.off .blabel{color:var(--dn);}
+  .main{padding:0 15px 104px;}
   .top{margin:0 -15px;padding:0 15px;overflow-x:auto;height:60px;}
   .top-r{gap:9px;}
   .g-kpi{grid-column:span 6;}
@@ -497,10 +511,11 @@ function App(){
 
   return(<div className="shell">
     <nav className="rail"><div className="logo">I</div>
-      {NAV.map(([id,icon,label])=>(<button key={id} className={'rbtn '+(view===id?'on':'')} onClick={()=>setView(id)} aria-label={label}><Ico d={icon}/><span className="tip">{label}</span></button>))}
+      {NAV.map(([id,icon,label])=>(<button key={id} className={'rbtn '+(view===id?'on':'')} onClick={()=>setView(id)} aria-label={label}><Ico d={icon}/><span className="tip">{label}</span><span className="blabel">{label}</span></button>))}
       <div className="rspace"/>
-      <button className="rbtn" onClick={toggle} aria-label="Theme"><Ico d={theme==='dark'?I.sun:I.moon}/><span className="tip">{theme==='dark'?'Light':'Dark'}</span></button>
-      <div className={'rdot '+eng} title={'Engine '+eng}/><button className="ava" title="Profile">{(localStorage.getItem('ie-user')||'K')[0].toUpperCase()}</button></nav>
+      <button className="rbtn" onClick={toggle} aria-label="Theme"><Ico d={theme==='dark'?I.sun:I.moon}/><span className="tip">{theme==='dark'?'Light':'Dark'}</span><span className="blabel">Theme</span></button>
+      <div className={'estat '+eng} title={'Engine '+eng}><span className={'rdot '+eng}/><span className="blabel">{eng==='live'?'Live':eng==='off'?'Off':'···'}</span></div>
+      <button className="ava" title="Profile">{(localStorage.getItem('ie-user')||'K')[0].toUpperCase()}</button></nav>
     <main className="main">
       <div className="top">
         {tickers.map(t=>(<div className="tk" key={t.c}><span className="nm">{t.c==='BANKNIFTY'?'BANKNIFTY':t.c==='FINNIFTY'?'FINNIFTY':'NIFTY'}</span>
