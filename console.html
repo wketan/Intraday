@@ -354,11 +354,11 @@ button{font-family:inherit;cursor:pointer;}input{font-family:inherit;}
   .top-r{gap:8px;margin-left:0;}
   .clock{display:none;}
   .g-kpi{grid-column:span 6;}
-  .kpi{padding:13px 14px;}
-  .kpi .k{margin-bottom:7px;font-size:8.5px;}
-  .kpi .v{font-size:22px;}
-  .kpi .s{margin-top:6px;font-size:9.5px;}
-  .kpi .spark{height:32px;width:45%;}
+  .kpi{padding:13px 14px;min-width:0;overflow:hidden;}
+  .kpi .k{margin-bottom:7px;font-size:8.5px;white-space:nowrap;}
+  .kpi .v{font-size:19px;white-space:nowrap;}
+  .kpi .s{margin-top:6px;font-size:9.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .kpi .spark{height:30px;width:40%;}
   .tbl .hr,.row{grid-template-columns:46px 1fr auto;}
   .tbl .hr .cs,.row .cside,.tbl .hr .cp,.row .cpx{display:none;}
 }
@@ -606,7 +606,7 @@ function App(){
   const NAV=[['overview',I.grid,'Overview'],['signals',I.list,'Signals'],['chain',I.layers,'Chain']];
 
   const kpis=(<>
-    <section className="panel g-kpi kpi"><div className="k">{day} · Net P&amp;L</div><div className={'v '+(net>=0?'up':'dn')}>{net>=0?'+':'−'}₹{fmt(netCU)}</div><div className="s">{closed.length} closed · {open.length} open</div><div className="spark"><Area pts={equity} color={net>=0?'var(--up)':'var(--dn)'} h={42}/></div></section>
+    <section className="panel g-kpi kpi"><div className="k">Net P&amp;L</div><div className={'v '+(net>=0?'up':'dn')}>{net>=0?'+':'−'}₹{fmt(netCU)}</div><div className="s">{closed.length} closed · {open.length} open</div><div className="spark"><Area pts={equity} color={net>=0?'var(--up)':'var(--dn)'} h={42}/></div></section>
     <section className="panel g-kpi kpi"><div className="k">Win rate</div><div className="v">{wrCU.toFixed(1)}%</div><div className="s">{wins}W · {losses}L</div></section>
     <section className="panel g-kpi kpi"><div className="k">Expectancy</div><div className={'v '+(exp>=0?'up':'dn')}>{exp>=0?'+':'−'}₹{fmt(exp)}</div><div className="s">per trade</div></section>
     <section className="panel g-kpi kpi"><div className="k">Capital</div><div className="v ac">₹{fmt(cap)}</div><div className="s">{net>=0?'+':'−'}{(Math.abs(net)/cap*100).toFixed(2)}% today</div></section></>);
@@ -616,7 +616,7 @@ function App(){
       {bnfLtp.pct!=null&&<span className={'pxd '+((bnfLtp.pct||0)>=0?'up':'dn')}>{(bnfLtp.pct>=0?'+':'')}{(+bnfLtp.pct).toFixed(2)}%</span>}<span className="pxm">{todayCandles.length} candles today</span></div>
     <CandleChart candles={todayCandles} ltp={bnfLtp.ltp}/></section>);
 
-  const openCard=(<section className="panel span12"><div className="head"><span className="t"><b>//</b> Open positions</span><span className="r lbl">{open.length}</span></div>
+  const openCard=(<section className="panel g12"><div className="head"><span className="t"><b>//</b> Open positions</span><span className="r lbl">{open.length}</span></div>
     {open.length===0&&<div className="empty" style={{padding:'28px 0'}}>Flat · watching for setups</div>}
     {open.map((p,i)=><PositionCard key={p.id||i} p={p} idx={i}/>)}</section>);
 
