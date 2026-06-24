@@ -1269,12 +1269,33 @@ class AngelClient:
             _params = {"exchange":exchange,"symboltoken":token,"interval":interval,
                 "fromdate":fromdate, "todate":todate}
             import concurrent.futures as _cf2
-            with _cf2.ThreadPoolExecutor(max_workers=1) as _ex2:
+            # Angel's getCandleData intermittently returns an empty/failed payload for a
+            # perfectly valid window (transient throttle / hiccup). The old code gave up on
+            # the FIRST empty response, which surfaced as random "no candles" gaps — e.g.
+            # days=1 FIVE_MINUTE returning [] on one call and 75 on the next, identical params.
+            # That also cost the live scanner a scan whenever Angel hiccuped. Retry a few
+            # times with a short backoff before treating the window as genuinely empty.
+            resp = None
+            for _attempt in range(3):
+                _rl = False
                 try:
-                    resp = _ex2.submit(self.api.getCandleData, _params).result(timeout=12)
-                except _cf2.TimeoutError:
-                    log.error("❌ getCandleData timeout (12s) — returning empty")
-                    return pd.DataFrame()
+                    with _cf2.ThreadPoolExecutor(max_workers=1) as _ex2:
+                        resp = _ex2.submit(self.api.getCandleData, _params).result(timeout=12)
+                except Exception as _ce:
+                    # The SmartAPI client raises here when Angel returns a non-JSON body —
+                    # most commonly "Access denied because of exceeding access rate" (rate
+                    # limit). Catch it INSIDE the loop so we retry instead of falling through
+                    # to the outer handler and returning empty (the original bug).
+                    _m = str(_ce)
+                    _rl = ("rate" in _m.lower()) or ("access denied" in _m.lower())
+                    log.warning(f"⚠️ getCandleData attempt {_attempt+1}/3 failed: {_m[:90]}")
+                    resp = None
+                if resp and resp.get("status") and resp.get("data"):
+                    break
+                if _attempt < 2:
+                    self._candle_retries = getattr(self, "_candle_retries", 0) + 1
+                    # back off longer when rate-limited so Angel's window clears
+                    time.sleep((1.3 if _rl else 0.6) * (_attempt + 1))
             if resp and resp.get("status") and resp.get("data"):
                 df = pd.DataFrame(resp["data"], columns=["timestamp","open","high","low","close","volume"])
                 df["timestamp"] = pd.to_datetime(df["timestamp"])
@@ -1285,6 +1306,8 @@ class AngelClient:
                         for k, _ in oldest: self._candle_cache.pop(k, None)
                     self._candle_cache[cache_key] = {"ts": now, "df": df.copy()}
                 return df
+            log.warning(f"⚠️ getCandleData returned no data after 3 attempts: "
+                        f"token={token} {interval} {fromdate}→{todate}")
             return pd.DataFrame()
         except Exception as e:
             log.error(f"Candle err: {e}"); return pd.DataFrame()
