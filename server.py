@@ -3889,10 +3889,20 @@ class Engine:
                     if _enabled and name not in _enabled:
                         # Silent skip — only log once when the engine starts up
                         continue
+                    # BUG FIX #7: regime avoid_instruments must NOT override an explicit
+                    # ENABLED_INSTRUMENTS allow-list. When the engine is pinned to a single
+                    # confirmed-edge instrument (BANKNIFTY+conductor), one morning RegimeBrief
+                    # opinion that drops it onto the avoid list silently kills the ENTIRE day —
+                    # and self-perpetuates, since the recent losses it reacts to never get
+                    # replaced by new trades. Same anti-pattern as the confidence_floor (#6) and
+                    # min_rr guards above. Only honor regime avoid when NOT running a pinned list.
                     if name in avoid:
-                        self.metrics["regime_blocked"] += 1
-                        log.info(f"  {name} skipped — regime avoid list")
-                        continue
+                        if _enabled:
+                            log.info(f"  ⚠️ regime flagged {name} on avoid list — OVERRIDDEN (operator-enabled via ENABLED_INSTRUMENTS)")
+                        else:
+                            self.metrics["regime_blocked"] += 1
+                            log.info(f"  {name} skipped — regime avoid list")
+                            continue
 
                     df=self.client.candles(inst["token"],inst["exchange"])
                     if df.empty or len(df)<30: continue
