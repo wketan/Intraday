@@ -115,7 +115,7 @@ button{font-family:inherit;cursor:pointer;}input{font-family:inherit;}
 .panel.hud::before{top:-1px;left:-1px;border-top:2px solid var(--lime);border-left:2px solid var(--lime);border-top-left-radius:10px;}
 .panel.hud::after{bottom:-1px;right:-1px;border-bottom:2px solid var(--lime);border-right:2px solid var(--lime);border-bottom-right-radius:10px;}
 .grid{display:grid;grid-template-columns:repeat(12,1fr);gap:14px;}
-.g-chart{grid-column:span 8;}.g-sig{grid-column:span 4;}
+.g-chart{grid-column:span 8;align-self:start;}.g-sig{grid-column:span 4;}
 .g-kpi{grid-column:span 3;}
 .g-sigs{grid-column:span 7;}.g-open{grid-column:span 5;}
 .g-gates{grid-column:span 5;}.g-feed{grid-column:span 7;}
@@ -140,7 +140,7 @@ button{font-family:inherit;cursor:pointer;}input{font-family:inherit;}
 .chartwrap::after{content:'';position:absolute;top:0;bottom:22px;width:1px;background:linear-gradient(var(--lime),transparent);opacity:.5;animation:sweep 6s linear infinite;}
 @keyframes sweep{0%{left:2%;opacity:0;}10%{opacity:.5;}90%{opacity:.5;}100%{left:86%;opacity:0;}}
 .cstrip{display:flex;align-items:baseline;gap:14px;margin-bottom:16px;flex-wrap:wrap;}
-.cstrip .pxbig{font-family:var(--mono);font-size:clamp(38px,5vw,56px);font-weight:800;letter-spacing:-.04em;line-height:.9;}
+.cstrip .pxbig{font-family:var(--mono);font-size:clamp(30px,3.4vw,42px);font-weight:800;letter-spacing:-.04em;line-height:.9;}
 .cstrip .pxbig.up{color:var(--up);}.cstrip .pxbig.dn{color:var(--dn);}
 .cstrip .pxd{font-family:var(--mono);font-size:13px;font-weight:700;padding:4px 10px;border-radius:6px;}
 .cstrip .pxd.up{color:var(--up);background:var(--up-soft);}.cstrip .pxd.dn{color:var(--dn);background:var(--dn-soft);}
@@ -164,6 +164,8 @@ button{font-family:inherit;cursor:pointer;}input{font-family:inherit;}
 .leg .k{font-family:var(--mono);font-size:8.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink3);margin-bottom:6px;}
 .leg .v{font-family:var(--mono);font-size:17px;font-weight:700;}
 .leg .v.up{color:var(--up);}.leg .v.dn{color:var(--dn);}
+.leg .lp{display:block;font-size:9.5px;font-weight:600;margin-top:3px;}
+.leg .lp.up{color:var(--up);}.leg .lp.dn{color:var(--dn);}
 .optline{display:flex;align-items:center;gap:9px;flex-wrap:wrap;padding:12px 14px;border-radius:8px;background:var(--panel2);border:1px solid var(--line);margin-bottom:15px;}
 .opttag{font-family:var(--mono);font-weight:700;font-size:11px;padding:5px 9px;border-radius:6px;background:var(--lime);color:#0a0b0e;}
 .optsym{font-family:var(--mono);font-size:13.5px;font-weight:700;}
@@ -331,7 +333,7 @@ function Area({pts,color,h=120}){if(!pts||pts.length<2)return null;
 
 function CandleChart({candles,ltp}){
   if(!candles||candles.length<2)return <div className="empty" style={{padding:'80px 0'}}>Waiting for candles · market may be closed</div>;
-  const W=880,H=320,pT=14,pB=22,pL=10,pR=58;
+  const W=880,H=228,pT=12,pB=20,pL=10,pR=58;
   const hi=Math.max(...candles.map(c=>c.h)),lo=Math.min(...candles.map(c=>c.l));
   const pad=(hi-lo)*0.06||1,mx=hi+pad,mn=lo-pad,rng=mx-mn||1;
   const n=candles.length,iw=(W-pL-pR)/n,bw=Math.max(1.5,Math.min(11,iw*0.62));
@@ -383,13 +385,14 @@ function SignalCard({sig,marketOpen}){
         <div className="sig-sub">{(s.strategy||'conductor').toUpperCase()} · score {s.v2_score||0}/5 · R:R {(s.risk_reward||o.rr||0).toFixed(1)}</div></div>
       <div className="confwrap"><div className="cv mono">{conf}</div><div className="cl">Conf</div></div></div>
     <div className="legbar">
-      <div className="leg"><div className="k">Entry</div><div className="v">{s.entry?(+s.entry).toFixed(0):'—'}</div></div>
-      <div className="leg"><div className="k">Stop</div><div className="v dn">{s.sl?(+s.sl).toFixed(0):'—'}</div></div>
-      <div className="leg"><div className="k">Target 1</div><div className="v up">{s.target1?(+s.target1).toFixed(0):'—'}</div></div>
-      <div className="leg"><div className="k">Target 2</div><div className="v up">{s.target2?(+s.target2).toFixed(0):'—'}</div></div></div>
+      <div className="leg"><div className="k">Entry ₹</div><div className="v">{o.entry?(+o.entry).toFixed(1):'—'}</div></div>
+      <div className="leg"><div className="k">Stop ₹</div><div className="v dn">{o.sl?(+o.sl).toFixed(1):'—'}{o.max_loss!=null&&<span className="lp dn"> −₹{fmt(o.max_loss)}</span>}</div></div>
+      <div className="leg"><div className="k">Target 1 ₹</div><div className="v up">{o.target1?(+o.target1).toFixed(1):'—'}{o.t1_profit!=null&&<span className="lp up"> +₹{fmt(o.t1_profit)}</span>}</div></div>
+      <div className="leg"><div className="k">Target 2 ₹</div><div className="v up">{o.target2?(+o.target2).toFixed(1):'—'}{o.t2_profit!=null&&<span className="lp up"> +₹{fmt(o.t2_profit)}</span>}</div></div></div>
     {o.symbol&&<div className="optline"><span className="opttag">{o.action||('BUY '+(o.type||''))}</span><span className="optsym">{humanizeOpt(o.symbol)}</span>
-      <span className="optmeta">@ <b>₹{o.entry?(+o.entry).toFixed(1):'—'}</b></span><span className="optmeta">{o.lots||1}×{o.lot_size||0}</span>
-      {o.delta!=null&&<span className="optmeta">Δ <b>{(+o.delta).toFixed(2)}</b></span>}{o.max_loss!=null&&<span className="optmeta">risk <b>₹{fmt(o.max_loss)}</b></span>}</div>}
+      <span className="optmeta">{o.lots||1}×{o.lot_size||0} = {o.qty||((o.lots||0)*(o.lot_size||0))} qty</span>
+      {o.delta!=null&&<span className="optmeta">Δ <b>{(+o.delta).toFixed(2)}</b></span>}
+      <span className="optmeta">idx <b>{s.entry?(+s.entry).toFixed(0):'—'}</b>→{s.target1?(+s.target1).toFixed(0):'—'}</span></div>}
     {Object.keys(v).length>0&&<div className="votes">{lenses.map(([k,lbl])=>(<span key={k} className={'vote '+(v[k]?'hit':'')}><span className="vd"/>{lbl}</span>))}</div>}
     {Array.isArray(s.reasons)&&s.reasons.length>0&&<ul className="reasons">{s.reasons.slice(0,5).map((r,i)=>(<li key={i}>{r}</li>))}</ul>}
   </section>);}
@@ -510,7 +513,7 @@ function App(){
       </div>
       <div className="tabs">{NAV.map(([id,icon,label])=>(<button key={id} className={'tab '+(view===id?'on':'')} onClick={()=>setView(id)}>{label}</button>))}</div>
 
-      {view==='overview'&&<div className="grid">{chartCard}<SignalCard sig={bnf} marketOpen={status&&status.market_open}/>{kpis}{signalsTable(false)}{openCard}{gatesCard}{feedCard}</div>}
+      {view==='overview'&&<div className="grid">{kpis}{chartCard}<SignalCard sig={bnf} marketOpen={status&&status.market_open}/>{signalsTable(false)}{openCard}{gatesCard}{feedCard}</div>}
       {view==='signals'&&<div className="grid">{kpis}{signalsTable(true)}{openCard}{feedCard}</div>}
       {view==='chain'&&<div className="grid"><ChainCards sig={bnf} ltp={ltp}/>{gatesCard}{feedCard}</div>}
     </main>
