@@ -269,6 +269,40 @@ button{font-family:inherit;cursor:pointer;}input{font-family:inherit;}
 .oirow .track .f.ce{background:var(--up);}.oirow .track .f.pe{background:var(--dn);}
 .oirow .amt{font-family:var(--mono);font-size:11px;color:var(--ink2);text-align:right;}
 
+/* live position tracker */
+.poscard{position:relative;background:var(--panel2);border:1px solid var(--line);border-radius:13px;padding:16px 18px;}
+.poscard+.poscard{margin-top:12px;}
+.pos-top{display:flex;align-items:center;gap:10px;margin-bottom:13px;}
+.pos-idx{font-family:var(--mono);font-size:11px;color:var(--ink4);font-weight:700;}
+.pos-lbl{font-family:var(--mono);font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink3);font-weight:700;white-space:nowrap;}
+.pos-live{margin-left:auto;flex-shrink:0;display:inline-flex;align-items:center;gap:7px;white-space:nowrap;font-family:var(--mono);font-size:10.5px;font-weight:700;letter-spacing:.04em;color:var(--ink2);border:1px solid var(--line);border-radius:8px;padding:6px 11px;}
+.pos-live b{color:var(--ink);font-weight:700;}
+.pos-live .d{width:6px;height:6px;border-radius:2px;background:var(--up);box-shadow:0 0 7px var(--up);animation:bp 2s infinite;}
+.pos-name{font-size:20px;font-weight:700;letter-spacing:-.01em;}
+.pos-name .ot{color:var(--lime);}
+.pos-meta{font-family:var(--mono);font-size:10.5px;color:var(--ink3);margin-top:4px;}
+.pos-prices{display:flex;justify-content:space-between;align-items:flex-end;margin:16px 0 4px;}
+.pp .k{font-family:var(--mono);font-size:8.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink3);margin-bottom:5px;}
+.pp .v{font-family:var(--mono);font-size:22px;font-weight:700;}
+.pp.r{text-align:right;}.pp .v.up{color:var(--up);}.pp .v.dn{color:var(--dn);}
+.track{position:relative;height:48px;margin:4px 0;}
+.tk-bar{position:absolute;top:21px;left:0;right:0;height:6px;border-radius:3px;}
+.tk-tick{position:absolute;top:-6px;width:1.5px;height:18px;background:var(--ink4);transform:translateX(-50%);}
+.tk-dot{position:absolute;top:3px;width:14px;height:14px;border-radius:50%;transform:translate(-50%,-50%);border:3px solid var(--bg);box-shadow:0 0 0 1.5px currentColor,0 0 10px currentColor;}
+.tk-lab{position:absolute;top:0;font-family:var(--mono);font-size:8px;letter-spacing:.06em;color:var(--ink3);transform:translateX(-50%);white-space:nowrap;}
+.tk-lab.l{transform:none;}.tk-lab.r{transform:translateX(-100%);}
+.tk-val{position:absolute;top:33px;font-family:var(--mono);font-size:10px;font-weight:600;color:var(--ink2);transform:translateX(-50%);white-space:nowrap;}
+.tk-val.l{transform:none;}.tk-val.r{transform:translateX(-100%);}
+.pos-pnl{display:flex;align-items:flex-end;justify-content:space-between;margin-top:16px;}
+.pos-pnl .k{font-family:var(--mono);font-size:8.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink3);margin-bottom:6px;}
+.pos-pnl .v{font-family:var(--mono);font-size:24px;font-weight:800;}
+.pos-pnl .v.up{color:var(--up);}.pos-pnl .v.dn{color:var(--dn);}
+.pos-pnl .pct{font-size:12px;font-weight:700;padding:2px 7px;border-radius:6px;margin-left:7px;}
+.pos-pnl .pct.up{background:var(--up-soft);color:var(--up);}.pos-pnl .pct.dn{background:var(--dn-soft);color:var(--dn);}
+.pos-stat{display:inline-flex;align-items:center;gap:6px;font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.06em;border:1px solid var(--line);border-radius:8px;padding:6px 11px;}
+.pos-stat .d{width:6px;height:6px;border-radius:2px;background:currentColor;}
+.pos-note{font-family:var(--mono);font-size:10.5px;color:var(--ink3);margin-top:11px;}
+
 /* setup */
 .setup{position:fixed;inset:0;z-index:100;display:grid;place-items:center;padding:24px;}
 .scard{width:min(440px,100%);}
@@ -320,6 +354,11 @@ button{font-family:inherit;cursor:pointer;}input{font-family:inherit;}
   .top-r{gap:8px;margin-left:0;}
   .clock{display:none;}
   .g-kpi{grid-column:span 6;}
+  .kpi{padding:13px 14px;}
+  .kpi .k{margin-bottom:7px;font-size:8.5px;}
+  .kpi .v{font-size:22px;}
+  .kpi .s{margin-top:6px;font-size:9.5px;}
+  .kpi .spark{height:32px;width:45%;}
   .tbl .hr,.row{grid-template-columns:46px 1fr auto;}
   .tbl .hr .cs,.row .cside,.tbl .hr .cp,.row .cpx{display:none;}
 }
@@ -463,6 +502,43 @@ function ChainCards({sig,ltp}){
         <span className="track"><span className={'f '+b.type} style={{width:(Math.abs(b.oi_delta)/maxB*100)+'%'}}/></span>
         <span className="amt">{b.oi_delta>=0?'+':''}{fmtK(b.oi_delta)}</span></div>))}</section></>);}
 
+function elapsedFrom(tin){ if(!tin) return '00:00:00'; const m=String(tin).match(/(\d{1,2}):(\d{2})/); if(!m) return '00:00:00';
+  const now=istNow(); const st=new Date(now); st.setHours(+m[1],+m[2],0,0); let s=Math.floor((now-st)/1000); if(s<0)s=0;
+  const hh=Math.floor(s/3600),mm=Math.floor((s%3600)/60),ss=s%60; const z=n=>String(n).padStart(2,'0'); return z(hh)+':'+z(mm)+':'+z(ss); }
+
+function PositionCard({p,idx}){
+  const entry=+p.entry||0,sl=+p.sl||0,t1=+p.t1||0,t2=+p.t2||0,cur=(p.current_premium!=null?+p.current_premium:entry)||entry;
+  const a=Math.min(sl,entry),b=Math.max(t2,cur),span=(b-a)||1;
+  const P=x=>Math.max(0,Math.min(100,((x-a)/span)*100));
+  const enP=P(entry),t1P=P(t1),curP=P(cur);
+  const pnl=+p.pnl_now||0,up=pnl>=0;
+  const pct=entry?(((cur-entry)/entry)*100):0;
+  const long=(p.direction||'').toUpperCase()==='LONG';
+  const dc=up?'var(--up)':'var(--dn)';
+  const grad=`linear-gradient(90deg,var(--dn) 0%,var(--dn) ${(enP*0.5).toFixed(0)}%,#d98b2e ${enP.toFixed(0)}%,var(--up) ${t1P.toFixed(0)}%,#4f8cff 100%)`;
+  return(<div className="poscard">
+    <div className="pos-top"><span className="pos-idx">{String(idx+1).padStart(2,'0')}</span><span className="pos-lbl">Active position</span>
+      <span className="pos-live"><span className="d"/>LIVE&nbsp;·&nbsp;<b>{elapsedFrom(p.t_in)}</b></span></div>
+    <div className="pos-name">{p.instrument||'—'} {p.option_strike?(+p.option_strike).toFixed(0):''} <span className="ot">{p.option_type||''}</span></div>
+    <div className="pos-meta">{long?'LONG':'SHORT'} · {p.lots||1} LOT · {p.qty||((p.lots||0)*(p.lot_size||0))} QTY · CONF {p.confidence!=null?p.confidence:'—'} · ENTERED {p.t_in||'—'}</div>
+    <div className="pos-prices">
+      <div className="pp"><div className="k">Entry</div><div className="v">₹{entry.toFixed(1)}</div></div>
+      <div className="pp r"><div className="k">LTP · Live</div><div className={'v '+(up?'up':'dn')}>₹{cur.toFixed(1)}</div></div></div>
+    <div className="track">
+      <span className="tk-lab l" style={{left:'0%'}}>SL</span><span className="tk-lab" style={{left:enP+'%'}}>ENTRY</span>
+      <span className="tk-lab" style={{left:t1P+'%'}}>T1</span><span className="tk-lab r" style={{left:'100%'}}>T2</span>
+      <div className="tk-bar" style={{background:grad}}>
+        <span className="tk-tick" style={{left:enP+'%'}}/><span className="tk-tick" style={{left:t1P+'%'}}/>
+        <span className="tk-dot" style={{left:curP+'%',color:dc,background:dc}}/></div>
+      <span className="tk-val l" style={{left:'0%'}}>₹{sl.toFixed(0)}</span><span className="tk-val" style={{left:enP+'%'}}>₹{entry.toFixed(0)}</span>
+      <span className="tk-val" style={{left:t1P+'%'}}>₹{t1.toFixed(0)}</span><span className="tk-val r" style={{left:'100%'}}>₹{t2.toFixed(0)}</span></div>
+    <div className="pos-pnl">
+      <div><div className="k">P&amp;L · Unrealised</div><div className={'v '+(up?'up':'dn')}>{up?'+':'−'}₹{fmt(pnl)}<span className={'pct '+(up?'up':'dn')}>{pct>=0?'+':''}{pct.toFixed(1)}%</span></div></div>
+      <span className="pos-stat" style={{color:up?'var(--up)':'var(--warn)'}}><span className="d"/>{up?'RUNNING':'WATCH'}</span></div>
+    {p.pnl_peak!=null&&<div className="pos-note">Peaked at {p.pnl_peak>=0?'+':'−'}₹{fmt(p.pnl_peak)}{p.pct_to_t1!=null?(' ('+(p.pct_to_t1>=0?'+':'')+p.pct_to_t1+'% to T1)'):''} · now {up?'+':'−'}₹{fmt(pnl)}</div>}
+  </div>);
+}
+
 function App(){
   const [theme,toggle]=useTheme();
   const [needsSetup,setNeedsSetup]=useState(()=>!getToken());
@@ -540,9 +616,9 @@ function App(){
       {bnfLtp.pct!=null&&<span className={'pxd '+((bnfLtp.pct||0)>=0?'up':'dn')}>{(bnfLtp.pct>=0?'+':'')}{(+bnfLtp.pct).toFixed(2)}%</span>}<span className="pxm">{todayCandles.length} candles today</span></div>
     <CandleChart candles={todayCandles} ltp={bnfLtp.ltp}/></section>);
 
-  const openCard=(<section className="panel g-open"><div className="head"><span className="t"><b>//</b> Open positions</span><span className="r lbl">{open.length}</span></div>
-    {open.length===0&&<div className="empty" style={{padding:'22px 0'}}>Flat · watching</div>}
-    {open.map((p,i)=>{const v=+p.pnl_now||0;return(<div className="posrow" key={i}><div><div className="s">{p.instrument||'—'}</div><div className="m">{humanizeOpt(p.option_symbol)||(p.direction||'')}</div></div><span className={'pnl '+(v>=0?'up':'dn')}>{v>=0?'+':'−'}₹{fmt(v)}</span></div>);})}</section>);
+  const openCard=(<section className="panel span12"><div className="head"><span className="t"><b>//</b> Open positions</span><span className="r lbl">{open.length}</span></div>
+    {open.length===0&&<div className="empty" style={{padding:'28px 0'}}>Flat · watching for setups</div>}
+    {open.map((p,i)=><PositionCard key={p.id||i} p={p} idx={i}/>)}</section>);
 
   const gatesCard=(<section className="panel g-gates"><div className="head"><span className="t"><b>//</b> Pre-trade gates</span></div>
     {gates.map((g,i)=>(<div className={'gaterow '+(g.ok?'ok':'bad')} key={i}><span className="ic"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d={g.ok?I.check:I.x}/></svg></span><span className="gl">{g.l}</span><span className="gn">{g.n}</span></div>))}</section>);
@@ -591,7 +667,7 @@ function App(){
       </div>
       <div className="tabs">{NAV.map(([id,icon,label])=>(<button key={id} className={'tab '+(view===id?'on':'')} onClick={()=>setView(id)}>{label}</button>))}</div>
 
-      {view==='overview'&&<div className="grid">{kpis}{chartCard}<SignalCard sig={bnf} marketOpen={status&&status.market_open}/>{signalsTable(false)}{openCard}{gatesCard}{feedCard}</div>}
+      {view==='overview'&&<div className="grid">{kpis}{chartCard}<SignalCard sig={bnf} marketOpen={status&&status.market_open}/>{open.length>0&&openCard}{signalsTable(true)}{open.length===0&&openCard}{gatesCard}{feedCard}</div>}
       {view==='signals'&&<div className="grid">{kpis}{signalsTable(true)}{openCard}{feedCard}</div>}
       {view==='chain'&&<div className="grid"><ChainCards sig={bnf} ltp={ltp}/>{gatesCard}{feedCard}</div>}
     </main>
