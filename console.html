@@ -84,8 +84,10 @@ button{font-family:inherit;cursor:pointer;}input{font-family:inherit;}
 .main{min-width:0;padding:0 28px 96px;max-width:1640px;}
 
 /* top readout bar */
-.top{display:flex;align-items:stretch;height:64px;position:sticky;top:0;z-index:20;margin:0 -28px;padding:0 28px;
-  background:color-mix(in srgb,var(--bg) 80%,transparent);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border-bottom:1px solid var(--line);}
+.top{position:sticky;top:0;z-index:20;margin:0 -28px;display:flex;flex-direction:column;
+  background:color-mix(in srgb,var(--bg) 82%,transparent);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border-bottom:1px solid var(--line);}
+.tapebar{display:flex;align-items:center;height:42px;padding:0 28px;border-bottom:1px solid var(--line2);}
+.toolbar{display:flex;align-items:center;height:56px;padding:0 28px;gap:12px;}
 .tk{display:flex;flex-direction:column;justify-content:center;gap:3px;padding:0 18px;border-right:1px solid var(--line2);white-space:nowrap;}
 .tk:first-child{padding-left:0;}
 .tk .nm{font-family:var(--mono);font-size:9px;font-weight:700;letter-spacing:.16em;color:var(--ink3);}
@@ -309,8 +311,10 @@ button{font-family:inherit;cursor:pointer;}input{font-family:inherit;}
   .rail .estat .rdot{width:8px;height:8px;margin-top:7px;}
   .rail .estat.live .blabel{color:var(--up);}.rail .estat.off .blabel{color:var(--dn);}
   .main{padding:0 15px 104px;}
-  .top{margin:0 -15px;padding:0 15px;overflow:hidden;height:58px;}
-  .top-r{gap:8px;}
+  .top{margin:0 -15px;}
+  .tapebar{padding:0 15px;height:38px;}
+  .toolbar{padding:0 15px;height:52px;gap:8px;justify-content:center;}
+  .top-r{gap:8px;margin-left:0;}
   .clock{display:none;}
   .g-kpi{grid-column:span 6;}
   .tbl .hr,.row{grid-template-columns:46px 1fr auto;}
@@ -568,18 +572,20 @@ function App(){
       <button className="ava" title="Profile">{(localStorage.getItem('ie-user')||'K')[0].toUpperCase()}</button></nav>
     <main className="main">
       <div className="top">
-        <div className="tape"><div className="tape-track">
+        <div className="tapebar"><div className="tape"><div className="tape-track">
           {[...tickers,...tickers,...tickers,...tickers,...tickers,...tickers].map((t,i)=>(<span className="tkm" key={i}>
             <span className="nm">{t.c}</span>
             <span className="px mono">{t.ltp?(+t.ltp).toLocaleString('en-IN'):'—'}</span>
             <span className={'ch mono '+((t.pct||0)>=0?'up':'dn')}>{t.pct!=null?((t.pct>=0?'+':'')+(+t.pct).toFixed(2)+'%'):'—'}</span>
             <span className="sep">/</span></span>))}
-        </div></div>
-        <div className="top-r"><span className="clock mono"><b>{clock}</b> IST</span>
+        </div></div></div>
+        <div className="toolbar"><span className="clock mono"><b>{clock}</b> IST</span>
+          <div className="top-r">
           <span className={'led '+eng}><span className="d"/>{eng==='live'?'Engine live':eng==='off'?'Engine off':'Connecting'}</span>
           {eng==='live'?<button className="btn stop" onClick={()=>engCall('/api/stop')} disabled={busy}>Stop</button>:<button className="btn go" onClick={()=>engCall('/api/start')} disabled={busy}>Start</button>}
           <button className={'ib'+(notify?' on':'')} onClick={toggleNotify} aria-label="Alerts" title={notify?'Alerts on':'Enable alerts'}><Ico d={notify?I.bell:I.belloff}/></button>
           <button className="ib" onClick={toggle} aria-label="Theme"><Ico d={theme==='dark'?I.sun:I.moon}/></button></div>
+        </div>
       </div>
       <div className="tabs">{NAV.map(([id,icon,label])=>(<button key={id} className={'tab '+(view===id?'on':'')} onClick={()=>setView(id)}>{label}</button>))}</div>
 
