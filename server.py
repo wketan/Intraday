@@ -16,6 +16,55 @@ from datetime import datetime, timedelta, timezone
 from functools import wraps
 IST = timezone(timedelta(hours=5, minutes=30))
 
+# ── NSE trading-holiday / market-status awareness ─────────────────────────
+# The engine's market_open flag used to be naive (9<=hour<16): it had no idea
+# about weekends or exchange holidays. On the 2026-06-26 Muharram holiday it
+# reported "market open", ran pointless scans, and the dashboard kept showing
+# the last (prior-day) signal card with no way to tell it was stale. This
+# calendar + the empirical newest-bar-date check close that gap.
+#
+# Only dates we are CERTAIN about are baked in. Extend via env (safe to add
+# the full official NSE circular without a redeploy):
+#   NSE_HOLIDAYS="2026-08-15=Independence Day,2026-10-02=Gandhi Jayanti"
+# Weekends are always closed regardless of this list.
+_NSE_HOLIDAYS_DEFAULT = {
+    "2026-06-26": "Muharram",
+}
+
+def _nse_holidays():
+    hols = dict(_NSE_HOLIDAYS_DEFAULT)
+    for tok in os.environ.get("NSE_HOLIDAYS", "").split(","):
+        tok = tok.strip()
+        if not tok:
+            continue
+        if "=" in tok:
+            d, nm = tok.split("=", 1); hols[d.strip()] = nm.strip()
+        else:
+            hols[tok] = "Holiday"
+    return hols
+
+def market_status(now=None):
+    """Live market open/closed status with a human reason.
+
+    open=False on weekends and listed NSE holidays. A holiday that is NOT in
+    the list still won't produce a bad trade (the strategy's own time-gate and
+    the empirical stale-data flag catch it) — this only labels the ones we know.
+    """
+    now = now or datetime.now(IST)
+    d = now.strftime("%Y-%m-%d")
+    wd = now.weekday()  # Mon=0 .. Sun=6
+    if wd >= 5:
+        return {"open": False, "reason": "weekend",
+                "label": "Saturday" if wd == 5 else "Sunday", "date": d}
+    hols = _nse_holidays()
+    if d in hols:
+        return {"open": False, "reason": "holiday", "label": hols[d], "date": d}
+    hm = now.hour * 60 + now.minute
+    is_session = (9 * 60 + 15) <= hm <= (15 * 60 + 30)
+    return {"open": is_session,
+            "reason": "session" if is_session else "after_hours",
+            "label": None, "date": d}
+
 import numpy as np
 import pandas as pd
 import requests
@@ -3511,6 +3560,17 @@ class Engine:
         # Captures EVERY scan tick (trigger or not) so the user can see exactly
         # what each rule scored and why it didn't fire. Read via /api/v2-diag.
         self._v2_diag = {}   # {name: deque(maxlen=20)}
+        # Conductor per-scan diagnostic — the verdict (TRIGGER / AFTER_WINDOW /
+        # BELOW_MIN_DIMENSIONS / …) of EVERY scan, even when no signal fires.
+        # Exposed via /api/status so the dashboard (and the user) can see WHY a
+        # scan produced nothing instead of staring at a silent, stale card.
+        self._cond_diag = {}        # {name: last decision dict}
+        self._cond_diag_last = {}   # {name: (verdict)} for change-only logging
+        # Newest candle date the feed has actually served (any instrument).
+        # If this isn't today on a trading day, the data is stale (holiday or
+        # feed outage) and the dashboard flags it instead of showing old cards.
+        self._newest_bar_date = None
+        self._mkt_closed_logged = None  # date we last logged "market closed"
         self._regime=None
         self._last_regime_run=None
         self._last_eod_run=None
@@ -3873,6 +3933,22 @@ class Engine:
                     time.sleep(30);continue
                 self.metrics["scans_total"] += 1
 
+                # ── Market-closed short-circuit (weekend / NSE holiday) ──
+                # Skip the whole scan when the exchange is definitively closed.
+                # Saves API calls and lets the dashboard say "Market closed —
+                # <reason>" instead of pretending to scan a dead market. We only
+                # short-circuit on weekends (certain) and LISTED holidays
+                # (conservative, env-extendable); an unknown holiday still falls
+                # through harmlessly — the strategy time-gate won't trade on it.
+                _ms = market_status(now)
+                if _ms["reason"] in ("weekend", "holiday"):
+                    _td = now.strftime("%Y-%m-%d")
+                    if self._mkt_closed_logged != _td:
+                        self._mkt_closed_logged = _td
+                        log.info(f"🛑 Market closed today ({_ms['reason']}: "
+                                 f"{_ms.get('label')}) — scanning paused")
+                    time.sleep(60); continue
+
                 # Mid/late-session learning + in-flight management
                 self._maybe_eod(now)
                 self._maybe_inflight()
@@ -3928,7 +4004,27 @@ class Engine:
                             continue
 
                     df=self.client.candles(inst["token"],inst["exchange"])
-                    if df.empty or len(df)<30: continue
+                    if df.empty or len(df)<30:
+                        # BUG FIX: this used to be a SILENT continue. When the
+                        # candle feed returns <30 bars the scan produced nothing
+                        # with zero trace — exactly the kind of quiet failure that
+                        # hides for days. Log it (change-only) so it's visible.
+                        _k = (name, "INSUFFICIENT_BARS", 0 if df.empty else len(df))
+                        if self._cond_diag_last.get(("bars", name)) != _k:
+                            self._cond_diag_last[("bars", name)] = _k
+                            log.warning(f"📭 {name} no scan — candle feed returned "
+                                        f"{0 if df.empty else len(df)} bars (<30 needed)")
+                        continue
+                    # Track the newest candle date the feed has actually served.
+                    # If this lags behind 'today' on a trading day the data is
+                    # stale (holiday or feed outage) and the dashboard flags it.
+                    try:
+                        _tcol = "ts" if "ts" in df.columns else "timestamp"
+                        _nbd = pd.to_datetime(df[_tcol].iloc[-1]).strftime("%Y-%m-%d")
+                        if not self._newest_bar_date or _nbd > self._newest_bar_date:
+                            self._newest_bar_date = _nbd
+                    except Exception:
+                        pass
 
                     # ── v2 regime gate (Phase 2): check VIX, day-of-week, expiry-window ──
                     # Only active when STRATEGY=v2; v1 path keeps the legacy time gate inside analyze().
@@ -3996,6 +4092,30 @@ class Engine:
                                              f"range={diag.get('range_ratio','?')}×")
                         except Exception as e:
                             log.warning(f"  v2 diag capture failed: {e}")
+
+                    # ── Capture conductor diagnostic EVERY scan (signal or not) ──
+                    # Conductor.last_decision holds the real verdict for this bar
+                    # (TRIGGER / AFTER_WINDOW / BELOW_MIN_DIMENSIONS / RR_BELOW_MIN
+                    # / …). It used to live only in-process — invisible. Surface it
+                    # via /api/status and loud-log the no-signal reason (change-only,
+                    # so a 14:30+ AFTER_WINDOW doesn't spam 120×/hour).
+                    if strategy == "conductor":
+                        try:
+                            from conductor import Conductor
+                            cdiag = dict(Conductor.last_decision or {})
+                            if cdiag:
+                                cdiag["scan_at"] = datetime.now(IST).strftime("%Y-%m-%d %H:%M:%S")
+                                cdiag["instrument"] = name
+                                self._cond_diag[name] = cdiag
+                                if not sig:
+                                    _ck = (cdiag.get("verdict"),)
+                                    if self._cond_diag_last.get(name) != _ck:
+                                        self._cond_diag_last[name] = _ck
+                                        log.info(f"📭 {name} no signal — "
+                                                 f"{cdiag.get('verdict')} "
+                                                 f"{cdiag.get('votes', cdiag.get('time',''))}")
+                        except Exception as e:
+                            log.warning(f"  conductor diag capture failed: {e}")
 
                     if not sig:
                         # Either too few bars OR analyzer returned None due to a blocked
@@ -4237,6 +4357,10 @@ class Engine:
                     result = {"instrument": name, "lot_size": inst["lot_size"],
                               "signal": sig, "option": opt,
                               "timing": timing, "chain_analytics": chain_anal,
+                              # signal_date = the date of the bar this was computed
+                              # on, so the dashboard can flag prior-day (stale) cards.
+                              "signal_date": (self._newest_bar_date
+                                              or datetime.now(IST).strftime("%Y-%m-%d")),
                               "updated_at": datetime.now(IST).strftime("%H:%M:%S")}
 
                     prev = self._prev.get(name, {}).get("signal", {})
@@ -4452,7 +4576,24 @@ class Engine:
         except Exception as _e:
             log.warning(f"  open-signals build failed: {_e}")
         _rm = os.getenv("INTRADAY_RESEARCH_MODE", "1").strip()
-        return{"running":self.running,"signals":self.latest,"alerts":self.alerts[:50],
+        _now = datetime.now(IST)
+        _today = _now.strftime("%Y-%m-%d")
+        _ms = market_status(_now)
+        # Stamp each live signal with a stale flag (its bar date != today) so the
+        # dashboard can show the date and badge prior-day cards instead of
+        # silently presenting an old signal as if it were live.
+        _sig_out = {}
+        for _k, _v in (self.latest or {}).items():
+            if isinstance(_v, dict):
+                _v = dict(_v)
+                _bd = _v.get("signal_date")
+                _v["signal_date"] = _bd
+                _v["stale"] = bool(_bd and _bd != _today)
+            _sig_out[_k] = _v
+        # Data freshness: True only when the feed has actually served today's
+        # bars. False on a trading day = stale feed (holiday or outage).
+        _data_fresh = (self._newest_bar_date == _today)
+        return{"running":self.running,"signals":_sig_out,"alerts":self.alerts[:50],
             "open_signals": open_signals,
             "performance":get_perf(),
             "config":{"scan_interval":CONFIG["scan_interval_sec"],"target_min":CONFIG["target_points_min"],
@@ -4461,8 +4602,13 @@ class Engine:
                 "enabled_instruments":os.environ.get("ENABLED_INSTRUMENTS","")},
             "research_mode": (_rm != "0"),
             "dispatch": dict(getattr(SignalGen, "last_dispatch", {}) or {}),
-            "time":datetime.now(IST).strftime("%H:%M:%S"),
-            "market_open":9<=datetime.now(IST).hour<16,
+            "signal_diag": dict(getattr(self, "_cond_diag", {}) or {}),
+            "time":_now.strftime("%H:%M:%S"),
+            "server_date": _today,
+            "market": _ms,
+            "market_open": _ms["open"],
+            "newest_bar_date": self._newest_bar_date,
+            "data_fresh": _data_fresh,
             "slack_enabled":CONFIG["slack_enabled"] and bool(CONFIG["slack_webhook"])}
 
 # ═══════════════════════════════════════════════════════════════════

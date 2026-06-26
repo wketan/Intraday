@@ -184,6 +184,9 @@ button{font-family:inherit;cursor:pointer;}input{font-family:inherit;}
 .confwrap .cl{font-family:var(--mono);font-size:8.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink3);margin-top:5px;}
 .verdict{display:inline-block;font-family:var(--mono);font-size:9.5px;font-weight:700;letter-spacing:.06em;padding:4px 8px;border-radius:5px;margin-left:9px;}
 .verdict.take{background:var(--up-soft);color:var(--up);}.verdict.skip{background:var(--dn-soft);color:var(--dn);}.verdict.watch{background:var(--warn-soft);color:var(--warn);}
+.stalebadge{display:inline-block;font-family:var(--mono);font-size:9px;font-weight:800;letter-spacing:.08em;color:#1a1206;background:var(--dn);padding:2px 6px;border-radius:5px;margin-right:7px;vertical-align:middle;}
+.stalebar{display:flex;align-items:center;gap:7px;font-size:11.5px;font-weight:600;color:var(--dn);background:color-mix(in srgb,var(--dn) 12%,transparent);border:1px solid color-mix(in srgb,var(--dn) 35%,transparent);border-radius:9px;padding:9px 12px;margin-bottom:13px;line-height:1.35;}
+.panel.is-stale{border-color:color-mix(in srgb,var(--dn) 45%,var(--line));}
 .ophead{display:flex;align-items:baseline;flex-wrap:wrap;gap:10px;padding:13px 15px;border-radius:11px;background:var(--panel2);border:1px solid var(--lime-soft);box-shadow:0 0 22px -12px var(--lime-gl);margin-bottom:13px;}
 .ophead .opname{font-family:var(--mono);font-size:17px;font-weight:700;letter-spacing:-.01em;}
 .ophead .opmeta{font-family:var(--mono);font-size:10.5px;color:var(--ink3);flex-basis:100%;}
@@ -382,6 +385,7 @@ function apiFetch(path,opts={}){const headers=Object.assign({},opts.headers||{})
 async function apiJSON(path,opts){const r=await apiFetch(path,opts);if(!r.ok)throw new Error(r.status);return r.json();}
 const istNow=()=>{const n=new Date();return new Date(n.getTime()+((n.getTimezoneOffset()+330)*60000));};
 const todayISO=()=>istNow().toISOString().slice(0,10);
+const fmtDay=(iso)=>{if(!iso)return'';const m=String(iso).match(/(\d{4})-(\d{2})-(\d{2})/);if(!m)return String(iso);const mo=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][(+m[2])-1]||m[2];return (+m[3])+' '+mo;};
 const fmt=(n)=>Math.abs(Math.round(n||0)).toLocaleString('en-IN');
 const fmtK=(n)=>{n=Math.abs(+n||0);return n>=1e7?(n/1e7).toFixed(2)+'Cr':n>=1e5?(n/1e5).toFixed(2)+'L':n>=1e3?(n/1e3).toFixed(1)+'k':String(Math.round(n));};
 function humanizeOpt(sym){if(!sym)return'';const m=String(sym).toUpperCase().match(/^([A-Z]+?)(\d{2})([A-Z]{3})(\d{2})(\d+)(CE|PE)$/);return m?`${m[5]} ${m[6]} · ${m[2]} ${m[3]}`:String(sym);}
@@ -453,17 +457,25 @@ function Setup({onDone}){
     <button className="btn go" style={{width:'100%',padding:'14px'}} onClick={go} disabled={busy||!tok.trim()}>{busy?<><span className="spin"/>Connecting…</>:'Connect'}</button>
   </div></div>);}
 
-function SignalCard({sig,marketOpen}){
+function SignalCard({sig,marketOpen,market}){
+  const closed=market&&market.open===false;
+  const closedLabel=!market?'market closed'
+    :market.reason==='holiday'?('Holiday'+(market.label?' · '+market.label:'')+' — market closed')
+    :market.reason==='weekend'?((market.label||'Weekend')+' — market closed')
+    :market.reason==='after_hours'?'Market closed · after hours'
+    :'market closed';
   if(!sig||!sig.signal){
     return(<section className="panel hud g-sig"><div className="head"><span className="t"><b>//</b> Live signal</span></div>
       <div className="sig-empty"><div className="radar"><span className="dot"/><span className="ring"/><span className="ring r2"/></div>
-        <div><div className="t">{marketOpen?'Scanning for setups':'No active trigger'}</div>
-        <div className="d">conductor · BANKNIFTY · {marketOpen?'live · every 30s':'market closed'}</div></div></div></section>);}
+        <div><div className="t">{closed?(market.reason==='holiday'?'Market holiday':'Market closed'):'Scanning for setups'}</div>
+        <div className="d">conductor · BANKNIFTY · {closed?closedLabel:'live · every 30s'}</div></div></div></section>);}
+  const stale=!!sig.stale;const dstr=fmtDay(sig.signal_date);
   const s=sig.signal,o=sig.option||{},ai=sig.ai||{};
   const long=(s.direction||'').toUpperCase()==='LONG';const conf=s.confidence_ai_adj||s.confidence||0;
   const v=(s.v2_diag&&s.v2_diag.votes)||{};const lenses=[['trend','Trend'],['momentum','Momntm'],['pattern','Pattrn'],['structure','Struct'],['flow','Flow']];
   const verdict=ai.verdict||(s.v2_diag&&s.v2_diag.verdict)||'';
-  return(<section className="panel hud g-sig"><div className="head"><span className="t"><b>//</b> Live signal</span><span className="r mono" style={{fontSize:'10px',color:'var(--ink3)'}}>{sig.updated_at||s.timestamp||''} IST</span></div>
+  return(<section className={'panel hud g-sig'+(stale?' is-stale':'')}><div className="head"><span className="t"><b>//</b> Live signal</span><span className="r mono" style={{fontSize:'10px',color:'var(--ink3)'}}>{stale&&<span className="stalebadge">STALE</span>}{dstr?(dstr+' · '):''}{sig.updated_at||s.timestamp||''} IST</span></div>
+    {stale&&<div className="stalebar">⚠ Prior-day signal ({dstr}) — not today's. {closed?closedLabel:'No live setup yet today.'}</div>}
     <div className="sig-head"><span className={'dirbadge '+(long?'long':'short')}><Ico d={long?I.up:I.down}/>{s.direction}</span>
       <div><div className="sig-inst">{sig.instrument||'BANKNIFTY'}{verdict&&<span className={'verdict '+verdictClass(verdict)}>{verdict}</span>}</div>
         <div className="sig-sub">{(s.strategy||'conductor').toUpperCase()} · score {s.v2_score||0}/5 · R:R {(s.risk_reward||o.rr||0).toFixed(1)}</div></div>
@@ -667,7 +679,7 @@ function App(){
       </div>
       <div className="tabs">{NAV.map(([id,icon,label])=>(<button key={id} className={'tab '+(view===id?'on':'')} onClick={()=>setView(id)}>{label}</button>))}</div>
 
-      {view==='overview'&&<div className="grid">{kpis}{chartCard}<SignalCard sig={bnf} marketOpen={status&&status.market_open}/>{open.length>0&&openCard}{signalsTable(true)}{open.length===0&&openCard}{gatesCard}{feedCard}</div>}
+      {view==='overview'&&<div className="grid">{kpis}{chartCard}<SignalCard sig={bnf} marketOpen={status&&status.market_open} market={status&&status.market}/>{open.length>0&&openCard}{signalsTable(true)}{open.length===0&&openCard}{gatesCard}{feedCard}</div>}
       {view==='signals'&&<div className="grid">{kpis}{signalsTable(true)}{openCard}{feedCard}</div>}
       {view==='chain'&&<div className="grid"><ChainCards sig={bnf} ltp={ltp}/>{gatesCard}{feedCard}</div>}
     </main>
