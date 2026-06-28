@@ -462,7 +462,8 @@ const Ico=({d})=>(<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" str
 const I={grid:"M3 3h7v7H3zM14 3h7v7h-7zM14 14h7v7h-7zM3 14h7v7H3z",list:"M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01",
   layers:"M12 2l9 5-9 5-9-5 9-5zM3 12l9 5 9-5M3 17l9 5 9-5",sun:"M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4",
   moon:"M21 12.8A9 9 0 1111.2 3 7 7 0 0021 12.8z",check:"M20 6L9 17l-5-5",x:"M18 6L6 18M6 6l12 12",up:"M7 17L17 7M17 7H8M17 7v9",down:"M7 7l10 10M17 17H8M17 17V8",
-  bell:"M18 8a6 6 0 10-12 0c0 7-3 9-3 9h18s-3-2-3-9M13.7 21a2 2 0 01-3.4 0",belloff:"M8.7 3A6 6 0 0118 8c0 2 .4 3.6 .9 4.8M18 17H3s3-2 3-9M1 1l22 22M13.7 21a2 2 0 01-3.4 0"};
+  bell:"M18 8a6 6 0 10-12 0c0 7-3 9-3 9h18s-3-2-3-9M13.7 21a2 2 0 01-3.4 0",belloff:"M8.7 3A6 6 0 0118 8c0 2 .4 3.6 .9 4.8M18 17H3s3-2 3-9M1 1l22 22M13.7 21a2 2 0 01-3.4 0",
+  gear:"M12 15a3 3 0 100-6 3 3 0 000 6zM12 2v2M12 20v2M4.2 4.2l1.4 1.4M18.4 18.4l1.4 1.4M2 12h2M20 12h2M4.2 19.8l1.4-1.4M18.4 5.6l1.4-1.4"};
 
 function Area({pts,color,h=120}){if(!pts||pts.length<2)return null;
   const W=560,H=h,vs=pts.map(p=>p.v),mn=Math.min(...vs,0),mx=Math.max(...vs,0),rng=(mx-mn)||1;
@@ -474,25 +475,34 @@ function Area({pts,color,h=120}){if(!pts||pts.length<2)return null;
 
 function CandleChart({candles,ltp}){
   if(!candles||candles.length<2)return <div className="empty" style={{padding:'80px 0'}}>Waiting for candles · market may be closed</div>;
+  const SLOTS=75; // 9:15 → 15:25 = 75 five-min slots; right side stays blank as day progresses
   const W=880,H=228,pT=12,pB=20,pL=10,pR=58;
   const hi=Math.max(...candles.map(c=>c.h)),lo=Math.min(...candles.map(c=>c.l));
   const pad=(hi-lo)*0.06||1,mx=hi+pad,mn=lo-pad,rng=mx-mn||1;
-  const n=candles.length,iw=(W-pL-pR)/n,bw=Math.max(1.5,Math.min(11,iw*0.62));
-  const Y=v=>pT+(1-(v-mn)/rng)*(H-pT-pB),X=i=>pL+i*iw+iw/2;
-  const lastC=candles[n-1],lastClose=(ltp&&+ltp)||lastC.c,lpUp=lastClose>=lastC.o;
-  const grid=[0,.25,.5,.75,1].map(f=>mn+rng*f);const F="'JetBrains Mono',monospace";
+  const iw=(W-pL-pR)/SLOTS,bw=Math.max(1.5,Math.min(10,iw*0.65));
+  const Y=v=>pT+(1-(v-mn)/rng)*(H-pT-pB);
+  const slotOf=t=>{const s=(t||'').slice(11,16)||t;const[h,m]=(s||'00:00').split(':').map(Number);return Math.round((h*60+m-555)/5);};
+  const X=slot=>pL+slot*iw+iw/2;
+  const lastC=candles[candles.length-1],lastClose=(ltp&&+ltp)||lastC.c,lpUp=lastClose>=lastC.o;
+  const lastSlot=slotOf(lastC.t);
+  const grid=[0,.25,.5,.75,1].map(f=>mn+rng*f);const F="'Courier New',monospace";
   return(<div className="chartwrap"><svg viewBox={`0 0 ${W} ${H}`} style={{width:'100%',height:'auto',display:'block'}}>
     {grid.map((g,i)=>(<g key={i}><line x1={pL} x2={W-pR} y1={Y(g)} y2={Y(g)} stroke="var(--line2)" strokeWidth="1"/>
       <text x={W-pR+6} y={Y(g)+3} fill="var(--ink3)" fontSize="9" fontFamily={F}>{Math.round(g)}</text></g>))}
-    {candles.map((c,i)=>{const u=c.c>=c.o,col=u?'var(--up)':'var(--dn)';const yO=Y(c.o),yC=Y(c.c),top=Math.min(yO,yC),hh=Math.max(1,Math.abs(yC-yO));
-      return(<g key={i}><line x1={X(i)} x2={X(i)} y1={Y(c.h)} y2={Y(c.l)} stroke={col} strokeWidth="1" opacity="0.85"/>
-        <rect x={X(i)-bw/2} y={top} width={bw} height={hh} fill={col}/></g>);})}
+    {candles.map((c,i)=>{
+      const slot=slotOf(c.t);if(slot<0||slot>=SLOTS)return null;
+      const u=c.c>=c.o,col=u?'var(--up)':'var(--dn)';
+      const yO=Y(c.o),yC=Y(c.c),top=Math.min(yO,yC),hh=Math.max(1,Math.abs(yC-yO));
+      return(<g key={i}><line x1={X(slot)} x2={X(slot)} y1={Y(c.h)} y2={Y(c.l)} stroke={col} strokeWidth="1" opacity="0.85"/>
+        <rect x={X(slot)-bw/2} y={top} width={bw} height={hh} fill={col}/></g>);
+    })}
     <line x1={pL} x2={W-pR} y1={Y(lastClose)} y2={Y(lastClose)} stroke={lpUp?'var(--up)':'var(--dn)'} strokeWidth="1" strokeDasharray="2 3" opacity="0.7"/>
     <rect x={W-pR} y={Y(lastClose)-9} width={pR-2} height="18" fill={lpUp?'var(--up)':'var(--dn)'}/>
-    <text x={W-pR+(pR-2)/2} y={Y(lastClose)+3} textAnchor="middle" fill="#0a0b0e" fontSize="10" fontWeight="800" fontFamily={F}>{Math.round(lastClose)}</text>
-    <circle cx={X(n-1)} cy={Y(lastC.c)} r="3.4" fill={lpUp?'var(--up)':'var(--dn)'}><animate attributeName="opacity" values="1;0.3;1" dur="1.6s" repeatCount="indefinite"/></circle>
-    <text x={pL} y={H-5} fill="var(--ink3)" fontSize="9" fontFamily={F}>{candles[0].t.slice(11,16)}</text>
-    <text x={W-pR} y={H-5} textAnchor="end" fill="var(--ink3)" fontSize="9" fontFamily={F}>{lastC.t.slice(11,16)}</text>
+    <text x={W-pR+(pR-2)/2} y={Y(lastClose)+3} textAnchor="middle" fill="#0F1D14" fontSize="10" fontWeight="800" fontFamily={F}>{Math.round(lastClose)}</text>
+    {lastSlot>=0&&lastSlot<SLOTS&&<circle cx={X(lastSlot)} cy={Y(lastC.c)} r="3.4" fill={lpUp?'var(--up)':'var(--dn)'}><animate attributeName="opacity" values="1;0.3;1" dur="1.6s" repeatCount="indefinite"/></circle>}
+    <text x={pL} y={H-5} fill="var(--ink3)" fontSize="9" fontFamily={F}>09:15</text>
+    <text x={X(39)} y={H-5} textAnchor="middle" fill="var(--ink3)" fontSize="9" fontFamily={F}>12:30</text>
+    <text x={W-pR-4} y={H-5} textAnchor="end" fill="var(--ink3)" fontSize="9" fontFamily={F}>15:30</text>
   </svg></div>);}
 
 function Setup({onDone}){
@@ -729,7 +739,8 @@ function App(){
           <span className={'led '+eng}><span className="d"/>{eng==='live'?'Engine live':eng==='off'?'Engine off':'Connecting'}</span>
           {eng==='live'?<button className="btn stop" onClick={()=>engCall('/api/stop')} disabled={busy}>Stop</button>:<button className="btn go" onClick={()=>engCall('/api/start')} disabled={busy}>Start</button>}
           <button className={'ib'+(notify?' on':'')} onClick={toggleNotify} aria-label="Alerts" title={notify?'Alerts on':'Enable alerts'}><Ico d={notify?I.bell:I.belloff}/></button>
-          <button className="ib" onClick={toggle} aria-label="Theme"><Ico d={theme==='dark'?I.sun:I.moon}/></button></div>
+          <button className="ib" onClick={toggle} aria-label="Theme"><Ico d={theme==='dark'?I.sun:I.moon}/></button>
+          <button className="ib" onClick={()=>{setSettingsName(localStorage.getItem('ie-user')||'');setSettingsCap(+localStorage.getItem('ie-capital')||20000);setShowSettings(true);}} aria-label="Settings"><Ico d={I.gear}/></button></div>
         </div>
       </div>
       <div className="tabs">{NAV.map(([id,icon,label])=>(<button key={id} className={'tab '+(view===id?'on':'')} onClick={()=>setView(id)}>{label}</button>))}</div>
@@ -738,27 +749,70 @@ function App(){
       {view==='signals'&&<div className="grid">{kpis}{signalsTable(true)}{openCard}{feedCard}</div>}
       {view==='chain'&&<div className="grid"><ChainCards sig={bnf} ltp={ltp}/>{gatesCard}{feedCard}</div>}
     </main>
-    {showSettings&&<div className="setup" style={{zIndex:200}} onClick={e=>{if(e.target===e.currentTarget)setShowSettings(false);}}>
-      <div className="scard" style={{width:'100%',maxWidth:'360px'}}>
-        <div className="logo" style={{margin:'0 auto 18px',width:48,height:48,display:'grid',placeItems:'center',fontSize:20,fontWeight:700}}>{(settingsName||'K')[0].toUpperCase()}</div>
-        <h1 style={{textAlign:'center',marginBottom:24,fontSize:22}}>Settings</h1>
-        <div className="fld">
-          <label>Your name</label>
-          <input value={settingsName} onChange={e=>setSettingsName(e.target.value)} placeholder="Ketan" style={{width:'100%',padding:'11px 12px',border:'1px solid',fontSize:15,marginTop:6}}/>
+    {showSettings&&<div onClick={e=>{if(e.target===e.currentTarget)setShowSettings(false);}} style={{
+        position:'fixed',inset:0,zIndex:200,
+        background:'rgba(10,15,11,0.72)',
+        backdropFilter:'blur(10px)',WebkitBackdropFilter:'blur(10px)',
+        display:'flex',alignItems:'center',justifyContent:'center',
+        padding:'20px'}}>
+      <div style={{
+          width:'100%',maxWidth:'340px',
+          background:'var(--panel)',
+          border:'1px solid var(--line)',
+          padding:'36px 28px 28px',
+          position:'relative'}}>
+        <div style={{
+            width:52,height:52,
+            background:'linear-gradient(135deg,#B87428,#3D6848)',
+            display:'grid',placeItems:'center',
+            fontSize:20,fontWeight:700,color:'#F1EDE0',
+            margin:'0 auto 18px'}}>{(settingsName||'K')[0].toUpperCase()}</div>
+        <div style={{
+            fontFamily:"Palatino,'Book Antiqua',Georgia,serif",
+            fontSize:22,fontWeight:'normal',color:'var(--ink)',
+            textAlign:'center',marginBottom:32,letterSpacing:'-0.01em'}}>Settings</div>
+        <div style={{marginBottom:22}}>
+          <div style={{fontSize:10,fontFamily:"'Courier New',monospace",letterSpacing:'0.13em',color:'var(--ink3)',marginBottom:8,textTransform:'uppercase'}}>Name</div>
+          <input value={settingsName} onChange={e=>setSettingsName(e.target.value)} placeholder="Ketan" style={{
+              width:'100%',padding:'9px 0',
+              background:'transparent',border:'none',borderBottom:'1px solid var(--line)',
+              color:'var(--ink)',fontSize:16,outline:'none',fontFamily:'inherit',boxSizing:'border-box'}}/>
         </div>
-        <div className="fld">
-          <label>Capital (₹)</label>
-          <input type="number" value={settingsCap} onChange={e=>setSettingsCap(+e.target.value||20000)} placeholder="20000" style={{width:'100%',padding:'11px 12px',border:'1px solid',fontSize:15,marginTop:6}}/>
-          <div style={{fontSize:11,marginTop:5,color:'var(--ink3)'}}>Used to calculate % return on Capital KPI</div>
+        <div style={{marginBottom:32}}>
+          <div style={{fontSize:10,fontFamily:"'Courier New',monospace",letterSpacing:'0.13em',color:'var(--ink3)',marginBottom:8,textTransform:'uppercase'}}>Capital</div>
+          <div style={{display:'flex',alignItems:'baseline',gap:6,borderBottom:'1px solid var(--line)'}}>
+            <span style={{color:'var(--ink3)',fontSize:15,fontFamily:"'Courier New',monospace",paddingBottom:9}}>₹</span>
+            <input type="number" value={settingsCap} onChange={e=>setSettingsCap(+e.target.value||20000)} placeholder="20000" style={{
+                flex:1,padding:'9px 0',
+                background:'transparent',border:'none',
+                color:'var(--ink)',fontSize:16,outline:'none',
+                fontFamily:"'Courier New',monospace",boxSizing:'border-box'}}/>
+          </div>
+          <div style={{fontSize:11,marginTop:6,color:'var(--ink4)',fontFamily:"'Courier New',monospace"}}>% return shown on Capital tile</div>
         </div>
-        <button className="btn go" style={{width:'100%',padding:'13px',marginBottom:10,fontSize:15}} onClick={()=>{
-          if(settingsName.trim())localStorage.setItem('ie-user',settingsName.trim());
-          localStorage.setItem('ie-capital',settingsCap||20000);
-          setCap(settingsCap||20000);
-          setShowSettings(false);
-        }}>Save</button>
-        <button className="btn" style={{width:'100%',padding:'11px',marginBottom:10,fontSize:14,background:'var(--panel2)',border:'1px solid var(--line)',color:'var(--ink2)',borderRadius:0}} onClick={()=>setShowSettings(false)}>Cancel</button>
-        <button className="btn settings-disconnect" style={{width:'100%',padding:'11px',fontSize:14,borderRadius:0}} onClick={()=>{localStorage.clear();location.reload();}}>Disconnect</button>
+        <button onClick={()=>{
+            if(settingsName.trim())localStorage.setItem('ie-user',settingsName.trim());
+            localStorage.setItem('ie-capital',settingsCap||20000);
+            setCap(settingsCap||20000);
+            setShowSettings(false);
+          }} style={{
+            width:'100%',padding:'13px',marginBottom:10,
+            background:'linear-gradient(135deg,#B87428,#3D6848)',
+            border:'none',color:'#F1EDE0',
+            fontSize:11,letterSpacing:'0.14em',textTransform:'uppercase',
+            fontFamily:"'Courier New',monospace",cursor:'pointer'}}>Save</button>
+        <button onClick={()=>setShowSettings(false)} style={{
+            width:'100%',padding:'11px',marginBottom:18,
+            background:'transparent',border:'1px solid var(--line)',
+            color:'var(--ink3)',fontSize:11,letterSpacing:'0.12em',textTransform:'uppercase',
+            fontFamily:"'Courier New',monospace",cursor:'pointer'}}>Cancel</button>
+        <div style={{borderTop:'1px solid var(--line)',paddingTop:14,textAlign:'center'}}>
+          <div style={{fontSize:10,fontFamily:"'Courier New',monospace",color:'var(--ink4)',marginBottom:10,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{getServer()}</div>
+          <button onClick={()=>{localStorage.clear();location.reload();}} style={{
+              background:'transparent',border:'none',
+              color:'rgba(176,58,46,0.75)',fontSize:10,letterSpacing:'0.12em',
+              textTransform:'uppercase',fontFamily:"'Courier New',monospace",cursor:'pointer'}}>Disconnect</button>
+        </div>
       </div>
     </div>}
   </div>);
