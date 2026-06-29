@@ -605,78 +605,164 @@ function SignalCard({sig,marketOpen,market}){
 
 function LiveChainView({enabled}){
   const [chainData,setChainData]=useState(null);
+  const [ready,setReady]=useState(false);
   const lastGood=useRef(null);
+  const prevGood=useRef(null);
   useEffect(()=>{
     if(!enabled)return;
     let live=true;
-    const go=async()=>{try{const d=await apiJSON('/api/chain/BANKNIFTY');if(live&&!d.error){setChainData(d);lastGood.current=d;}else if(live&&d.error&&!lastGood.current){setChainData(d);}}catch(e){}};
+    const go=async()=>{
+      try{
+        const d=await apiJSON('/api/chain/BANKNIFTY');
+        if(live&&!d.error){prevGood.current=lastGood.current;lastGood.current=d;setChainData(d);setReady(true);}
+        else if(live&&!ready){setChainData(d);setReady(true);}
+      }catch(e){}
+    };
     go();const id=setInterval(go,30000);return()=>{live=false;clearInterval(id);};
   },[enabled]);
+
   const disp=chainData||lastGood.current;
-  if(!disp)return<div className="empty" style={{padding:'60px 0'}}>Fetching chain data from Angel One...</div>;
-  if(disp.error)return<div className="empty" style={{padding:'60px 0'}}>{disp.error}</div>;
+
+  if(!ready||!disp)return(
+    <section className="panel g12">
+      <div className="head"><span className="t"><b>//</b> Chain · BANKNIFTY</span></div>
+      <div style={{padding:'52px 0',display:'flex',flexDirection:'column',alignItems:'center',gap:14}}>
+        <span className="rdot live" style={{width:10,height:10}}/>
+        <span style={{fontFamily:'var(--mono)',fontSize:11,letterSpacing:'0.12em',textTransform:'uppercase',color:'var(--ink3)'}}>Fetching from Angel One</span>
+      </div>
+    </section>);
+
+  if(disp.error)return(
+    <section className="panel g12">
+      <div className="head"><span className="t"><b>//</b> Chain · BANKNIFTY</span></div>
+      <div className="empty" style={{padding:'40px 0'}}>{disp.error}</div>
+    </section>);
+
   const {chain,spot,atm,expiry}=disp;
-  // Build map strike → {CE,PE}
+  const spotN=Math.round(spot),atmStrike=+atm;
+  // Strike map
   const byStrike={};
   chain.forEach(o=>{const k=+o.strike;if(!byStrike[k])byStrike[k]={};byStrike[k][o.type]=o;});
   const strikes=[...new Set(chain.map(o=>+o.strike))].sort((a,b)=>a-b);
-  const atmStrike=+atm;
   const atmIdx=strikes.reduce((bi,s,i)=>Math.abs(s-atmStrike)<Math.abs(strikes[bi]-atmStrike)?i:bi,0);
-  const from=Math.max(0,atmIdx-8),to=Math.min(strikes.length-1,atmIdx+8);
-  const vis=strikes.slice(from,to+1);
+  const vis=strikes.slice(Math.max(0,atmIdx-8),Math.min(strikes.length-1,atmIdx+8)+1);
   // Analytics
-  const ceAll=chain.filter(o=>o.type==='CE'&&(o.oi||0)>0);
-  const peAll=chain.filter(o=>o.type==='PE'&&(o.oi||0)>0);
+  const ceAll=chain.filter(o=>o.type==='CE'),peAll=chain.filter(o=>o.type==='PE');
   const tCeOI=ceAll.reduce((s,o)=>s+(+o.oi||0),0),tPeOI=peAll.reduce((s,o)=>s+(+o.oi||0),0);
-  const pcr=tCeOI>0?(tPeOI/tCeOI):0,bull=pcr>=1;
-  const tCeVol=ceAll.reduce((s,o)=>s+(+o.volume||0),0),tPeVol=peAll.reduce((s,o)=>s+(+o.volume||0),0);
-  const pcrPct=Math.min(100,(pcr/2)*100);
+  const pcr=tCeOI>0?tPeOI/tCeOI:0,bull=pcr>=1,pcrPct=Math.min(100,(pcr/2)*100);
   const oiByStrike={};chain.forEach(o=>{const k=+o.strike;oiByStrike[k]=(oiByStrike[k]||0)+(+o.oi||0);});
   const maxPain=+Object.entries(oiByStrike).sort((a,b)=>b[1]-a[1])[0]?.[0]||0;
-  // Max OI for bar scaling
-  const maxCeOI=Math.max(1,...vis.map(s=>(byStrike[s]?.CE?.oi||0)));
-  const maxPeOI=Math.max(1,...vis.map(s=>(byStrike[s]?.PE?.oi||0)));
+  const atmCE=ceAll.find(o=>+o.strike===atmStrike),atmPE=peAll.find(o=>+o.strike===atmStrike);
+  const ceIV=+(atmCE?.iv_raw||atmCE?.iv||0),peIV=+(atmPE?.iv_raw||atmPE?.iv||0);
+  const ivSkew=peIV-ceIV;
+  const skewDesc=ivSkew>2?'Put skew · downside priced':ivSkew<-2?'Call skew · unusual':'Balanced IV';
+  const maxOICE=ceAll.reduce((a,b)=>(+b.oi||0)>(+a.oi||0)?b:a,ceAll[0]||{});
+  const maxOIPE=peAll.reduce((a,b)=>(+b.oi||0)>(+a.oi||0)?b:a,peAll[0]||{});
+  // OI delta vs previous poll
+  const oiActs=[];
+  if(prevGood.current){
+    const pm={};prevGood.current.chain.forEach(o=>{pm[o.strike+'_'+o.type]=+o.oi||0;});
+    chain.forEach(o=>{
+      const prev=pm[o.strike+'_'+o.type]||0,curr=+o.oi||0,delta=curr-prev;
+      if(prev>0&&Math.abs(delta)>=Math.max(50000,prev*0.02))oiActs.push({strike:+o.strike,type:o.type,delta,ltp:+o.ltp||0});
+    });
+    oiActs.sort((a,b)=>Math.abs(b.delta)-Math.abs(a.delta));
+  }
+  const actInfo=(a)=>{
+    const {type,delta,strike}=a;
+    if(type==='PE'&&delta<0)return{tag:'Put covering',desc:'PE positions closed · bullish signal',cls:'up'};
+    if(type==='CE'&&delta<0)return{tag:'Short covering',desc:'CE writers buying back · easing pressure',cls:'up'};
+    if(type==='PE'&&delta>0&&strike<spotN)return{tag:'Put writing',desc:'OTM puts sold · market above strike expected',cls:'up'};
+    if(type==='PE'&&delta>0&&strike>=spotN)return{tag:'Put buying',desc:'ATM puts bought · hedging downside',cls:'dn'};
+    if(type==='CE'&&delta>0&&strike>spotN)return{tag:'Call writing',desc:'OTM calls sold · ceiling being set',cls:'dn'};
+    return{tag:'Call buying',desc:'Fresh CE positions · upside expected',cls:'up'};
+  };
+  // Recommendation
+  const recDir=pcr>1.15?'LONG':pcr<0.85?'SHORT':'NEUTRAL';
+  const recStrike=recDir==='LONG'?(strikes.find(s=>s>spotN)||atmStrike):recDir==='SHORT'?([...strikes].reverse().find(s=>s<spotN)||atmStrike):atmStrike;
+  const recType=recDir==='SHORT'?'PE':'CE';
+  const recOpt=byStrike[recStrike]?.[recType];
+  const recReason=recDir==='LONG'?`PCR ${pcr.toFixed(2)} (put-heavy) + max resistance ${fmt(maxOICE.strike)} CE`:recDir==='SHORT'?`PCR ${pcr.toFixed(2)} (call-heavy) + max support ${fmt(maxOIPE.strike)} PE`:`PCR near 1.0 · no directional bias · wait`;
+  // Table OI scaling
+  const maxCeOI=Math.max(1,...vis.map(s=>byStrike[s]?.CE?.oi||0));
+  const maxPeOI=Math.max(1,...vis.map(s=>byStrike[s]?.PE?.oi||0));
+
   return(<>
     <section className="panel g12">
-      <div className="head"><span className="t"><b>//</b> Chain · BANKNIFTY</span><span className="r mono" style={{fontSize:'10px',color:'var(--ink3)'}}>ATM {fmt(atmStrike)} · {expiry}</span></div>
-      <div className="chgrid" style={{marginBottom:16}}>
-        <div className="cstat"><div className="k">PCR (OI)</div><div className={'v '+(bull?'up':'dn')}>{pcr.toFixed(3)}</div>
+      <div className="head"><span className="t"><b>//</b> Chain · BANKNIFTY</span>
+        <span className="r mono" style={{fontSize:'10px',color:'var(--ink3)'}}>ATM {fmt(atmStrike)} · {expiry}</span></div>
+
+      {/* 4 stats cards — 2×2 on mobile */}
+      <div className="chgrid" style={{marginBottom:18}}>
+        <div className="cstat">
+          <div className="k">PCR (OI)</div>
+          <div className={'v '+(bull?'up':'dn')}>{pcr.toFixed(3)}</div>
           <div className="pcrbar"><div className="fill" style={{width:pcrPct+'%'}}/></div>
-          <div className="s">{bull?'Put-heavy · bullish':'Call-heavy · bearish'}</div></div>
-        <div className="cstat"><div className="k">Max pain</div><div className="v">{fmt(maxPain)}</div>
-          <div className="s">spot {fmt(Math.round(spot))} · {maxPain?((Math.round(spot)-maxPain)>=0?'+':'')+fmt(Math.round(spot)-maxPain):''}</div></div>
-        <div className="cstat"><div className="k">Volume</div>
-          <div className="v" style={{fontSize:'14px'}}><span className="up">{fmtK(tCeVol)}</span> / <span className="dn">{fmtK(tPeVol)}</span></div>
-          <div className="s">CE / PE vol</div></div>
+          <div className="s">{bull?'Put-heavy · bullish':'Call-heavy · bearish'}</div>
+        </div>
+        <div className="cstat">
+          <div className="k">Max pain</div>
+          <div className="v">{fmt(maxPain)}</div>
+          <div className="s">spot {fmt(spotN)} · {maxPain?((spotN-maxPain)>=0?'+':'')+(spotN-maxPain).toLocaleString('en-IN'):''}</div>
+        </div>
+        <div className="cstat">
+          <div className="k">IV skew (ATM)</div>
+          <div className={'v '+(ivSkew>2?'dn':ivSkew<-2?'ac':'')}>{ceIV||peIV?ivSkew.toFixed(1):'—'}</div>
+          <div className="s">{skewDesc}</div>
+        </div>
+        <div className="cstat">
+          <div className="k">Levels</div>
+          <div className="v" style={{fontSize:'15px'}}><span className="dn">{fmt(maxOIPE.strike)}</span><span style={{color:'var(--ink4)',margin:'0 4px'}}>/</span><span className="up">{fmt(maxOICE.strike)}</span></div>
+          <div className="s">support / resist (max OI)</div>
+        </div>
       </div>
+
+      {/* Option recommendation */}
+      <div style={{background:'var(--panel2)',border:'1px solid var(--line)',borderRadius:10,padding:'14px 16px',marginBottom:18}}>
+        <div className="lbl" style={{marginBottom:10}}>Option to watch</div>
+        {recDir!=='NEUTRAL'&&recOpt
+          ?<div style={{display:'flex',alignItems:'center',gap:14,flexWrap:'wrap',marginBottom:8}}>
+              <span style={{fontFamily:'var(--mono)',fontSize:20,fontWeight:800,color:recDir==='LONG'?'var(--up)':'var(--dn)'}}>{fmt(recStrike)} {recType}</span>
+              <span style={{fontFamily:'var(--mono)',fontSize:16,fontWeight:700,color:'var(--ink)'}}>₹{(+recOpt.ltp||0).toFixed(1)}</span>
+              {(+recOpt.iv||+recOpt.iv_raw)>0&&<span style={{fontFamily:'var(--mono)',fontSize:11,letterSpacing:'.08em',textTransform:'uppercase',color:'var(--lime)',background:'var(--lime-soft)',borderRadius:4,padding:'2px 8px'}}>IV {(+(recOpt.iv||recOpt.iv_raw)||0).toFixed(1)}</span>}
+            </div>
+          :<div style={{fontFamily:'var(--mono)',fontSize:13,color:'var(--ink2)',marginBottom:8}}>No clear bias · watch for PCR move</div>}
+        <div style={{fontFamily:'var(--mono)',fontSize:11,color:'var(--ink3)',lineHeight:1.6}}>{recReason}</div>
+      </div>
+
+      {/* OI Activity */}
+      {oiActs.length>0&&<div style={{marginBottom:18}}>
+        <div className="lbl" style={{marginBottom:10}}>OI activity · last 30s</div>
+        {oiActs.slice(0,5).map((a,i)=>{const{tag,desc,cls}=actInfo(a);return(
+          <div key={i} style={{display:'flex',alignItems:'flex-start',gap:10,padding:'9px 0',borderBottom:'1px solid var(--line2)'}}>
+            <span style={{fontFamily:'var(--mono)',fontSize:9,fontWeight:700,letterSpacing:'.06em',textTransform:'uppercase',whiteSpace:'nowrap',borderRadius:4,padding:'3px 7px',background:cls==='up'?'var(--up-soft)':'var(--dn-soft)',color:cls==='up'?'var(--up)':'var(--dn)',flexShrink:0}}>{tag}</span>
+            <div>
+              <div style={{fontFamily:'var(--mono)',fontSize:12,fontWeight:700,color:'var(--ink)'}}>{fmt(a.strike)} {a.type} &nbsp;<span style={{color:a.delta>0?'var(--up)':'var(--dn)'}}>{a.delta>0?'+':''}{fmtK(a.delta)}</span></div>
+              <div style={{fontFamily:'var(--mono)',fontSize:10,color:'var(--ink3)',marginTop:3}}>{desc}</div>
+            </div>
+          </div>);})}
+      </div>}
+      {!oiActs.length&&prevGood.current&&<div className="empty" style={{padding:'10px 0 18px',fontSize:11}}>No significant OI moves in last 30s</div>}
+      {!prevGood.current&&<div style={{fontFamily:'var(--mono)',fontSize:10,color:'var(--ink4)',letterSpacing:'.06em',textTransform:'uppercase',marginBottom:18,padding:'6px 0'}}>OI activity appears after first refresh (30s)</div>}
+
+      {/* Chain table */}
+      <div className="lbl" style={{marginBottom:10}}>Option chain</div>
       <div style={{overflowX:'auto',WebkitOverflowScrolling:'touch'}}>
-        <table className="chain-tbl" style={{minWidth:320}}>
+        <table className="chain-tbl" style={{minWidth:300}}>
           <thead>
-            <tr>
-              <th className="ce-h" colSpan="2">CALLS</th>
-              <th className="str-h">STRIKE</th>
-              <th className="pe-h" colSpan="2">PUTS</th>
-            </tr>
-            <tr>
-              <th className="sub r">LTP</th><th className="sub r">OI</th>
-              <th className="sub c"></th>
-              <th className="sub l">OI</th><th className="sub l">LTP</th>
-            </tr>
+            <tr><th className="ce-h" colSpan="2">CALLS</th><th className="str-h">STRIKE</th><th className="pe-h" colSpan="2">PUTS</th></tr>
+            <tr><th className="sub r">LTP</th><th className="sub r">OI</th><th className="sub c"/><th className="sub l">OI</th><th className="sub l">LTP</th></tr>
           </thead>
           <tbody>
             {vis.map(s=>{
               const ce=byStrike[s]?.CE||{},pe=byStrike[s]?.PE||{};
-              const isAtm=s===atmStrike;
-              const ceOIpct=((+ce.oi||0)/maxCeOI*100).toFixed(0);
-              const peOIpct=((+pe.oi||0)/maxPeOI*100).toFixed(0);
-              return(<tr key={s} className={isAtm?'atm-row':''}>
-                <td className="ltp-ce"><div>{ce.ltp?(+ce.ltp).toFixed(1):'—'}</div><div className="chain-bar-wrap"><div className="chain-bar-ce" style={{width:ceOIpct+'%'}}/></div></td>
+              return(<tr key={s} className={s===atmStrike?'atm-row':''}>
+                <td className="ltp-ce"><div>{ce.ltp?(+ce.ltp).toFixed(1):'—'}</div><div className="chain-bar-wrap"><div className="chain-bar-ce" style={{width:(((+ce.oi||0)/maxCeOI)*100).toFixed(0)+'%'}}/></div></td>
                 <td className="oi-c">{fmtK(ce.oi)}</td>
                 <td className="str-c">{fmt(s)}</td>
                 <td className="oi-p">{fmtK(pe.oi)}</td>
-                <td className="ltp-pe"><div>{pe.ltp?(+pe.ltp).toFixed(1):'—'}</div><div className="chain-bar-wrap"><div className="chain-bar-pe" style={{width:peOIpct+'%'}}/></div></td>
-              </tr>);
-            })}
+                <td className="ltp-pe"><div>{pe.ltp?(+pe.ltp).toFixed(1):'—'}</div><div className="chain-bar-wrap"><div className="chain-bar-pe" style={{width:(((+pe.oi||0)/maxPeOI)*100).toFixed(0)+'%'}}/></div></td>
+              </tr>);})}
           </tbody>
         </table>
       </div>
