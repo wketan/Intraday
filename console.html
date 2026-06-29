@@ -474,35 +474,62 @@ function Area({pts,color,h=120}){if(!pts||pts.length<2)return null;
     <path d={`${line} L${W} ${H} L0 ${H} Z`} fill={`url(#${gid})`}/><path d={line} fill="none" stroke={color} strokeWidth="2"/></svg>);}
 
 function CandleChart({candles,ltp}){
-  if(!candles||candles.length<2)return <div className="empty" style={{padding:'80px 0'}}>Waiting for candles · market may be closed</div>;
-  const SLOTS=75; // 9:15 → 15:25 = 75 five-min slots; right side stays blank as day progresses
-  const W=880,H=228,pT=12,pB=20,pL=10,pR=58;
-  const hi=Math.max(...candles.map(c=>c.h)),lo=Math.min(...candles.map(c=>c.l));
+  // Keep last known good data - never blank the chart due to a transient poll gap
+  const lastRef=useRef(null);
+  const disp=(candles&&candles.length>=2)?candles:lastRef.current;
+  if(candles&&candles.length>=2)lastRef.current=candles;
+  if(!disp)return <div className="empty" style={{padding:'80px 0'}}>Waiting for candles · market may be closed</div>;
+
+  const SLOTS=75; // 9:15 → 15:25 = 75 five-min slots
+  const W=880,H=228,pT=18,pB=22,pL=10,pR=62;
+  const hi=Math.max(...disp.map(c=>c.h)),lo=Math.min(...disp.map(c=>c.l));
   const pad=(hi-lo)*0.06||1,mx=hi+pad,mn=lo-pad,rng=mx-mn||1;
   const iw=(W-pL-pR)/SLOTS,bw=Math.max(1.5,Math.min(10,iw*0.65));
   const Y=v=>pT+(1-(v-mn)/rng)*(H-pT-pB);
   const slotOf=t=>{const s=(t||'').slice(11,16)||t;const[h,m]=(s||'00:00').split(':').map(Number);return Math.round((h*60+m-555)/5);};
   const X=slot=>pL+slot*iw+iw/2;
-  const lastC=candles[candles.length-1],lastClose=(ltp&&+ltp)||lastC.c,lpUp=lastClose>=lastC.o;
+  const lastC=disp[disp.length-1],lastClose=(ltp&&+ltp)||lastC.c,lpUp=lastClose>=lastC.o;
   const lastSlot=slotOf(lastC.t);
   const grid=[0,.25,.5,.75,1].map(f=>mn+rng*f);const F="'Courier New',monospace";
+
+  // Trade window slots: Conductor fires 9:45-14:30
+  // 9:15=slot0, 9:45=slot6 ((9*60+45-555)/5=6), 14:30=slot63 ((14*60+30-555)/5=63)
+  const W_OPEN=6,W_CLOSE=63;
+  const xOpen=pL+W_OPEN*iw,xClose=pL+W_CLOSE*iw,xEnd=W-pR;
+  const bandH=H-pT-pB;
+
   return(<div className="chartwrap"><svg viewBox={`0 0 ${W} ${H}`} style={{width:'100%',height:'auto',display:'block'}}>
-    {grid.map((g,i)=>(<g key={i}><line x1={pL} x2={W-pR} y1={Y(g)} y2={Y(g)} stroke="var(--line2)" strokeWidth="1"/>
-      <text x={W-pR+6} y={Y(g)+3} fill="var(--ink3)" fontSize="9" fontFamily={F}>{Math.round(g)}</text></g>))}
-    {candles.map((c,i)=>{
+    {/* Trade window background bands */}
+    <rect x={pL} y={pT} width={xOpen-pL} height={bandH} fill="rgba(176,58,46,0.07)"/>
+    <rect x={xOpen} y={pT} width={xClose-xOpen} height={bandH} fill="rgba(61,104,72,0.07)"/>
+    <rect x={xClose} y={pT} width={xEnd-xClose} height={bandH} fill="rgba(184,116,40,0.08)"/>
+    {/* Window boundary lines */}
+    <line x1={xOpen} x2={xOpen} y1={pT} y2={H-pB} stroke="rgba(61,104,72,0.35)" strokeWidth="1" strokeDasharray="3 3"/>
+    <line x1={xClose} x2={xClose} y1={pT} y2={H-pB} stroke="rgba(184,116,40,0.35)" strokeWidth="1" strokeDasharray="3 3"/>
+    {/* Window labels at top */}
+    <text x={pL+3} y={pT-4} fill="rgba(176,58,46,0.7)" fontSize="8" fontFamily={F} fontWeight="700" letterSpacing="0.08em">PRE</text>
+    <text x={xOpen+4} y={pT-4} fill="rgba(61,104,72,0.75)" fontSize="8" fontFamily={F} fontWeight="700" letterSpacing="0.08em">TRADE WINDOW</text>
+    <text x={xClose+4} y={pT-4} fill="rgba(184,116,40,0.8)" fontSize="8" fontFamily={F} fontWeight="700" letterSpacing="0.08em">CLOSED</text>
+    {/* Price grid */}
+    {grid.map((g,i)=>(<g key={i}><line x1={pL} x2={xEnd} y1={Y(g)} y2={Y(g)} stroke="var(--line2)" strokeWidth="1"/>
+      <text x={xEnd+5} y={Y(g)+3.5} fill="var(--ink2)" fontSize="10" fontFamily={F} fontWeight="600">{Math.round(g)}</text></g>))}
+    {disp.map((c,i)=>{
       const slot=slotOf(c.t);if(slot<0||slot>=SLOTS)return null;
       const u=c.c>=c.o,col=u?'var(--up)':'var(--dn)';
       const yO=Y(c.o),yC=Y(c.c),top=Math.min(yO,yC),hh=Math.max(1,Math.abs(yC-yO));
       return(<g key={i}><line x1={X(slot)} x2={X(slot)} y1={Y(c.h)} y2={Y(c.l)} stroke={col} strokeWidth="1" opacity="0.85"/>
         <rect x={X(slot)-bw/2} y={top} width={bw} height={hh} fill={col}/></g>);
     })}
-    <line x1={pL} x2={W-pR} y1={Y(lastClose)} y2={Y(lastClose)} stroke={lpUp?'var(--up)':'var(--dn)'} strokeWidth="1" strokeDasharray="2 3" opacity="0.7"/>
-    <rect x={W-pR} y={Y(lastClose)-9} width={pR-2} height="18" fill={lpUp?'var(--up)':'var(--dn)'}/>
-    <text x={W-pR+(pR-2)/2} y={Y(lastClose)+3} textAnchor="middle" fill="#0F1D14" fontSize="10" fontWeight="800" fontFamily={F}>{Math.round(lastClose)}</text>
+    <line x1={pL} x2={xEnd} y1={Y(lastClose)} y2={Y(lastClose)} stroke={lpUp?'var(--up)':'var(--dn)'} strokeWidth="1" strokeDasharray="2 3" opacity="0.7"/>
+    <rect x={xEnd} y={Y(lastClose)-9} width={pR-2} height="18" fill={lpUp?'var(--up)':'var(--dn)'}/>
+    <text x={xEnd+(pR-2)/2} y={Y(lastClose)+3.5} textAnchor="middle" fill="#0F1D14" fontSize="10" fontWeight="800" fontFamily={F}>{Math.round(lastClose)}</text>
     {lastSlot>=0&&lastSlot<SLOTS&&<circle cx={X(lastSlot)} cy={Y(lastC.c)} r="3.4" fill={lpUp?'var(--up)':'var(--dn)'}><animate attributeName="opacity" values="1;0.3;1" dur="1.6s" repeatCount="indefinite"/></circle>}
-    <text x={pL} y={H-5} fill="var(--ink3)" fontSize="9" fontFamily={F}>09:15</text>
-    <text x={X(39)} y={H-5} textAnchor="middle" fill="var(--ink3)" fontSize="9" fontFamily={F}>12:30</text>
-    <text x={W-pR-4} y={H-5} textAnchor="end" fill="var(--ink3)" fontSize="9" fontFamily={F}>15:30</text>
+    {/* Time labels */}
+    <text x={pL} y={H-6} fill="var(--ink2)" fontSize="10" fontWeight="600" fontFamily={F}>09:15</text>
+    <text x={xOpen} y={H-6} textAnchor="middle" fill="var(--ink2)" fontSize="10" fontWeight="600" fontFamily={F}>09:45</text>
+    <text x={X(39)} y={H-6} textAnchor="middle" fill="var(--ink3)" fontSize="9" fontFamily={F}>12:30</text>
+    <text x={xClose} y={H-6} textAnchor="middle" fill="var(--ink2)" fontSize="10" fontWeight="600" fontFamily={F}>14:30</text>
+    <text x={xEnd-4} y={H-6} textAnchor="end" fill="var(--ink2)" fontSize="10" fontWeight="600" fontFamily={F}>15:30</text>
   </svg></div>);}
 
 function Setup({onDone}){
