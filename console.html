@@ -73,7 +73,9 @@ button{font-family:inherit;cursor:pointer;}input{font-family:inherit;}
 .rbtn svg{width:20px;height:20px;}
 .rbtn .tip{position:absolute;left:54px;top:50%;transform:translateY(-50%) translateX(-6px);background:var(--raised);color:var(--ink);border:1px solid var(--line);border-radius:7px;padding:6px 10px;font-size:11px;font-weight:600;white-space:nowrap;opacity:0;pointer-events:none;transition:all .18s var(--e);z-index:40;}
 .rbtn:hover .tip{opacity:1;transform:translateY(-50%) translateX(0);}
-.wake-menu{position:absolute;left:54px;top:0;background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:6px 0;z-index:100;min-width:190px;box-shadow:0 8px 28px rgba(0,0,0,.18);white-space:nowrap;}
+.wake-menu{position:absolute;top:calc(100% + 6px);right:0;background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:6px 0;z-index:100;min-width:190px;box-shadow:0 8px 28px rgba(0,0,0,.18);white-space:nowrap;}
+.sig-badge{position:absolute;top:2px;right:2px;min-width:16px;height:16px;border-radius:8px;background:var(--dn);color:#fff;font-family:var(--mono);font-size:9px;font-weight:800;display:grid;place-items:center;padding:0 3px;line-height:1;pointer-events:none;}
+.tab{position:relative;}
 .wake-menu button{display:block;width:100%;padding:11px 18px;text-align:left;background:transparent;border:none;border-bottom:1px solid var(--line2);color:var(--ink);font-family:var(--mono);font-size:12px;font-weight:600;cursor:pointer;letter-spacing:.05em;text-transform:uppercase;}
 .wake-menu button:last-child{border-bottom:none;}
 .wake-menu button:hover{background:var(--hover);}
@@ -367,7 +369,7 @@ button{font-family:inherit;cursor:pointer;}input{font-family:inherit;}
   .rbtn,.rail .estat{position:relative;flex:1;width:auto;height:auto;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;gap:6px;border-radius:11px;padding:7px 0 3px;}
   .rbtn svg{width:23px;height:23px;}
   .rbtn .tip{display:none;}
-  .wake-menu{left:auto;right:0;top:auto;bottom:calc(100% + 8px);}
+  .rail .theme-rbtn,.rail .settings-rbtn{display:none;}
   .blabel{display:block;font-family:var(--mono);font-size:8.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;line-height:1;color:var(--ink3);}
   .rbtn.on{background:transparent;border-color:transparent;color:var(--lime);}
   .rbtn.on .blabel{color:var(--lime);}
@@ -439,8 +441,10 @@ html,body,button,input{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',s
 .btn.go:disabled{opacity:.5!important;}
 /* Settings modal (reuse .setup/.scard classes) */
 .settings-disconnect{background:transparent!important;border:1px solid rgba(176,58,46,0.40)!important;color:#B03A2E!important;}
-/* Big numbers: Palatino */
-.pxbig,.kpi .v,.cstat .v,.chain-tbl td.str-c,.chain-tbl td.ltp-ce,.chain-tbl td.ltp-pe{font-family:Palatino,'Book Antiqua',Georgia,serif!important;font-weight:normal!important;}
+/* Big numbers: Palatino — applies everywhere, !important beats inline styles */
+.pxbig,.kpi .v,.cstat .v,
+.confwrap .cv,.leg .v,.pp .v,.pos-pnl .v,
+.chain-tbl td.str-c,.chain-tbl td.ltp-ce,.chain-tbl td.ltp-pe{font-family:Palatino,'Book Antiqua',Georgia,serif!important;font-weight:normal!important;}
 /* Signals table chips */
 .chip.long{background:rgba(61,104,72,0.12)!important;color:var(--up)!important;border-radius:2px!important;}
 .chip.short{background:rgba(176,58,46,0.10)!important;color:var(--dn)!important;border-radius:2px!important;}
@@ -852,13 +856,11 @@ function WakeLockBtn(){
     return()=>{document.removeEventListener('mousedown',fn);document.removeEventListener('touchstart',fn);};
   },[open]);
   const isOn=mode!==null;
-  const short=mode===null?'Screen':mode==='∞'?'On':mode+'m';
+  const tip=isOn?(mode==='∞'?'Screen on — tap to release':'Screen on · '+mode+'min — tap to release'):'Keep screen on';
   return(
     <div style={{position:'relative'}} ref={menuRef}>
-      <button className={'rbtn'+(isOn?' on':'')} onClick={()=>isOn?release():setOpen(o=>!o)} aria-label={isOn?'Screen on — tap to release':'Keep screen on'}>
+      <button className={'ib'+(isOn?' on':'')} onClick={()=>isOn?release():setOpen(o=>!o)} aria-label={tip} title={tip}>
         <Ico d={I.eye}/>
-        <span className="tip">{isOn?`Screen on${mode!=='∞'?' · '+mode+'min':''} — tap to release`:'Keep screen on'}</span>
-        <span className="blabel">{short}</span>
       </button>
       {open&&<div className="wake-menu">
         {[['∞','Keep screen on'],[15,'15 minutes'],[30,'30 minutes'],[60,'1 hour']].map(([m,lbl])=>(
@@ -975,12 +977,11 @@ function App(){
   return(<div className="shell">
     {toast&&<div className="toast" onClick={()=>setToast(null)}><div className="tt">{toast.tt}</div>{toast.tb&&<div className="tb">{toast.tb}</div>}</div>}
     <nav className="rail"><div className="logo">I</div>
-      {NAV.map(([id,icon,label])=>(<button key={id} className={'rbtn '+(view===id?'on':'')} onClick={()=>setView(id)} aria-label={label}><Ico d={icon}/><span className="tip">{label}</span><span className="blabel">{label}</span></button>))}
+      {NAV.map(([id,icon,label])=>(<button key={id} className={'rbtn '+(view===id?'on':'')} onClick={()=>setView(id)} aria-label={label} style={{position:'relative'}}><Ico d={icon}/><span className="tip">{label}</span><span className="blabel">{label}</span>{id==='signals'&&open.length>0&&<span className="sig-badge">{open.length}</span>}</button>))}
       <div className="rspace"/>
-      <button className="rbtn" onClick={toggle} aria-label="Theme"><Ico d={theme==='dark'?I.sun:I.moon}/><span className="tip">{theme==='dark'?'Light':'Dark'}</span><span className="blabel">Theme</span></button>
-      <WakeLockBtn/>
+      <button className="rbtn theme-rbtn" onClick={toggle} aria-label="Theme"><Ico d={theme==='dark'?I.sun:I.moon}/><span className="tip">{theme==='dark'?'Light':'Dark'}</span><span className="blabel">Theme</span></button>
       <div className={'estat '+eng} title={'Engine '+eng}><span className={'rdot '+eng}/><span className="blabel">{eng==='live'?'Live':eng==='off'?'Off':'···'}</span></div>
-      <button className="rbtn" title="Settings" onClick={()=>{setSettingsName(localStorage.getItem('ie-user')||'');setSettingsCap(+localStorage.getItem('ie-capital')||20000);setShowSettings(true);}}><Ico d={I.gear}/><span className="tip">Settings</span><span className="blabel">Settings</span></button></nav>
+      <button className="rbtn settings-rbtn" title="Settings" onClick={()=>{setSettingsName(localStorage.getItem('ie-user')||'');setSettingsCap(+localStorage.getItem('ie-capital')||20000);setShowSettings(true);}}><Ico d={I.gear}/><span className="tip">Settings</span><span className="blabel">Settings</span></button></nav>
     <main className="main">
       <div className="top">
         <div className="tapebar"><div className="tape"><div className="tape-track">
@@ -996,10 +997,11 @@ function App(){
           {eng==='live'?<button className="btn stop" onClick={()=>engCall('/api/stop')} disabled={busy}>Stop</button>:<button className="btn go" onClick={()=>engCall('/api/start')} disabled={busy}>Start</button>}
           <button className={'ib'+(notify?' on':'')} onClick={toggleNotify} aria-label="Alerts" title={notify?'Alerts on':'Enable alerts'}><Ico d={notify?I.bell:I.belloff}/></button>
           <button className="ib" onClick={toggle} aria-label="Theme"><Ico d={theme==='dark'?I.sun:I.moon}/></button>
+          <WakeLockBtn/>
           <button className="ib" onClick={()=>{setSettingsName(localStorage.getItem('ie-user')||'');setSettingsCap(+localStorage.getItem('ie-capital')||20000);setShowSettings(true);}} aria-label="Settings"><Ico d={I.gear}/></button></div>
         </div>
       </div>
-      <div className="tabs">{NAV.map(([id,icon,label])=>(<button key={id} className={'tab '+(view===id?'on':'')} onClick={()=>setView(id)}>{label}</button>))}</div>
+      <div className="tabs">{NAV.map(([id,icon,label])=>(<button key={id} className={'tab '+(view===id?'on':'')} onClick={()=>setView(id)}>{label}{id==='signals'&&open.length>0&&<span className="sig-badge">{open.length}</span>}</button>))}</div>
 
       {view==='overview'&&<div className="grid">{kpis}{chartCard}<SignalCard sig={bnf} marketOpen={status&&status.market_open} market={status&&status.market}/>{open.length>0&&openCard}{signalsTable(true)}{open.length===0&&openCard}{gatesCard}{feedCard}</div>}
       {view==='signals'&&<div className="grid">{kpis}{signalsTable(true)}{openCard}{feedCard}</div>}
