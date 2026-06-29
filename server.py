@@ -88,9 +88,9 @@ CONFIG = {
     "scan_interval_sec": int(os.environ.get("SCAN_INTERVAL", "30")),
     "candle_interval":   "FIVE_MINUTE",
     "lookback_days":     3,
-    # Cache 5-min candles for 90s — they only update every 5 min, so 90s is fresh and
-    # cuts getCandleData calls dramatically.
-    "candle_cache_ttl":  int(os.environ.get("CANDLE_CACHE_TTL", "90")),
+    # Cache 5-min candles for 270s — candles only update every 5 min so there is no
+    # benefit to fetching more often; 270s cuts Angel API calls by 3x vs 90s.
+    "candle_cache_ttl":  int(os.environ.get("CANDLE_CACHE_TTL", "270")),
     "target_points_min": int(os.environ.get("TARGET_MIN", "10")),
     "target_points_max": int(os.environ.get("TARGET_MAX", "15")),
     "min_confidence":    int(os.environ.get("MIN_CONFIDENCE", "45")),
@@ -1343,8 +1343,9 @@ class AngelClient:
                     break
                 if _attempt < 2:
                     self._candle_retries = getattr(self, "_candle_retries", 0) + 1
-                    # back off longer when rate-limited so Angel's window clears
-                    time.sleep((1.3 if _rl else 0.6) * (_attempt + 1))
+                    # back off longer when rate-limited so Angel's window clears;
+                    # 1.3s was too short — rate limit persists for ~10-30s so use 10s steps
+                    time.sleep((10 if _rl else 1) * (_attempt + 1))
             if resp and resp.get("status") and resp.get("data"):
                 df = pd.DataFrame(resp["data"], columns=["timestamp","open","high","low","close","volume"])
                 df["timestamp"] = pd.to_datetime(df["timestamp"])
@@ -4899,8 +4900,9 @@ class SwingEngine:
         log.info("[Swing] Engine started — scanning on 30-min cycle")
 
     def _loop(self):
-        # Stagger swing start by 60s so it doesn't hammer API at same time as intraday
-        time.sleep(60)
+        # Stagger swing start by 150s — intraday scanner needs 2-3 candle fetches
+        # to warm its cache before the swing scan fires 20+ daily candle calls.
+        time.sleep(150)
         while self.running:
             try:
                 now = datetime.now(IST)
