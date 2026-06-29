@@ -362,21 +362,40 @@ button{font-family:inherit;cursor:pointer;}input{font-family:inherit;}
   .shell{grid-template-columns:1fr;}
   /* solid bg + NO backdrop-filter: iOS Safari has a WebKit bug where a
      position:fixed element with backdrop-filter scrolls away with the page. */
-  .rail{position:fixed;bottom:0;top:auto;left:0;right:0;height:auto;width:100%;flex-direction:row;gap:2px;
-    justify-content:space-around;align-items:stretch;padding:9px 6px;padding-bottom:calc(9px + env(safe-area-inset-bottom));
-    border-right:0;border-top:1px solid var(--line);background:var(--bg);box-shadow:0 -10px 26px -12px rgba(0,0,0,0.85);}
+  /* ── bottom nav bar ── */
+  .rail{position:fixed;bottom:0;top:auto;left:0;right:0;width:100%;
+    flex-direction:row;gap:0;justify-content:stretch;align-items:stretch;
+    padding:0;padding-bottom:env(safe-area-inset-bottom);
+    height:calc(54px + env(safe-area-inset-bottom));
+    border-right:0;border-top:1px solid var(--line);
+    background:var(--bg);box-shadow:0 -4px 16px rgba(0,0,0,.10);}
   .rail .logo,.rail .ava,.rail .rspace{display:none;}
-  .rbtn,.rail .estat{position:relative;flex:1;width:auto;height:auto;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;gap:6px;border-radius:11px;padding:7px 0 3px;}
-  .rbtn svg{width:23px;height:23px;}
-  .rbtn .tip{display:none;}
   .rail .theme-rbtn,.rail .settings-rbtn{display:none;}
-  .blabel{display:block;font-family:var(--mono);font-size:8.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;line-height:1;color:var(--ink3);}
-  .rbtn.on{background:transparent;border-color:transparent;color:var(--lime);}
-  .rbtn.on .blabel{color:var(--lime);}
-  .rbtn.on::before{display:block;content:'';position:absolute;top:-9px;left:50%;transform:translateX(-50%);width:30px;height:3px;border-radius:0 0 4px 4px;background:var(--lime);box-shadow:0 0 9px var(--lime);}
-  .rail .estat .rdot{width:8px;height:8px;margin-top:7px;}
-  .rail .estat.live .blabel{color:var(--up);}.rail .estat.off .blabel{color:var(--dn);}
-  .main{padding:0 15px 104px;}
+  .rbtn,.rail .estat{
+    position:relative;flex:1;min-width:0;
+    width:auto;height:54px;
+    display:flex;flex-direction:column;align-items:center;justify-content:center;
+    gap:4px;border-radius:0;padding:0;
+    color:var(--ink3);background:transparent;border:none;}
+  .rbtn svg{width:22px;height:22px;flex-shrink:0;}
+  .rbtn .tip{display:none;}
+  .blabel{display:block;font-family:var(--mono);font-size:8px;font-weight:700;
+    letter-spacing:.06em;text-transform:uppercase;line-height:1;color:inherit;}
+  /* Active: amber top bar + color, NO background fill */
+  .rbtn.on{color:#B87428;background:transparent;border:none;}
+  .rbtn.on .blabel{color:#B87428;}
+  .rbtn.on::before{display:block;content:'';position:absolute;
+    top:0;left:50%;transform:translateX(-50%);
+    width:36px;height:2.5px;border-radius:0 0 3px 3px;
+    background:#B87428;box-shadow:none;}
+  /* Signal badge: sits top-right of the icon (centered in button) */
+  .rbtn .sig-badge{top:4px;left:calc(50% + 4px);right:auto;}
+  /* Live estat */
+  .rail .estat{gap:4px;}
+  .rail .estat .rdot{width:7px;height:7px;margin:0;flex-shrink:0;}
+  .rail .estat.live .blabel{color:var(--up);}
+  .rail .estat.off .blabel{color:var(--dn);}
+  .main{padding:0 15px 70px;}
   .top{margin:0 -15px;}
   .tapebar{padding:0 15px;height:38px;}
   .toolbar{padding:0 15px;height:52px;gap:8px;justify-content:center;}
@@ -425,8 +444,10 @@ html,body,button,input{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',s
 .top .led.live{color:var(--up)!important;border-color:var(--up-soft)!important;background:var(--up-soft)!important;}
 /* Rail logo and active nav button accent color */
 .rail .logo{background:linear-gradient(135deg,#B87428,#3D6848)!important;color:#F1EDE0!important;border-radius:6px!important;box-shadow:none!important;}
-.rbtn.on{color:#B87428!important;background:rgba(184,116,40,0.12)!important;}
-.rbtn.on::before{background:#B87428!important;box-shadow:none!important;}
+@media(min-width:681px){
+  .rbtn.on{color:#B87428!important;background:rgba(184,116,40,0.12)!important;}
+  .rbtn.on::before{background:#B87428!important;box-shadow:none!important;}
+}
 /* Cards: sharp corners */
 .panel,.kpi,.hud{border-radius:0!important;}
 /* Setup screen */
@@ -444,6 +465,7 @@ html,body,button,input{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',s
 /* Big numbers: Palatino — applies everywhere, !important beats inline styles */
 .pxbig,.kpi .v,.cstat .v,
 .confwrap .cv,.leg .v,.pp .v,.pos-pnl .v,
+.pos-name,
 .chain-tbl td.str-c,.chain-tbl td.ltp-ce,.chain-tbl td.ltp-pe{font-family:Palatino,'Book Antiqua',Georgia,serif!important;font-weight:normal!important;}
 /* Signals table chips */
 .chip.long{background:rgba(61,104,72,0.12)!important;color:var(--up)!important;border-radius:2px!important;}
