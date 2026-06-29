@@ -581,7 +581,6 @@ function CandleChart({candles,ltp}){
     <text x={xEnd+(pR-3)/2} y={Y(lastClose)+5} textAnchor="middle" fill="#0F1D14" fontSize="15" fontWeight="800" fontFamily={F}>{Math.round(lastClose)}</text>
     {lastSlot>=0&&lastSlot<SLOTS&&<circle cx={X(lastSlot)} cy={Y(lastC.c)} r="4.5" fill={lpUp?'var(--up)':'var(--dn)'}><animate attributeName="opacity" values="1;0.3;1" dur="1.6s" repeatCount="indefinite"/></circle>}
     {/* Time labels */}
-    <text x={pL} y={H-10} fill="var(--ink2)" fontSize="15" fontWeight="700" fontFamily={F}>09:15</text>
     <text x={xOpen} y={H-10} textAnchor="middle" fill="var(--ink2)" fontSize="15" fontWeight="700" fontFamily={F}>09:45</text>
     <text x={X(39)} y={H-10} textAnchor="middle" fill="var(--ink3)" fontSize="14" fontFamily={F}>12:30</text>
     <text x={xClose} y={H-10} textAnchor="middle" fill="var(--ink2)" fontSize="15" fontWeight="700" fontFamily={F}>14:30</text>
