@@ -268,6 +268,25 @@ button{font-family:inherit;cursor:pointer;}input{font-family:inherit;}
 .oirow .track .f{height:100%;border-radius:3px;transition:width .6s var(--e);}
 .oirow .track .f.ce{background:var(--up);}.oirow .track .f.pe{background:var(--dn);}
 .oirow .amt{font-family:var(--mono);font-size:11px;color:var(--ink2);text-align:right;}
+/* live chain table */
+.chain-tbl{width:100%;border-collapse:collapse;font-family:var(--mono);}
+.chain-tbl th{font-size:9px;letter-spacing:.1em;text-transform:uppercase;padding:7px 8px 10px;border-bottom:2px solid var(--line);}
+.chain-tbl th.ce-h{color:var(--up);text-align:right;}
+.chain-tbl th.pe-h{color:var(--dn);text-align:left;}
+.chain-tbl th.str-h{text-align:center;color:var(--ink2);}
+.chain-tbl th.sub{font-size:8.5px;color:var(--ink3);font-weight:400;}
+.chain-tbl th.sub.r{text-align:right;}.chain-tbl th.sub.c{text-align:center;}.chain-tbl th.sub.l{text-align:left;}
+.chain-tbl td{padding:8px 8px;font-size:12px;font-weight:600;border-bottom:1px solid var(--line2);}
+.chain-tbl tr.atm-row{background:rgba(184,116,40,0.09);}
+.chain-tbl tr.atm-row td.str-c{color:var(--lime);font-size:13px;}
+.chain-tbl td.ltp-ce{color:var(--up);text-align:right;}
+.chain-tbl td.ltp-pe{color:var(--dn);text-align:left;}
+.chain-tbl td.oi-c{text-align:right;color:var(--ink2);font-size:11px;}
+.chain-tbl td.oi-p{text-align:left;color:var(--ink2);font-size:11px;}
+.chain-tbl td.str-c{text-align:center;color:var(--ink);font-weight:700;font-size:12.5px;}
+.chain-bar-wrap{height:4px;background:var(--line);border-radius:2px;overflow:hidden;margin-top:3px;}
+.chain-bar-ce{height:4px;border-radius:2px;background:var(--up);float:right;}
+.chain-bar-pe{height:4px;border-radius:2px;background:var(--dn);}
 
 /* live position tracker */
 .poscard{position:relative;background:var(--panel2);border:1px solid var(--line);border-radius:13px;padding:16px 18px;}
@@ -584,27 +603,84 @@ function SignalCard({sig,marketOpen,market}){
     {Array.isArray(s.reasons)&&s.reasons.length>0&&<ul className="reasons">{s.reasons.slice(0,5).map((r,i)=>(<li key={i}>{r}</li>))}</ul>}
   </section>);}
 
-function ChainCards({sig,ltp}){
-  const ca=sig&&sig.chain_analytics;
-  if(!ca)return<section className="panel g12"><div className="head"><span className="t"><b>//</b> Option chain</span></div><div className="empty">No chain data · market closed or engine idle</div></section>;
-  const spot=(ltp&&ltp.prices&&ltp.prices.BANKNIFTY&&ltp.prices.BANKNIFTY.ltp)||ca.atm;
-  const pcr=ca.pcr||0,pcrPct=Math.min(100,(pcr/1.5)*100),bull=pcr>=1;
-  const building=[...(ca.building_ce||[]).map(x=>({...x,type:'ce'})),...(ca.building_pe||[]).map(x=>({...x,type:'pe'}))].sort((a,b)=>Math.abs(b.oi_delta)-Math.abs(a.oi_delta)).slice(0,6);
-  const maxB=Math.max(1,...building.map(b=>Math.abs(b.oi_delta)));
+function LiveChainView({enabled}){
+  const [chainData,setChainData]=useState(null);
+  const lastGood=useRef(null);
+  useEffect(()=>{
+    if(!enabled)return;
+    let live=true;
+    const go=async()=>{try{const d=await apiJSON('/api/chain/BANKNIFTY');if(live&&!d.error){setChainData(d);lastGood.current=d;}else if(live&&d.error&&!lastGood.current){setChainData(d);}}catch(e){}};
+    go();const id=setInterval(go,30000);return()=>{live=false;clearInterval(id);};
+  },[enabled]);
+  const disp=chainData||lastGood.current;
+  if(!disp)return<div className="empty" style={{padding:'60px 0'}}>Fetching chain data from Angel One...</div>;
+  if(disp.error)return<div className="empty" style={{padding:'60px 0'}}>{disp.error}</div>;
+  const {chain,spot,atm,expiry}=disp;
+  // Build map strike → {CE,PE}
+  const byStrike={};
+  chain.forEach(o=>{const k=+o.strike;if(!byStrike[k])byStrike[k]={};byStrike[k][o.type]=o;});
+  const strikes=[...new Set(chain.map(o=>+o.strike))].sort((a,b)=>a-b);
+  const atmStrike=+atm;
+  const atmIdx=strikes.reduce((bi,s,i)=>Math.abs(s-atmStrike)<Math.abs(strikes[bi]-atmStrike)?i:bi,0);
+  const from=Math.max(0,atmIdx-8),to=Math.min(strikes.length-1,atmIdx+8);
+  const vis=strikes.slice(from,to+1);
+  // Analytics
+  const ceAll=chain.filter(o=>o.type==='CE'&&(o.oi||0)>0);
+  const peAll=chain.filter(o=>o.type==='PE'&&(o.oi||0)>0);
+  const tCeOI=ceAll.reduce((s,o)=>s+(+o.oi||0),0),tPeOI=peAll.reduce((s,o)=>s+(+o.oi||0),0);
+  const pcr=tCeOI>0?(tPeOI/tCeOI):0,bull=pcr>=1;
+  const tCeVol=ceAll.reduce((s,o)=>s+(+o.volume||0),0),tPeVol=peAll.reduce((s,o)=>s+(+o.volume||0),0);
+  const pcrPct=Math.min(100,(pcr/2)*100);
+  const oiByStrike={};chain.forEach(o=>{const k=+o.strike;oiByStrike[k]=(oiByStrike[k]||0)+(+o.oi||0);});
+  const maxPain=+Object.entries(oiByStrike).sort((a,b)=>b[1]-a[1])[0]?.[0]||0;
+  // Max OI for bar scaling
+  const maxCeOI=Math.max(1,...vis.map(s=>(byStrike[s]?.CE?.oi||0)));
+  const maxPeOI=Math.max(1,...vis.map(s=>(byStrike[s]?.PE?.oi||0)));
   return(<>
-    <section className="panel g6"><div className="head"><span className="t"><b>//</b> Chain · BANKNIFTY</span><span className="r mono" style={{fontSize:'10px',color:'var(--ink3)'}}>{sig.chain_fetched_at||''} IST</span></div>
-      <div className="chgrid">
-        <div className="cstat"><div className="k">PCR (OI)</div><div className={'v '+(bull?'up':'dn')}>{pcr.toFixed(3)}</div><div className="pcrbar"><div className="fill" style={{width:pcrPct+'%'}}/></div><div className="s">{bull?'Put-heavy · bullish':'Call-heavy · bearish'}</div></div>
-        <div className="cstat"><div className="k">Max pain</div><div className="v">{fmt(ca.max_pain)}</div><div className="s">spot {spot?fmt(spot):'—'}{spot&&ca.max_pain?(' · '+(spot-ca.max_pain>=0?'+':'')+fmt(spot-ca.max_pain)):''}</div></div>
-        <div className="cstat"><div className="k">OI shift</div><div className="v ac" style={{fontSize:'14px',lineHeight:'1.3'}}>{(ca.oi_shift_signal||'—').replace(/_/g,' ')}</div><div className="s">ATM {ca.atm}</div></div>
-        <div className="cstat"><div className="k">Max OI CE / PE</div><div className="v" style={{fontSize:'14px'}}>{fmt(ca.max_oi_ce_strike)} / {fmt(ca.max_oi_pe_strike)}</div><div className="s">resist / support</div></div>
-        <div className="cstat"><div className="k">CE vol</div><div className="v up">{fmtK(ca.total_ce_vol)}</div><div className="s">PCR vol {ca.pcr_vol!=null?ca.pcr_vol.toFixed(2):'—'}</div></div>
-        <div className="cstat"><div className="k">PE vol</div><div className="v dn">{fmtK(ca.total_pe_vol)}</div><div className="s">IV skew {ca.iv_skew!=null?ca.iv_skew.toFixed(2):'—'}</div></div></div></section>
-    <section className="panel g6"><div className="head"><span className="t"><b>//</b> OI building</span><span className="r lbl">fresh positions</span></div>
-      {building.length===0&&<div className="empty">No notable OI build</div>}
-      {building.map((b,i)=>(<div className="oirow" key={i}><span className="strike">{b.strike} <span style={{color:b.type==='ce'?'var(--up)':'var(--dn)',fontWeight:700}}>{b.type.toUpperCase()}</span></span>
-        <span className="track"><span className={'f '+b.type} style={{width:(Math.abs(b.oi_delta)/maxB*100)+'%'}}/></span>
-        <span className="amt">{b.oi_delta>=0?'+':''}{fmtK(b.oi_delta)}</span></div>))}</section></>);}
+    <section className="panel g12">
+      <div className="head"><span className="t"><b>//</b> Chain · BANKNIFTY</span><span className="r mono" style={{fontSize:'10px',color:'var(--ink3)'}}>ATM {fmt(atmStrike)} · {expiry}</span></div>
+      <div className="chgrid" style={{marginBottom:16}}>
+        <div className="cstat"><div className="k">PCR (OI)</div><div className={'v '+(bull?'up':'dn')}>{pcr.toFixed(3)}</div>
+          <div className="pcrbar"><div className="fill" style={{width:pcrPct+'%'}}/></div>
+          <div className="s">{bull?'Put-heavy · bullish':'Call-heavy · bearish'}</div></div>
+        <div className="cstat"><div className="k">Max pain</div><div className="v">{fmt(maxPain)}</div>
+          <div className="s">spot {fmt(Math.round(spot))} · {maxPain?((Math.round(spot)-maxPain)>=0?'+':'')+fmt(Math.round(spot)-maxPain):''}</div></div>
+        <div className="cstat"><div className="k">Volume</div>
+          <div className="v" style={{fontSize:'14px'}}><span className="up">{fmtK(tCeVol)}</span> / <span className="dn">{fmtK(tPeVol)}</span></div>
+          <div className="s">CE / PE vol</div></div>
+      </div>
+      <div style={{overflowX:'auto',WebkitOverflowScrolling:'touch'}}>
+        <table className="chain-tbl" style={{minWidth:320}}>
+          <thead>
+            <tr>
+              <th className="ce-h" colSpan="2">CALLS</th>
+              <th className="str-h">STRIKE</th>
+              <th className="pe-h" colSpan="2">PUTS</th>
+            </tr>
+            <tr>
+              <th className="sub r">LTP</th><th className="sub r">OI</th>
+              <th className="sub c"></th>
+              <th className="sub l">OI</th><th className="sub l">LTP</th>
+            </tr>
+          </thead>
+          <tbody>
+            {vis.map(s=>{
+              const ce=byStrike[s]?.CE||{},pe=byStrike[s]?.PE||{};
+              const isAtm=s===atmStrike;
+              const ceOIpct=((+ce.oi||0)/maxCeOI*100).toFixed(0);
+              const peOIpct=((+pe.oi||0)/maxPeOI*100).toFixed(0);
+              return(<tr key={s} className={isAtm?'atm-row':''}>
+                <td className="ltp-ce"><div>{ce.ltp?(+ce.ltp).toFixed(1):'—'}</div><div className="chain-bar-wrap"><div className="chain-bar-ce" style={{width:ceOIpct+'%'}}/></div></td>
+                <td className="oi-c">{fmtK(ce.oi)}</td>
+                <td className="str-c">{fmt(s)}</td>
+                <td className="oi-p">{fmtK(pe.oi)}</td>
+                <td className="ltp-pe"><div>{pe.ltp?(+pe.ltp).toFixed(1):'—'}</div><div className="chain-bar-wrap"><div className="chain-bar-pe" style={{width:peOIpct+'%'}}/></div></td>
+              </tr>);
+            })}
+          </tbody>
+        </table>
+      </div>
+    </section></>);}
 
 function elapsedFrom(tin){ if(!tin) return '00:00:00'; const m=String(tin).match(/(\d{1,2}):(\d{2})/); if(!m) return '00:00:00';
   const now=istNow(); const st=new Date(now); st.setHours(+m[1],+m[2],0,0); let s=Math.floor((now-st)/1000); if(s<0)s=0;
@@ -709,7 +785,7 @@ function App(){
 
   if(needsSetup)return <Setup onDone={()=>{setNeedsSetup(false);ensureAudio();}}/>;
   const day=istNow().toLocaleDateString('en-GB',{weekday:'short',day:'2-digit',month:'short'}).toUpperCase();
-  const NAV=[['overview',I.grid,'Overview'],['signals',I.list,'Signals']];
+  const NAV=[['overview',I.grid,'Overview'],['signals',I.list,'Signals'],['chain',I.layers,'Chain']];
 
   const kpis=(<>
     <section className="panel g-kpi kpi"><div className="k">Net P&amp;L</div><div className={'v '+(net>=0?'up':'dn')}>{net>=0?'+':'−'}₹{fmt(netCU)}</div><div className="s">{closed.length} closed · {open.length} open</div><div className="spark"><Area pts={equity} color={net>=0?'var(--up)':'var(--dn)'} h={42}/></div></section>
@@ -776,6 +852,7 @@ function App(){
 
       {view==='overview'&&<div className="grid">{kpis}{chartCard}<SignalCard sig={bnf} marketOpen={status&&status.market_open} market={status&&status.market}/>{open.length>0&&openCard}{signalsTable(true)}{open.length===0&&openCard}{gatesCard}{feedCard}</div>}
       {view==='signals'&&<div className="grid">{kpis}{signalsTable(true)}{openCard}{feedCard}</div>}
+      {view==='chain'&&<div className="grid"><LiveChainView enabled={view==='chain'}/></div>}
     </main>
     {showSettings&&<div onClick={e=>{if(e.target===e.currentTarget)setShowSettings(false);}} style={{
         position:'fixed',inset:0,zIndex:200,
