@@ -126,7 +126,7 @@ button{font-family:inherit;cursor:pointer;}input{font-family:inherit;}
 @media(max-width:680px){.toast{top:calc(10px + env(safe-area-inset-top));width:92%;}}
 
 /* nav tabs */
-.tabs{display:flex;gap:0;padding:22px 0 2px;border-bottom:1px solid var(--line);margin-bottom:22px;}
+.tabs{display:flex;gap:0;padding:22px 0 2px;border-bottom:1px solid var(--line);margin-bottom:22px;justify-content:center;}
 .tab{appearance:none;border:0;border-bottom:2px solid transparent;background:transparent;color:var(--ink3);font-family:var(--mono);font-size:12px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;padding:10px 18px;margin-bottom:-1px;transition:all .18s var(--e);}
 .tab:hover{color:var(--ink);}
 .tab.on{color:var(--ink);border-bottom-color:var(--lime);}
@@ -709,7 +709,7 @@ function App(){
 
   if(needsSetup)return <Setup onDone={()=>{setNeedsSetup(false);ensureAudio();}}/>;
   const day=istNow().toLocaleDateString('en-GB',{weekday:'short',day:'2-digit',month:'short'}).toUpperCase();
-  const NAV=[['overview',I.grid,'Overview'],['signals',I.list,'Signals'],['chain',I.layers,'Chain']];
+  const NAV=[['overview',I.grid,'Overview'],['signals',I.list,'Signals']];
 
   const kpis=(<>
     <section className="panel g-kpi kpi"><div className="k">Net P&amp;L</div><div className={'v '+(net>=0?'up':'dn')}>{net>=0?'+':'−'}₹{fmt(netCU)}</div><div className="s">{closed.length} closed · {open.length} open</div><div className="spark"><Area pts={equity} color={net>=0?'var(--up)':'var(--dn)'} h={42}/></div></section>
@@ -776,7 +776,6 @@ function App(){
 
       {view==='overview'&&<div className="grid">{kpis}{chartCard}<SignalCard sig={bnf} marketOpen={status&&status.market_open} market={status&&status.market}/>{open.length>0&&openCard}{signalsTable(true)}{open.length===0&&openCard}{gatesCard}{feedCard}</div>}
       {view==='signals'&&<div className="grid">{kpis}{signalsTable(true)}{openCard}{feedCard}</div>}
-      {view==='chain'&&<div className="grid"><ChainCards sig={bnf} ltp={ltp}/>{gatesCard}{feedCard}</div>}
     </main>
     {showSettings&&<div onClick={e=>{if(e.target===e.currentTarget)setShowSettings(false);}} style={{
         position:'fixed',inset:0,zIndex:200,
