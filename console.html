@@ -73,6 +73,10 @@ button{font-family:inherit;cursor:pointer;}input{font-family:inherit;}
 .rbtn svg{width:20px;height:20px;}
 .rbtn .tip{position:absolute;left:54px;top:50%;transform:translateY(-50%) translateX(-6px);background:var(--raised);color:var(--ink);border:1px solid var(--line);border-radius:7px;padding:6px 10px;font-size:11px;font-weight:600;white-space:nowrap;opacity:0;pointer-events:none;transition:all .18s var(--e);z-index:40;}
 .rbtn:hover .tip{opacity:1;transform:translateY(-50%) translateX(0);}
+.wake-menu{position:absolute;left:54px;top:0;background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:6px 0;z-index:100;min-width:190px;box-shadow:0 8px 28px rgba(0,0,0,.18);white-space:nowrap;}
+.wake-menu button{display:block;width:100%;padding:11px 18px;text-align:left;background:transparent;border:none;border-bottom:1px solid var(--line2);color:var(--ink);font-family:var(--mono);font-size:12px;font-weight:600;cursor:pointer;letter-spacing:.05em;text-transform:uppercase;}
+.wake-menu button:last-child{border-bottom:none;}
+.wake-menu button:hover{background:var(--hover);}
 .rdot{width:9px;height:9px;border-radius:2px;background:var(--ink4);}
 .rdot.live{background:var(--up);box-shadow:0 0 11px var(--up);animation:bp 2.2s infinite;}
 .rdot.off{background:var(--dn);}
@@ -363,6 +367,7 @@ button{font-family:inherit;cursor:pointer;}input{font-family:inherit;}
   .rbtn,.rail .estat{position:relative;flex:1;width:auto;height:auto;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;gap:6px;border-radius:11px;padding:7px 0 3px;}
   .rbtn svg{width:23px;height:23px;}
   .rbtn .tip{display:none;}
+  .wake-menu{left:auto;right:0;top:auto;bottom:calc(100% + 8px);}
   .blabel{display:block;font-family:var(--mono);font-size:8.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;line-height:1;color:var(--ink3);}
   .rbtn.on{background:transparent;border-color:transparent;color:var(--lime);}
   .rbtn.on .blabel{color:var(--lime);}
@@ -485,7 +490,8 @@ const I={grid:"M3 3h7v7H3zM14 3h7v7h-7zM14 14h7v7h-7zM3 14h7v7H3z",list:"M8 6h13
   layers:"M12 2l9 5-9 5-9-5 9-5zM3 12l9 5 9-5M3 17l9 5 9-5",sun:"M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4",
   moon:"M21 12.8A9 9 0 1111.2 3 7 7 0 0021 12.8z",check:"M20 6L9 17l-5-5",x:"M18 6L6 18M6 6l12 12",up:"M7 17L17 7M17 7H8M17 7v9",down:"M7 7l10 10M17 17H8M17 17V8",
   bell:"M18 8a6 6 0 10-12 0c0 7-3 9-3 9h18s-3-2-3-9M13.7 21a2 2 0 01-3.4 0",belloff:"M8.7 3A6 6 0 0118 8c0 2 .4 3.6 .9 4.8M18 17H3s3-2 3-9M1 1l22 22M13.7 21a2 2 0 01-3.4 0",
-  gear:"M12 15a3 3 0 100-6 3 3 0 000 6zM12 2v2M12 20v2M4.2 4.2l1.4 1.4M18.4 18.4l1.4 1.4M2 12h2M20 12h2M4.2 19.8l1.4-1.4M18.4 5.6l1.4-1.4"};
+  gear:"M12 15a3 3 0 100-6 3 3 0 000 6zM12 2v2M12 20v2M4.2 4.2l1.4 1.4M18.4 18.4l1.4 1.4M2 12h2M20 12h2M4.2 19.8l1.4-1.4M18.4 5.6l1.4-1.4",
+  eye:"M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8zM12 9a3 3 0 100 6 3 3 0 000-6z"};
 
 function Area({pts,color,h=120}){if(!pts||pts.length<2)return null;
   const W=560,H=h,vs=pts.map(p=>p.v),mn=Math.min(...vs,0),mx=Math.max(...vs,0),rng=(mx-mn)||1;
@@ -808,6 +814,61 @@ function PositionCard({p,idx}){
   </div>);
 }
 
+function WakeLockBtn(){
+  const [open,setOpen]=useState(false);
+  const [mode,setMode]=useState(null); // null | '∞' | 15 | 30 | 60
+  const lockRef=useRef(null),timerRef=useRef(null),menuRef=useRef(null);
+  const release=async()=>{
+    if(timerRef.current){clearTimeout(timerRef.current);timerRef.current=null;}
+    if(lockRef.current){try{await lockRef.current.release();}catch(e){}lockRef.current=null;}
+    setMode(null);
+  };
+  const acquire=async(m)=>{
+    setOpen(false);await release();
+    if(!('wakeLock' in navigator))return;
+    try{
+      const wl=await navigator.wakeLock.request('screen');
+      lockRef.current=wl;
+      wl.addEventListener('release',()=>{lockRef.current=null;});
+      setMode(m);
+      if(m!=='∞')timerRef.current=setTimeout(release,m*60*1000);
+    }catch(e){}
+  };
+  // Re-acquire after tab becomes visible (lock auto-releases on page hide)
+  useEffect(()=>{
+    const fn=async()=>{
+      if(document.visibilityState==='visible'&&mode!==null&&!lockRef.current){
+        try{lockRef.current=await navigator.wakeLock.request('screen');lockRef.current.addEventListener('release',()=>{lockRef.current=null;});}catch(e){}
+      }
+    };
+    document.addEventListener('visibilitychange',fn);
+    return()=>document.removeEventListener('visibilitychange',fn);
+  },[mode]);
+  // Close on outside click/touch
+  useEffect(()=>{
+    if(!open)return;
+    const fn=(e)=>{if(menuRef.current&&!menuRef.current.contains(e.target))setOpen(false);};
+    document.addEventListener('mousedown',fn);document.addEventListener('touchstart',fn);
+    return()=>{document.removeEventListener('mousedown',fn);document.removeEventListener('touchstart',fn);};
+  },[open]);
+  const isOn=mode!==null;
+  const short=mode===null?'Screen':mode==='∞'?'On':mode+'m';
+  return(
+    <div style={{position:'relative'}} ref={menuRef}>
+      <button className={'rbtn'+(isOn?' on':'')} onClick={()=>isOn?release():setOpen(o=>!o)} aria-label={isOn?'Screen on — tap to release':'Keep screen on'}>
+        <Ico d={I.eye}/>
+        <span className="tip">{isOn?`Screen on${mode!=='∞'?' · '+mode+'min':''} — tap to release`:'Keep screen on'}</span>
+        <span className="blabel">{short}</span>
+      </button>
+      {open&&<div className="wake-menu">
+        {[['∞','Keep screen on'],[15,'15 minutes'],[30,'30 minutes'],[60,'1 hour']].map(([m,lbl])=>(
+          <button key={m} onClick={()=>acquire(m)}>{lbl}</button>
+        ))}
+      </div>}
+    </div>
+  );
+}
+
 function App(){
   const [theme,toggle]=useTheme();
   const [needsSetup,setNeedsSetup]=useState(()=>!getToken());
@@ -917,8 +978,9 @@ function App(){
       {NAV.map(([id,icon,label])=>(<button key={id} className={'rbtn '+(view===id?'on':'')} onClick={()=>setView(id)} aria-label={label}><Ico d={icon}/><span className="tip">{label}</span><span className="blabel">{label}</span></button>))}
       <div className="rspace"/>
       <button className="rbtn" onClick={toggle} aria-label="Theme"><Ico d={theme==='dark'?I.sun:I.moon}/><span className="tip">{theme==='dark'?'Light':'Dark'}</span><span className="blabel">Theme</span></button>
+      <WakeLockBtn/>
       <div className={'estat '+eng} title={'Engine '+eng}><span className={'rdot '+eng}/><span className="blabel">{eng==='live'?'Live':eng==='off'?'Off':'···'}</span></div>
-      <button className="ava" title="Settings" onClick={()=>{setSettingsName(localStorage.getItem('ie-user')||'');setSettingsCap(+localStorage.getItem('ie-capital')||20000);setShowSettings(true);}}>{(localStorage.getItem('ie-user')||'K')[0].toUpperCase()}</button></nav>
+      <button className="rbtn" title="Settings" onClick={()=>{setSettingsName(localStorage.getItem('ie-user')||'');setSettingsCap(+localStorage.getItem('ie-capital')||20000);setShowSettings(true);}}><Ico d={I.gear}/><span className="tip">Settings</span><span className="blabel">Settings</span></button></nav>
     <main className="main">
       <div className="top">
         <div className="tapebar"><div className="tape"><div className="tape-track">
