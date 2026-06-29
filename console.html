@@ -709,14 +709,14 @@ function LiveChainView({enabled}){
           <div className="s">spot {fmt(spotN)} · {maxPain?((spotN-maxPain)>=0?'+':'')+(spotN-maxPain).toLocaleString('en-IN'):''}</div>
         </div>
         <div className="cstat">
-          <div className="k">IV skew (ATM)</div>
-          <div className={'v '+(ivSkew>2?'dn':ivSkew<-2?'ac':'')}>{ceIV||peIV?ivSkew.toFixed(1):'—'}</div>
-          <div className="s">{skewDesc}</div>
+          <div className="k">Support</div>
+          <div className="v dn">{fmt(maxOIPE.strike)}</div>
+          <div className="s">max PE OI · put wall</div>
         </div>
         <div className="cstat">
-          <div className="k">Levels</div>
-          <div className="v"><span className="dn">{fmt(maxOIPE.strike)}</span><span style={{color:'var(--ink4)',margin:'0 4px'}}>/</span><span className="up">{fmt(maxOICE.strike)}</span></div>
-          <div className="s">support / resist (max OI)</div>
+          <div className="k">Resistance</div>
+          <div className="v up">{fmt(maxOICE.strike)}</div>
+          <div className="s">max CE OI · call wall</div>
         </div>
       </div>
 
