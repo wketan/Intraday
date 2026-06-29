@@ -4118,6 +4118,23 @@ class Engine:
                         except Exception as e:
                             log.warning(f"  conductor diag capture failed: {e}")
 
+                    # ── MACD Scalper runs alongside Conductor — no strategy switch needed ──
+                    # Fires independently on MACD histogram zero-line crossover + EMA9/EMA21.
+                    # Only activates when Conductor is quiet (avoids duplicate signals on same bar).
+                    if not sig and strategy == "conductor":
+                        try:
+                            from macd_scalper import MACDScalper
+                            _ms = MACDScalper.analyze(df, symbol=name)
+                            if _ms:
+                                sig = _ms
+                                _ind = sig.get("indicators", {})
+                                log.info(f"⚡ {name} MACD Scalper: {sig['direction']} "
+                                         f"hist {_ind.get('macd_hist_prev'):+.1f}→{_ind.get('macd_hist'):+.1f}  "
+                                         f"EMA9={_ind.get('ema9'):.0f}/{_ind.get('ema21'):.0f}  "
+                                         f"RSI={_ind.get('rsi'):.0f}")
+                        except Exception as _mse:
+                            log.warning(f"  MACD Scalper error: {_mse}")
+
                     if not sig:
                         # Either too few bars OR analyzer returned None due to a blocked
                         # time window or hard time-gate (post-14:50). Track the window hits.
