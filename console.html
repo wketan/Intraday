@@ -435,7 +435,7 @@ html,body,button,input{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',s
 /* Settings modal (reuse .setup/.scard classes) */
 .settings-disconnect{background:transparent!important;border:1px solid rgba(176,58,46,0.40)!important;color:#B03A2E!important;}
 /* Big numbers: Palatino */
-.pxbig,.kpi .v{font-family:Palatino,'Book Antiqua',Georgia,serif!important;font-weight:normal!important;}
+.pxbig,.kpi .v,.cstat .v,.chain-tbl td.str-c,.chain-tbl td.ltp-ce,.chain-tbl td.ltp-pe{font-family:Palatino,'Book Antiqua',Georgia,serif!important;font-weight:normal!important;}
 /* Signals table chips */
 .chip.long{background:rgba(61,104,72,0.12)!important;color:var(--up)!important;border-radius:2px!important;}
 .chip.short{background:rgba(176,58,46,0.10)!important;color:var(--dn)!important;border-radius:2px!important;}
@@ -725,8 +725,8 @@ function LiveChainView({enabled}){
         <div className="lbl" style={{marginBottom:10}}>Option to watch</div>
         {recDir!=='NEUTRAL'&&recOpt
           ?<div style={{display:'flex',alignItems:'center',gap:14,flexWrap:'wrap',marginBottom:8}}>
-              <span style={{fontFamily:'var(--mono)',fontSize:22,fontWeight:800,letterSpacing:'-.03em',lineHeight:1,color:recDir==='LONG'?'var(--up)':'var(--dn)'}}>{fmt(recStrike)} {recType}</span>
-              <span style={{fontFamily:'var(--mono)',fontSize:18,fontWeight:800,letterSpacing:'-.03em',lineHeight:1,color:'var(--ink)'}}>₹{(+recOpt.ltp||0).toFixed(1)}</span>
+              <span style={{fontFamily:"Palatino,'Book Antiqua',Georgia,serif",fontSize:22,fontWeight:'normal',letterSpacing:'-.04em',lineHeight:.9,color:recDir==='LONG'?'var(--up)':'var(--dn)'}}>{fmt(recStrike)} {recType}</span>
+              <span style={{fontFamily:"Palatino,'Book Antiqua',Georgia,serif",fontSize:18,fontWeight:'normal',letterSpacing:'-.04em',lineHeight:.9,color:'var(--ink)'}}>₹{(+recOpt.ltp||0).toFixed(1)}</span>
               {(+recOpt.iv||+recOpt.iv_raw)>0&&<span style={{fontFamily:'var(--mono)',fontSize:11,letterSpacing:'.08em',textTransform:'uppercase',color:'var(--lime)',background:'var(--lime-soft)',borderRadius:4,padding:'2px 8px'}}>IV {(+(recOpt.iv||recOpt.iv_raw)||0).toFixed(1)}</span>}
             </div>
           :<div style={{fontFamily:'var(--mono)',fontSize:13,color:'var(--ink2)',marginBottom:8}}>No clear bias · watch for PCR move</div>}
@@ -740,7 +740,7 @@ function LiveChainView({enabled}){
           <div key={i} style={{display:'flex',alignItems:'flex-start',gap:10,padding:'9px 0',borderBottom:'1px solid var(--line2)'}}>
             <span style={{fontFamily:'var(--mono)',fontSize:9,fontWeight:700,letterSpacing:'.06em',textTransform:'uppercase',whiteSpace:'nowrap',borderRadius:4,padding:'3px 7px',background:cls==='up'?'var(--up-soft)':'var(--dn-soft)',color:cls==='up'?'var(--up)':'var(--dn)',flexShrink:0}}>{tag}</span>
             <div>
-              <div style={{fontFamily:'var(--mono)',fontSize:14,fontWeight:800,letterSpacing:'-.03em',lineHeight:1,color:'var(--ink)'}}>{fmt(a.strike)} {a.type} &nbsp;<span style={{color:a.delta>0?'var(--up)':'var(--dn)'}}>{a.delta>0?'+':''}{fmtK(a.delta)}</span></div>
+              <div style={{fontFamily:"Palatino,'Book Antiqua',Georgia,serif",fontSize:14,fontWeight:'normal',letterSpacing:'-.04em',lineHeight:.9,color:'var(--ink)'}}>{fmt(a.strike)} {a.type} &nbsp;<span style={{color:a.delta>0?'var(--up)':'var(--dn)'}}>{a.delta>0?'+':''}{fmtK(a.delta)}</span></div>
               <div style={{fontFamily:'var(--mono)',fontSize:10,color:'var(--ink3)',marginTop:3}}>{desc}</div>
             </div>
           </div>);})}
