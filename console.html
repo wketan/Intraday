@@ -927,7 +927,7 @@ function App(){
   const candleData=usePoll('/api/historical/BANKNIFTY?days=2&interval=FIVE_MINUTE',45000,!needsSetup);
   const [busy,setBusy]=useState(false);
 
-  const todayCandles=useMemo(()=>{const arr=(candleData&&candleData.candles)||[];const t=todayISO();const todays=arr.filter(c=>(c.t||'').slice(0,10)===t);return todays.length>=2?todays:arr.slice(-78);},[candleData]);
+  const todayCandles=useMemo(()=>{const arr=(candleData&&candleData.candles)||[];const t=todayISO();return arr.filter(c=>(c.t||'').slice(0,10)===t);},[candleData]);
   const eng=!status?'idle':(status.running?'live':'off');
   const open=(status&&status.open_signals)||[];const alerts=(status&&status.alerts)||[];
   const bnf=(status&&status.signals&&status.signals.BANKNIFTY)||null;
@@ -984,7 +984,7 @@ function App(){
 
   const chartCard=(<section className="panel hud g-chart"><div className="head"><span className="t"><b>//</b> BANKNIFTY · 5-MIN</span><span className="r"><span className="live-tag"><span className="d"/>LIVE</span></span></div>
     <div className="cstrip"><span className={'pxbig '+((bnfLtp.pct||0)>=0?'up':'dn')}>{bnfLtp.ltp?(+bnfLtp.ltp).toLocaleString('en-IN'):'—'}</span>
-      {bnfLtp.pct!=null&&<span className={'pxd '+((bnfLtp.pct||0)>=0?'up':'dn')}>{(bnfLtp.pct>=0?'+':'')}{(+bnfLtp.pct).toFixed(2)}%</span>}<span className="pxm">{todayCandles.length} candles today</span></div>
+      {bnfLtp.pct!=null&&<span className={'pxd '+((bnfLtp.pct||0)>=0?'up':'dn')}>{(bnfLtp.pct>=0?'+':'')}{(+bnfLtp.pct).toFixed(2)}%</span>}<span className="pxm">{todayCandles.length>0?todayCandles.length+' candles today':'waiting for first candle'}</span></div>
     <CandleChart candles={todayCandles} ltp={bnfLtp.ltp}/></section>);
 
   const openCard=(<section className="panel g12"><div className="head"><span className="t"><b>//</b> Open positions</span><span className="r lbl">{open.length}</span></div>
