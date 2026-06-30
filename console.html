@@ -580,8 +580,9 @@ function CandleChart({candles,ltp}){
   // so all sizes are set ~2.3x larger than they'd be for desktop-only
   const SLOTS=75; // 9:15 → 15:25 = 75 five-min slots
   const W=880,H=320,pT=30,pB=36,pL=10,pR=80;
-  const hi=Math.max(...disp.map(c=>c.h)),lo=Math.min(...disp.map(c=>c.l));
-  const pad=(hi-lo)*0.06||1,mx=hi+pad,mn=lo-pad,rng=mx-mn||1;
+  const ltpN=ltp?+ltp:null;
+  const hi=Math.max(...disp.map(c=>c.h),ltpN||0),lo=Math.min(...disp.map(c=>c.l),ltpN||Infinity);
+  const pad=(hi-lo)*0.08||1,mx=hi+pad,mn=lo-pad,rng=mx-mn||1;
   const iw=(W-pL-pR)/SLOTS,bw=Math.max(2,Math.min(14,iw*0.72));
   const Y=v=>pT+(1-(v-mn)/rng)*(H-pT-pB);
   const slotOf=t=>{const s=(t||'').slice(11,16)||t;const[h,m]=(s||'00:00').split(':').map(Number);return Math.round((h*60+m-555)/5);};
