@@ -72,6 +72,7 @@ from flask import Flask, jsonify, request as flask_request, send_file
 
 from SmartApi import SmartConnect
 import pyotp
+from options_intel import OptionsIntel
 
 # ═══════════════════════════════════════════════════════════════════
 # CONFIG
@@ -4348,6 +4349,52 @@ class Engine:
                                      f"[OI_shift={oi_shift} atm_ce={atm_ce_d.get('velocity','?')} atm_pe={atm_pe_d.get('velocity','?')}]")
 
                     # ════════════════════════════════════════════════════════
+                    # STEP 1c: OptionsIntel composite gate
+                    # Six signals (PCR, OI velocity, IV skew, OI wall, GEX,
+                    # max pain) scored against the proposed direction.
+                    # BLOCK = options market strongly contradicts direction;
+                    # skip saving the signal this cycle.
+                    # ════════════════════════════════════════════════════════
+                    _oi_intel = None
+                    if chain_anal:
+                        try:
+                            _expiry = (opt or {}).get("expiry", "")
+                            _oi_intel = OptionsIntel.score(
+                                chain_analytics=chain_anal,
+                                chain_raw=chain,
+                                spot=sig.get("price", 0),
+                                direction=sig.get("direction", "LONG"),
+                                expiry=_expiry,
+                                instrument=name,
+                            )
+                            sig["intel"] = _oi_intel
+                            log.info(
+                                f"  {name} OptionsIntel: {_oi_intel['summary']}"
+                            )
+                            if _oi_intel["gate"] == "BLOCK":
+                                log.warning(
+                                    f"  OptionsIntel BLOCK {name} {sig.get('direction')} — "
+                                    f"composite={_oi_intel['composite']:+.3f} contradicts direction. "
+                                    f"Signal suppressed this cycle."
+                                )
+                                self._prev[name] = {
+                                    "instrument": name, "signal": sig,
+                                    "option": opt, "chain_analytics": chain_anal,
+                                }
+                                continue
+                            elif _oi_intel["confidence_delta"] != 0:
+                                sig["confidence"] = min(95, max(10,
+                                    sig["confidence"] + _oi_intel["confidence_delta"]
+                                ))
+                                sig.setdefault("reasons", []).append(
+                                    f"OptionsIntel {_oi_intel['gate']} "
+                                    f"({_oi_intel['confidence_delta']:+d}pts, "
+                                    f"composite={_oi_intel['composite']:+.2f})"
+                                )
+                        except Exception as _ie:
+                            log.warning(f"  OptionsIntel error for {name}: {_ie}")
+
+                    # ════════════════════════════════════════════════════════
                     # STEP 2: Always update self.latest with real option data
                     # (dashboard polls this; must reflect current scan state)
                     # ════════════════════════════════════════════════════════
@@ -4357,6 +4404,7 @@ class Engine:
                         "instrument": name, "lot_size": inst["lot_size"],
                         "signal": sig, "option": opt,
                         "timing": timing, "chain_analytics": chain_anal,
+                        "options_intel": _oi_intel,
                         "updated_at": now_ist_str,
                         # Separate timestamp for when the option chain was last fetched
                         # (option prices in 'opt' correspond to this time, not now)

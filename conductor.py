@@ -313,9 +313,13 @@ class Conductor:
             pcr = float(ca.get("pcr") or 1.0)
             iv_skew = float(ca.get("iv_skew") or 0)
             oi_shift = str(ca.get("oi_shift_signal") or "NONE")
-            # Bullish flow: PCR < 0.9 + IV skew negative (call premium) OR CE_UNWIND/PE_BUILD
-            bullish_flow = (pcr < 0.9 and iv_skew < 0) or oi_shift in ("CE_UNWIND_PE_BUILD", "PE_ROLL_BEARISH_UP")
-            bearish_flow = (pcr > 1.1 and iv_skew > 0) or oi_shift in ("PE_UNWIND_CE_BUILD", "CE_ROLL_BULLISH_DOWN")
+            # Bullish flow: low PCR + call premium skew, OR OI shift signals bullish
+            # CE_ROLL_BULLISH = calls being placed near ATM (bullish)
+            # PE_BUILD = fresh put writing = support forming (bullish for underlying)
+            bullish_flow = (pcr < 0.9 and iv_skew < 0) or oi_shift in ("CE_ROLL_BULLISH", "PE_BUILD")
+            # PE_ROLL_BEARISH = puts being placed near ATM (bearish)
+            # CE_BUILD = fresh call writing = resistance forming (bearish for underlying)
+            bearish_flow = (pcr > 1.1 and iv_skew > 0) or oi_shift in ("PE_ROLL_BEARISH", "CE_BUILD")
             # Note: "bullish flow for LONGS" means underlying going UP, but
             # bearish flow can also support a SHORT (i.e., flow_vote=-1).
             if bullish_flow: flow_vote = +1; flow_note = f"PCR {pcr:.2f}, skew {iv_skew:+.1f}, shift {oi_shift}"
