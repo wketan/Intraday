@@ -32,6 +32,7 @@ COPY signal_reverter.py .
 COPY signal_nifty_regime.py .
 COPY signal_patterns.py .
 COPY conductor.py .
+COPY options_intel.py .
 COPY regime.py .
 COPY events.json .
 COPY index.html .
