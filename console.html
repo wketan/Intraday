@@ -139,6 +139,11 @@ button{font-family:inherit;cursor:pointer;}input{font-family:inherit;}
 .tab{appearance:none;border:0;border-bottom:2px solid transparent;background:transparent;color:var(--ink3);font-family:var(--mono);font-size:12px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;padding:10px 18px;margin-bottom:-1px;transition:all .18s var(--e);}
 .tab:hover{color:var(--ink);}
 .tab.on{color:var(--ink);border-bottom-color:var(--lime);}
+.mkt-cd{display:flex;align-items:center;justify-content:center;gap:8px;padding:4px 0 12px;font-family:var(--mono);font-size:11px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;}
+.mkt-cd .dot{width:6px;height:6px;border-radius:50%;flex-shrink:0;}
+.mkt-cd .cdtime{font-size:14px;font-weight:700;font-variant-numeric:tabular-nums;}
+.mkt-cd.open{color:var(--lime);}.mkt-cd.open .dot{background:var(--lime);}
+.mkt-cd.closed{color:var(--ink3);}.mkt-cd.closed .dot{background:var(--ink3);}
 
 /* panels + grid */
 .panel{position:relative;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:20px 22px;box-shadow:var(--sh);}
@@ -494,6 +499,32 @@ function apiFetch(path,opts={}){const headers=Object.assign({},opts.headers||{})
 async function apiJSON(path,opts){const r=await apiFetch(path,opts);if(!r.ok)throw new Error(r.status);return r.json();}
 const istNow=()=>{const n=new Date();return new Date(n.getTime()+((n.getTimezoneOffset()+330)*60000));};
 const todayISO=()=>istNow().toISOString().slice(0,10);
+
+const fmtCountdown=(()=>{
+  const pad=n=>String(n).padStart(2,"0");
+  const hms=s=>{const h=Math.floor(s/3600),m=Math.floor((s%3600)/60),r=s%60;return h?""+h+":"+pad(m)+":"+pad(r):pad(m)+":"+pad(r);};
+  const HOLS=new Set(["2026-01-26","2026-03-25","2026-04-14","2026-05-01","2026-06-19","2026-08-15","2026-08-27","2026-10-02","2026-10-21","2026-11-04","2026-11-05","2026-11-25","2026-12-25"]);
+  return ()=>{
+    const now=istNow(),h=now.getHours(),mi=now.getMinutes(),s=now.getSeconds(),wd=now.getDay();
+    const p=n=>String(n).padStart(2,"0");
+    const ds=now.getFullYear()+"-"+p(now.getMonth()+1)+"-"+p(now.getDate());
+    const nowS=h*3600+mi*60+s,OPEN=9*3600+15*60,CLOSE=15*3600+30*60;
+    const isTrade=wd>=1&&wd<=5&&!HOLS.has(ds);
+    if(isTrade&&nowS>=OPEN&&nowS<CLOSE)return {open:true,label:"Closes in",time:hms(CLOSE-nowS)};
+    if(isTrade&&nowS<OPEN)return {open:false,label:"Opens in",time:hms(OPEN-nowS)};
+    for(let d=1;d<=10;d++){
+      const nd=new Date(now);nd.setDate(now.getDate()+d);
+      const nwd=nd.getDay(),ns=nd.getFullYear()+"-"+p(nd.getMonth()+1)+"-"+p(nd.getDate());
+      if(nwd>=1&&nwd<=5&&!HOLS.has(ns)){
+        const no=new Date(nd);no.setHours(9,15,0,0);
+        const diff=Math.max(0,Math.round((no-now)/1000));
+        const dname=["Sun","Mon","Tue","Wed","Thu","Fri","Sat"][nwd];
+        return {open:false,label:"Opens "+dname,time:hms(diff)};
+      }
+    }
+    return null;
+  };
+})();
 const fmtDay=(iso)=>{if(!iso)return'';const m=String(iso).match(/(\d{4})-(\d{2})-(\d{2})/);if(!m)return String(iso);const mo=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][(+m[2])-1]||m[2];return (+m[3])+' '+mo;};
 const fmt=(n)=>Math.abs(Math.round(n||0)).toLocaleString('en-IN');
 const fmtK=(n)=>{n=Math.abs(+n||0);return n>=1e7?(n/1e7).toFixed(2)+'Cr':n>=1e5?(n/1e5).toFixed(2)+'L':n>=1e3?(n/1e3).toFixed(1)+'k':String(Math.round(n));};
@@ -914,6 +945,7 @@ function App(){
   const [showSettings,setShowSettings]=useState(false);
   const [settingsName,setSettingsName]=useState('');const [settingsCap,setSettingsCap]=useState(20000);
   useEffect(()=>{const t=()=>setClock(istNow().toTimeString().slice(0,8));t();const id=setInterval(t,1000);return()=>clearInterval(id);},[]);
+  const [countdown,setCountdown]=React.useState(null);useEffect(()=>{const t=()=>setCountdown(fmtCountdown());t();const id=setInterval(t,1000);return()=>clearInterval(id);},[]);
   useEffect(()=>{ if('serviceWorker' in navigator){ navigator.serviceWorker.register('sw.js').catch(()=>{}); } },[]);
   const [toast,setToast]=useState(null);
   const [notify,setNotify]=useState(()=>localStorage.getItem('ie-notify')==='1');
@@ -1039,6 +1071,7 @@ function App(){
         </div>
       </div>
       <div className="tabs">{NAV.map(([id,icon,label])=>(<button key={id} className={'tab '+(view===id?'on':'')} onClick={()=>setView(id)}>{label}{id==='signals'&&open.length>0&&<span className="sig-badge">{open.length}</span>}</button>))}</div>
+      {countdown&&<div className={"mkt-cd "+(countdown.open?"open":"closed")}><span className="dot"/><span className="cdlabel">{countdown.label}</span><span className="cdtime mono">{countdown.time}</span></div>}
 
       {view==='overview'&&<div className="grid">{kpis}{chartCard}<SignalCard sig={bnf} marketOpen={status&&status.market_open} market={status&&status.market}/>{open.length>0&&openCard}{signalsTable(true)}{open.length===0&&openCard}{gatesCard}{feedCard}</div>}
       {view==='signals'&&<div className="grid">{kpis}{signalsTable(true)}{openCard}{feedCard}</div>}
