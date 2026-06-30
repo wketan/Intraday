@@ -952,37 +952,21 @@ function App(){
   const engCall=async(p)=>{setBusy(true);try{await apiFetch(p,{method:'POST',body:'{}'});}catch(e){}finally{setBusy(false);}};
 
   /* ── new-trade alert system ── */
-  const ensureAudio=()=>{try{if(!audioRef.current){const AC=window.AudioContext||window.webkitAudioContext;if(AC)audioRef.current=new AC();}if(audioRef.current&&audioRef.current.state===’suspended’)audioRef.current.resume().catch(()=>{});}catch(e){}};
-  /* Resume audio context when app comes back to foreground (iOS suspends it) */
-  useEffect(()=>{const wake=()=>{if(audioRef.current&&audioRef.current.state===’suspended’)audioRef.current.resume().catch(()=>{});};document.addEventListener(‘visibilitychange’,wake);return()=>document.removeEventListener(‘visibilitychange’,wake);},[]);
-  const beep=()=>{
-    ensureAudio();
-    try{const c=audioRef.current;if(!c||c.state===’suspended’)return;
-      [0,0.18].forEach((t,i)=>{const o=c.createOscillator(),g=c.createGain();o.connect(g);g.connect(c.destination);o.type=’sine’;o.frequency.value=i?1175:880;const s=c.currentTime+t;g.gain.setValueAtTime(0.0001,s);g.gain.exponentialRampToValueAtTime(0.35,s+0.02);g.gain.exponentialRampToValueAtTime(0.0001,s+0.16);o.start(s);o.stop(s+0.18);});}catch(e){}};
-  /* Send a system notification — try SW first, fall back to direct Notification */
-  const pushNotif=(title,body)=>{
-    if(!(‘Notification’in window)||Notification.permission!==’granted’)return;
-    const opts={body,icon:’icon-192.png’,badge:’icon-192.png’,tag:’ie-signal’,renotify:true};
-    if(‘serviceWorker’in navigator){
-      navigator.serviceWorker.ready
-        .then(r=>r.showNotification(title,opts))
-        .catch(()=>{try{new Notification(title,opts);}catch(e){}});
-    }else{try{new Notification(title,opts);}catch(e){}}};
+  const ensureAudio=()=>{try{if(!audioRef.current){const AC=window.AudioContext||window.webkitAudioContext;if(AC)audioRef.current=new AC();}if(audioRef.current&&audioRef.current.state==='suspended')audioRef.current.resume();}catch(e){}};
+  const beep=()=>{try{const c=audioRef.current;if(!c)return;[0,0.18].forEach((t,i)=>{const o=c.createOscillator(),g=c.createGain();o.connect(g);g.connect(c.destination);o.type='sine';o.frequency.value=i?1175:880;const s=c.currentTime+t;g.gain.setValueAtTime(0.0001,s);g.gain.exponentialRampToValueAtTime(0.3,s+0.02);g.gain.exponentialRampToValueAtTime(0.0001,s+0.16);o.start(s);o.stop(s+0.18);});}catch(e){}};
   const showToast=(tt,tb,ms)=>{setToast({tt,tb});clearTimeout(toastT.current);toastT.current=setTimeout(()=>setToast(null),ms||6000);};
-  const fireAlert=(a)=>{const s=a.signal||{},o=a.option||{},dir=(s.direction||’’).toUpperCase();
-    const tt=`${a.instrument||’Signal’}${dir?(‘ ‘+dir):’’}${o.action?(‘ · ‘+o.action):’’}`;
-    const tb=`${humanizeOpt(o.symbol)||’’}${o.entry?(‘ @ ₹’+(+o.entry).toFixed(1)):’’}${(s.confidence_ai_adj||s.confidence)?(‘ · conf ‘+(s.confidence_ai_adj||s.confidence)):’’}`;
+  const fireAlert=(a)=>{const s=a.signal||{},o=a.option||{},dir=(s.direction||'').toUpperCase();
+    const tt=`${a.instrument||'Signal'}${dir?(' '+dir):''}${o.action?(' · '+o.action):''}`;
+    const tb=`${humanizeOpt(o.symbol)||''}${o.entry?(' @ ₹'+(+o.entry).toFixed(1)):''}${(s.confidence_ai_adj||s.confidence)?(' · conf '+(s.confidence_ai_adj||s.confidence)):''}`;
     showToast(tt,tb,7000);beep();try{navigator.vibrate&&navigator.vibrate([60,40,60]);}catch(e){}
-    if(notify)pushNotif(tt,tb);};
+    if(notify&&'serviceWorker'in navigator&&'Notification'in window&&Notification.permission==='granted'){
+      navigator.serviceWorker.ready.then(r=>r.showNotification(tt,{body:tb,icon:'icon-192.png',badge:'icon-192.png',tag:'ie-signal',renotify:true})).catch(()=>{});}};
   const toggleNotify=async()=>{ensureAudio();
-    if(notify){setNotify(false);localStorage.setItem(‘ie-notify’,’0’);showToast(‘Alerts off’,’’,2500);return;}
-    if(!(‘Notification’in window)){showToast(‘Not supported’,’This browser has no web notifications. Add this page to your home screen first.’,5000);return;}
-    let p=Notification.permission;if(p===’default’){try{p=await Notification.requestPermission();}catch(e){}}
-    if(p===’granted’){setNotify(true);localStorage.setItem(‘ie-notify’,’1’);
-      showToast(‘Alerts on’,’You will be pinged when a new trade fires’,4000);
-      /* fire a test notification so user confirms it works */
-      setTimeout(()=>pushNotif(‘Intraday Console ready’,’Notifications are on. You will hear a sound + see this when a signal fires.’),900);}
-    else{showToast(‘Blocked’,’Enable in iOS Settings → Safari/this app → Notifications, then tap the bell again.’,6000);}};
+    if(notify){setNotify(false);localStorage.setItem('ie-notify','0');showToast('Alerts off','',2500);return;}
+    if(!('Notification'in window)){showToast('Not supported','This browser has no notifications',4000);return;}
+    let p=Notification.permission;if(p==='default'){try{p=await Notification.requestPermission();}catch(e){}}
+    if(p==='granted'){setNotify(true);localStorage.setItem('ie-notify','1');showToast('Alerts on','You’ll be pinged when a new trade is found',4000);}
+    else{showToast('Notifications blocked','Enable in iOS Settings → this app → Notifications',5500);}};
   useEffect(()=>{const top=alerts&&alerts[0];const id=top&&(top.id!=null?top.id:top.iso_ts);if(id==null)return;
     if(lastAlert.current===undefined){lastAlert.current=id;return;}
     if(id!==lastAlert.current){lastAlert.current=id;fireAlert(top);}},[alerts]);
