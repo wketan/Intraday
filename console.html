@@ -145,7 +145,7 @@ button{font-family:inherit;cursor:pointer;}input{font-family:inherit;}
 .mkt-cd .cdlabel{line-height:1;}
 .mkt-cd .cdtime{font-size:14px;font-weight:700;font-variant-numeric:tabular-nums;line-height:1;}
 .mkt-bar{height:4px;background:color-mix(in srgb,var(--ink3) 28%,transparent);border-radius:2px;overflow:hidden;position:relative;}
-.mkt-bar-fill{position:absolute;right:0;top:0;height:100%;border-radius:2px;transition:width 1s linear;overflow:hidden;}
+.mkt-bar-fill{position:absolute;left:0;top:0;height:100%;border-radius:2px;transition:width 1s linear;overflow:hidden;}
 .mkt-bar-fill::after{content:"";position:absolute;top:-50%;left:160%;width:60%;height:200%;background:rgba(255,255,255,0.35);transform:skewX(-20deg);animation:mktshine 3s ease-in-out infinite;}
 @keyframes mktshine{0%{left:160%;}100%{left:-150%;}}
 .mkt-cd.open{color:var(--lime);}.mkt-cd.open .dot{background:var(--lime);}
