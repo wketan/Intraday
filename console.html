@@ -178,16 +178,19 @@ button{font-family:inherit;cursor:pointer;}input{font-family:inherit;}
 .cstrip .pxm{font-family:var(--mono);font-size:11px;color:var(--ink3);}
 
 /* live signal */
-.sig-head{display:flex;align-items:center;gap:12px;margin-bottom:18px;}
-.dirbadge{display:inline-flex;align-items:center;gap:8px;font-family:var(--mono);font-weight:800;font-size:15px;letter-spacing:.02em;padding:10px 14px;border-radius:8px;}
-.dirbadge.long{background:var(--up-soft);color:var(--up);box-shadow:0 0 26px -8px var(--lime-gl);}
-.dirbadge.short{background:var(--dn-soft);color:var(--dn);box-shadow:0 0 26px -8px var(--dn-gl);}
-.dirbadge svg{width:16px;height:16px;}
-.sig-inst{font-size:18px;font-weight:700;letter-spacing:-.01em;}
-.sig-sub{font-family:var(--mono);font-size:10px;color:var(--ink3);margin-top:3px;letter-spacing:.03em;}
-.confwrap{margin-left:auto;text-align:right;}
-.confwrap .cv{font-family:var(--mono);font-size:34px;font-weight:800;line-height:1;color:var(--lime);}
-.confwrap .cl{font-family:var(--mono);font-size:8.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink3);margin-top:5px;}
+.sig-head{margin-bottom:18px;}
+.sig-row-top{display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin-bottom:10px;}
+.sig-row-bot{display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
+.sig-sub-wrap{display:flex;flex-direction:column;gap:5px;min-width:0;}
+.dirbadge{display:inline-flex;align-items:center;gap:6px;font-family:var(--mono);font-weight:800;font-size:13px;letter-spacing:.05em;padding:5px 10px;border-radius:6px;flex-shrink:0;}
+.dirbadge.long{background:var(--up-soft);color:var(--up);}
+.dirbadge.short{background:var(--dn-soft);color:var(--dn);}
+.dirbadge svg{width:14px;height:14px;}
+.sig-inst{font-size:20px;font-weight:700;letter-spacing:-.01em;}
+.sig-sub{font-family:var(--mono);font-size:10px;color:var(--ink3);letter-spacing:.03em;}
+.confwrap{text-align:right;flex-shrink:0;}
+.confwrap .cv{font-size:36px;line-height:1;color:var(--lime);}
+.confwrap .cl{font-family:var(--mono);font-size:8.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink3);margin-top:3px;}
 .verdict{display:inline-block;font-family:var(--mono);font-size:9.5px;font-weight:700;letter-spacing:.06em;padding:4px 8px;border-radius:5px;margin-left:9px;}
 .verdict.take{background:var(--up-soft);color:var(--up);}.verdict.skip{background:var(--dn-soft);color:var(--dn);}.verdict.watch{background:var(--warn-soft);color:var(--warn);}
 .stalebadge{display:inline-block;font-family:var(--mono);font-size:9px;font-weight:800;letter-spacing:.08em;color:#1a1206;background:var(--dn);padding:2px 6px;border-radius:5px;margin-right:7px;vertical-align:middle;}
@@ -619,12 +622,24 @@ function SignalCard({sig,marketOpen,market}){
   const long=(s.direction||'').toUpperCase()==='LONG';const conf=s.confidence_ai_adj||s.confidence||0;
   const v=(s.v2_diag&&s.v2_diag.votes)||{};const lenses=[['trend','Trend'],['momentum','Momntm'],['pattern','Pattrn'],['structure','Struct'],['flow','Flow']];
   const verdict=ai.verdict||(s.v2_diag&&s.v2_diag.verdict)||'';
-  return(<section className={'panel hud g-sig'+(stale?' is-stale':'')}><div className="head"><span className="t"><b>//</b> Live signal</span><span className="r mono" style={{fontSize:'10px',color:'var(--ink3)'}}>{stale&&<span className="stalebadge">STALE</span>}{dstr?(dstr+' · '):''}{sig.updated_at||s.timestamp||''} IST</span></div>
-    {stale&&<div className="stalebar">⚠ Prior-day signal ({dstr}) — not today's. {closed?closedLabel:'No live setup yet today.'}</div>}
-    <div className="sig-head"><span className={'dirbadge '+(long?'long':'short')}><Ico d={long?I.up:I.down}/>{s.direction}</span>
-      <div><div className="sig-inst">{sig.instrument||'BANKNIFTY'}{verdict&&<span className={'verdict '+verdictClass(verdict)}>{verdict}</span>}</div>
-        <div className="sig-sub">{(s.strategy||'conductor').toUpperCase()} · score {s.v2_score||0}/5 · R:R {(s.risk_reward||o.rr||0).toFixed(1)}</div></div>
-      <div className="confwrap"><div className="cv mono">{conf}</div><div className="cl">Conf</div></div></div>
+  const tsRaw=sig.updated_at||s.timestamp||'';
+  const tsDate=tsRaw.slice(0,10);const todayIso=new Date().toISOString().slice(0,10);
+  const tsTime=tsRaw.slice(11,16)||tsRaw;const showDate=tsDate&&tsDate!==todayIso;
+  return(<section className={'panel hud g-sig'+(stale?' is-stale':'')}><div className="head"><span className="t"><b>//</b> Live signal</span><span className="r mono" style={{fontSize:'10px',color:'var(--ink3)'}}>{stale&&<span className="stalebadge">STALE</span>}{showDate?(fmtDay(tsDate)+' · '):''}{tsTime} IST</span></div>
+    {stale&&<div className="stalebar">⚠ Prior-day signal ({dstr||fmtDay(tsDate)||'prior day'}) — not today's. {closed?closedLabel:'No live setup yet today.'}</div>}
+    <div className="sig-head">
+      <div className="sig-row-top">
+        <div className="sig-inst">{sig.instrument||'BANKNIFTY'}</div>
+        <div className="confwrap"><div className="cv">{conf}</div><div className="cl">Conf</div></div>
+      </div>
+      <div className="sig-row-bot">
+        <span className={'dirbadge '+(long?'long':'short')}><Ico d={long?I.up:I.down}/>{s.direction}</span>
+        <div className="sig-sub-wrap">
+          {verdict&&<span className={'verdict '+verdictClass(verdict)}>{verdict}</span>}
+          <div className="sig-sub">{(s.strategy||'conductor').toUpperCase()} · score {s.v2_score||0}/5 · R:R {(s.risk_reward||o.rr||0).toFixed(1)}</div>
+        </div>
+      </div>
+    </div>
     {o.symbol&&<div className="ophead">
       <span className="opttag">{o.action||('BUY '+(o.type||''))}</span><span className="opname">{humanizeOpt(o.symbol)}</span>
       <span className="opmeta">{(o.lots||1)+'×'+(o.lot_size||0)+' = '+(o.qty||((o.lots||0)*(o.lot_size||0)))+' qty'}{o.delta!=null?(' · Δ '+(+o.delta).toFixed(2)):''}{s.entry?(' · idx '+(+s.entry).toFixed(0)+'→'+(s.target1?(+s.target1).toFixed(0):'—')):''}</span></div>}
