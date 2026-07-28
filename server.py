@@ -833,7 +833,7 @@ def init_db():
     """)
     # Migrate existing swing_positions table if needed
     sw_cols = {r[1] for r in c.execute("PRAGMA table_info(swing_positions)").fetchall()}
-    for col_decl in [("last_ai_decision","TEXT"),("last_ai_reasoning","TEXT"),("last_ai_ts","TEXT"),("source","TEXT"),("hold_days","INTEGER")]:
+    for col_decl in [("last_ai_decision","TEXT"),("last_ai_reasoning","TEXT"),("last_ai_ts","TEXT"),("source","TEXT"),("hold_days","INTEGER"),("exit_reason","TEXT")]:
         col, typ = col_decl
         if col not in sw_cols:
             try: c.execute(f"ALTER TABLE swing_positions ADD COLUMN {col} {typ}")
@@ -5190,8 +5190,14 @@ def swing_pos_save(data):
         data.get("lot_size"), data.get("lots",1), data.get("capital"),
         data.get("source","AUTO"), reas, ind,
     )
-    result = db_exec(q, params)
-    return result
+    # db_exec returns None for INSERTs — open a connection directly so the
+    # promised row id is actually returned (mirrors save_signal).
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute(q, params)
+    row_id = c.lastrowid
+    conn.commit(); conn.close()
+    return row_id
 
 def swing_pos_list(status=None):
     if status:
@@ -5458,6 +5464,12 @@ class SwingEngine:
                 now = datetime.now(IST)
                 if 9 <= now.hour < 15 or (now.hour == 15 and now.minute < 30):
                     self._scan_all()
+                    # Paper-position outcome tracking (SL/T1/T2/max-hold) —
+                    # also refreshes live P&L for the app's Swing tab.
+                    try:
+                        self._track_paper_outcomes()
+                    except Exception as e:
+                        log.warning(f"[Swing] paper outcome pass failed: {e}")
                     # Periodic AI exit check on open positions
                     mins_since = (now - self._last_exit_check).total_seconds() / 60
                     if mins_since >= self.EXIT_RECHECK_MIN:
@@ -5534,6 +5546,199 @@ class SwingEngine:
                 if _key not in self._slack_sent:
                     self._slack_sent.add(_key)
                     SlackAlert.send(self._format_slack(name, sig, opt))
+            # ── Paper-track every alerted swing signal ─────────────────
+            # A signal that is never recorded can never be judged. Each
+            # alert opens ONE paper position (deduped against an existing
+            # OPEN one for the same instrument+direction); the outcome
+            # tracker closes it on SL / T1 / T2 / max-hold and reports
+            # what actually happened.
+            try:
+                self._open_paper_position(name, info, sig, opt)
+            except Exception as e:
+                log.warning(f"[Swing] paper-open failed {name}: {e}")
+
+    # ── Paper tracking of alerted signals ────────────────────────────
+    # Every Slack-alerted swing signal becomes ONE paper position so the
+    # outcome is verifiable: after N days you can see whether it actually
+    # made money instead of wondering. Closed on SL / T1 / T2 / max-hold
+    # by _track_paper_outcomes(), with a Slack outcome ping.
+
+    @staticmethod
+    def _paper_max_hold_days():
+        try:
+            return max(1, int(os.environ.get("SWING_PAPER_MAX_HOLD_DAYS", "5")))
+        except Exception:
+            return 5
+
+    def _open_paper_position(self, name, info, sig, opt):
+        """Insert an AUTO_PAPER swing position for an alerted signal, unless
+        an OPEN one for the same instrument+direction already exists."""
+        existing = db_exec(
+            "SELECT id FROM swing_positions WHERE status='OPEN' AND instrument=? "
+            "AND direction=? AND source='AUTO_PAPER' LIMIT 1",
+            (name, sig["direction"]), fetchone=True)
+        if existing:
+            return None
+        pos = {
+            "instrument": name, "instrument_type": info.get("type", "STOCK"),
+            "direction": sig["direction"],
+            "spot_entry": sig.get("price"), "spot_sl": sig.get("sl"),
+            "spot_target1": sig.get("target1"), "spot_target2": sig.get("target2"),
+            "source": "AUTO_PAPER",
+            "reasons": sig.get("reasons", []),
+            "indicators": {
+                "confidence": sig.get("confidence"),
+                "rsi": sig.get("rsi"),
+                "risk_reward": sig.get("risk_reward"),
+                "hold_days_est": sig.get("hold_days_est"),
+                "max_hold_days": SwingEngine._paper_max_hold_days(),
+            },
+        }
+        if opt:
+            pos.update({
+                "option_symbol": opt.get("symbol"), "option_strike": opt.get("strike"),
+                "option_type": opt.get("type"), "option_expiry": opt.get("expiry"),
+                "option_token": opt.get("token"), "option_dte": opt.get("dte"),
+                "option_entry": opt.get("entry"), "option_sl": opt.get("sl"),
+                "option_target1": opt.get("target1"),
+                "lot_size": opt.get("lot_size"), "lots": 1,
+                "capital": opt.get("capital"),
+            })
+        row_id = swing_pos_save(pos)
+        log.info(f"[Swing] 📓 paper position #{row_id} opened: {name} {sig['direction']} "
+                 f"@ {sig.get('price')} (SL {sig.get('sl')} / T1 {sig.get('target1')}, "
+                 f"max hold {SwingEngine._paper_max_hold_days()}d)")
+        return row_id
+
+    def _track_paper_outcomes(self):
+        """Close AUTO_PAPER positions on SL / T1 / T2 / max-hold and report
+        the outcome to Slack. Runs every swing cycle (~30 min)."""
+        opens = [p for p in swing_pos_list(status="OPEN")
+                 if (p.get("source") or "") == "AUTO_PAPER"]
+        for pos in opens:
+            try:
+                self._track_one_paper(pos)
+                time.sleep(0.3)
+            except Exception as e:
+                log.warning(f"[Swing] paper-track err #{pos.get('id')}: {e}")
+
+    def _paper_live_quote(self, pos):
+        """Fetch spot LTP for a position's instrument. Returns float or None.
+        Also caches into self._paper_live for the /api/swing/results feed."""
+        name = pos["instrument"]
+        info = SWING_STOCKS.get(name)
+        if not info:
+            return None
+        token, exch, sym = self._resolve_token(name, info)
+        if not token:
+            return None
+        ltp_data = self.client.ltp(exch, sym, token)
+        ltp = (ltp_data or {}).get("ltp")
+        if not ltp:
+            return None
+        ltp = float(ltp)
+        if not hasattr(self, "_paper_live"):
+            self._paper_live = {}
+        favorable = (ltp - (pos.get("spot_entry") or ltp)) if pos.get("direction") == "LONG" \
+            else ((pos.get("spot_entry") or ltp) - ltp)
+        self._paper_live[pos["id"]] = {
+            "ltp": ltp,
+            "pnl_pct": round(favorable / max(float(pos.get("spot_entry") or 1), 0.01) * 100, 2),
+            "est_pnl_rs": self._paper_est_option_pnl(pos, favorable),
+            "ts": datetime.now(IST).strftime("%H:%M:%S"),
+        }
+        return ltp
+
+    @staticmethod
+    def _paper_est_option_pnl(pos, favorable_spot_move):
+        """Estimated rupee P&L of the BOUGHT option (CE for LONG / PE for
+        SHORT) at delta ≈ 0.5. Estimate only — flagged as such everywhere
+        it's shown. None when the position has no option leg."""
+        opt_entry = float(pos.get("option_entry") or 0)
+        if opt_entry <= 0:
+            return None
+        lot_size = int(pos.get("lot_size") or 0) or 1
+        lots = int(pos.get("lots") or 1)
+        est_exit = max(0.05 * opt_entry, opt_entry + favorable_spot_move * 0.5)
+        return round((est_exit - opt_entry) * lot_size * lots, 0)
+
+    def _track_one_paper(self, pos):
+        direction = pos.get("direction", "LONG")
+        entry = float(pos.get("spot_entry") or 0)
+        sl = float(pos.get("spot_sl") or 0)
+        t1 = float(pos.get("spot_target1") or 0)
+        t2 = float(pos.get("spot_target2") or 0)
+        if entry <= 0:
+            return
+        ltp = self._paper_live_quote(pos)
+        if ltp is None:
+            return
+
+        # Days held (calendar) + max-hold from the row's own snapshot
+        try:
+            d0 = datetime.strptime(pos.get("entry_date", ""), "%Y-%m-%d").date()
+            held = (datetime.now(IST).date() - d0).days
+        except Exception:
+            held = 0
+        try:
+            max_hold = int((json.loads(pos.get("indicators") or "{}") or {})
+                           .get("max_hold_days") or SwingEngine._paper_max_hold_days())
+        except Exception:
+            max_hold = SwingEngine._paper_max_hold_days()
+
+        exit_reason = None
+        if direction == "LONG":
+            if sl > 0 and ltp <= sl:      exit_reason = "SL_HIT"
+            elif t2 > 0 and ltp >= t2:    exit_reason = "T2_HIT"
+            elif t1 > 0 and ltp >= t1:    exit_reason = "T1_HIT"
+        else:
+            if sl > 0 and ltp >= sl:      exit_reason = "SL_HIT"
+            elif t2 > 0 and ltp <= t2:    exit_reason = "T2_HIT"
+            elif t1 > 0 and ltp <= t1:    exit_reason = "T1_HIT"
+        if exit_reason is None and held >= max_hold:
+            exit_reason = "MAX_HOLD"
+        if exit_reason is None:
+            return
+
+        favorable = (ltp - entry) if direction == "LONG" else (entry - ltp)
+        pnl_pct = round(favorable / entry * 100, 2)
+        est_rs = self._paper_est_option_pnl(pos, favorable)
+        result = "WIN" if favorable > 0 else "LOSS"
+        opt_entry = float(pos.get("option_entry") or 0)
+        est_opt_exit = (max(0.05 * opt_entry, opt_entry + favorable * 0.5)
+                        if opt_entry > 0 else None)
+        swing_pos_update(pos["id"], status="CLOSED",
+                         exit_date=datetime.now(IST).strftime("%Y-%m-%d"),
+                         exit_price=ltp,
+                         option_exit=(round(est_opt_exit, 2) if est_opt_exit else None),
+                         pnl_pct=pnl_pct,
+                         pnl_rupees=(est_rs if est_rs is not None else round(favorable, 0)),
+                         result=result, hold_days=held, exit_reason=exit_reason)
+        if hasattr(self, "_paper_live"):
+            self._paper_live.pop(pos["id"], None)
+
+        story = {
+            "SL_HIT": "stop-loss hit",
+            "T1_HIT": "target 1 hit",
+            "T2_HIT": "target 2 hit",
+            "MAX_HOLD": f"max hold ({max_hold}d) reached",
+        }[exit_reason]
+        emoji = "🎯" if exit_reason == "T2_HIT" else ("✅" if result == "WIN" else "❌")
+        log.info(f"[Swing] {emoji} paper #{pos['id']} {pos['instrument']} {direction} "
+                 f"CLOSED ({story}) after {held}d: {pnl_pct:+.1f}% spot"
+                 + (f", est ₹{est_rs:+,.0f}" if est_rs is not None else ""))
+        if os.environ.get("SWING_SLACK_ENABLED", "true").lower() == "true":
+            opt_line = ""
+            if opt_entry > 0 and est_opt_exit:
+                opt_line = (f"\n{pos.get('option_symbol')} est ₹{opt_entry:.1f} → "
+                            f"₹{est_opt_exit:.1f}  ·  est P&L ₹{est_rs:+,.0f} "
+                            f"_(delta-0.5 model, not a real fill)_")
+            SlackAlert.send(
+                f"{emoji} *Swing outcome: {pos['instrument']} {direction}* — "
+                f"{result} ({story})\n"
+                f"Held {held} day{'s' if held != 1 else ''}: "
+                f"₹{entry:,.1f} → ₹{ltp:,.1f} ({pnl_pct:+.1f}% spot)"
+                f"{opt_line}")
 
     def _pick_option(self, name, info, sig, spot):
         """Select swing option (monthly expiry, ≥15 DTE, ATM strike)."""
@@ -7039,6 +7244,67 @@ swing_engine = SwingEngine(engine.client)
 # ═══════════════════════════════════════════════════════════════════
 # SWING FLASK ROUTES
 # ═══════════════════════════════════════════════════════════════════
+@app.route("/api/swing/results")
+def api_swing_results():
+    """Swing paper-tracking feed for the app's Swing tab.
+
+    open[]   — OPEN AUTO_PAPER positions with live LTP / P&L (refreshed each
+               ~30-min swing cycle), days held, max hold, days remaining.
+    closed[] — most recent closed positions with result, exit_reason,
+               hold_days, pnl. ?days=N (default 30) window.
+    summary  — win/loss aggregate over the closed set.
+    """
+    try:
+        days = max(1, min(int(flask_request.args.get("days", 30)), 180))
+    except Exception:
+        days = 30
+    since = (datetime.now(IST) - timedelta(days=days)).strftime("%Y-%m-%d")
+    live = getattr(swing_engine, "_paper_live", {}) or {}
+    today = datetime.now(IST).date()
+
+    open_rows = []
+    for p in swing_pos_list(status="OPEN"):
+        if (p.get("source") or "") != "AUTO_PAPER":
+            continue
+        try:
+            d0 = datetime.strptime(p.get("entry_date", ""), "%Y-%m-%d").date()
+            held = (today - d0).days
+        except Exception:
+            held = 0
+        try:
+            max_hold = int((json.loads(p.get("indicators") or "{}") or {})
+                           .get("max_hold_days") or SwingEngine._paper_max_hold_days())
+        except Exception:
+            max_hold = SwingEngine._paper_max_hold_days()
+        lv = live.get(p["id"], {})
+        p["held_days"] = held
+        p["max_hold_days"] = max_hold
+        p["days_remaining"] = max(0, max_hold - held)
+        p["live_ltp"] = lv.get("ltp")
+        p["live_pnl_pct"] = lv.get("pnl_pct")
+        p["live_est_pnl_rs"] = lv.get("est_pnl_rs")
+        p["live_ts"] = lv.get("ts")
+        open_rows.append(p)
+
+    closed_raw = db_exec(
+        "SELECT * FROM swing_positions WHERE status='CLOSED' AND source='AUTO_PAPER' "
+        "AND COALESCE(exit_date, entry_date) >= ? ORDER BY id DESC LIMIT 100",
+        (since,), fetch=True) or []
+    closed = [dict(r) for r in closed_raw]
+
+    wins = [r for r in closed if r.get("result") == "WIN"]
+    pnls = [r.get("pnl_rupees") or 0 for r in closed]
+    summary = {
+        "total": len(closed), "wins": len(wins), "losses": len(closed) - len(wins),
+        "win_rate": round(len(wins) / len(closed) * 100, 1) if closed else 0,
+        "est_total_pnl": round(sum(pnls), 0),
+        "open_count": len(open_rows),
+        "window_days": days,
+    }
+    return jsonify({"open": open_rows, "closed": closed, "summary": summary,
+                    "time": datetime.now(IST).strftime("%H:%M:%S")})
+
+
 @app.route("/api/swing/status")
 def swing_status():
     """Current swing signals + open positions + performance."""

@@ -559,7 +559,8 @@ const I={grid:"M3 3h7v7H3zM14 3h7v7h-7zM14 14h7v7h-7zM3 14h7v7H3z",list:"M8 6h13
   moon:"M21 12.8A9 9 0 1111.2 3 7 7 0 0021 12.8z",check:"M20 6L9 17l-5-5",x:"M18 6L6 18M6 6l12 12",up:"M7 17L17 7M17 7H8M17 7v9",down:"M7 7l10 10M17 17H8M17 17V8",
   bell:"M18 8a6 6 0 10-12 0c0 7-3 9-3 9h18s-3-2-3-9M13.7 21a2 2 0 01-3.4 0",belloff:"M8.7 3A6 6 0 0118 8c0 2 .4 3.6 .9 4.8M18 17H3s3-2 3-9M1 1l22 22M13.7 21a2 2 0 01-3.4 0",
   gear:"M12 15a3 3 0 100-6 3 3 0 000 6zM12 2v2M12 20v2M4.2 4.2l1.4 1.4M18.4 18.4l1.4 1.4M2 12h2M20 12h2M4.2 19.8l1.4-1.4M18.4 5.6l1.4-1.4",
-  eye:"M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8zM12 9a3 3 0 100 6 3 3 0 000-6z"};
+  eye:"M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8zM12 9a3 3 0 100 6 3 3 0 000-6z",
+  trend:"M23 6l-9.5 9.5-5-5L1 18M17 6h6v6"};
 
 function Area({pts,color,h=120}){if(!pts||pts.length<2)return null;
   const W=560,H=h,vs=pts.map(p=>p.v),mn=Math.min(...vs,0),mx=Math.max(...vs,0),rng=(mx-mn)||1;
@@ -894,6 +895,75 @@ function PositionCard({p,idx}){
   </div>);
 }
 
+/* ── Swing tab ─────────────────────────────────────────────────────── */
+const swName=(n)=>String(n||'').replace(/_SW$/,'');
+const exitLabel=(r)=>({SL_HIT:'SL hit',T1_HIT:'T1 hit',T2_HIT:'T2 hit',MAX_HOLD:'Max hold'}[r]||r||'—');
+const parseInd=(p)=>{try{return JSON.parse(p.indicators||'{}')||{};}catch(e){return{};}};
+
+function SwingHoldBar({held,maxHold,remaining}){
+  const pct=Math.max(0,Math.min(100,maxHold>0?(held/maxHold)*100:0));
+  return(<div style={{margin:'12px 0 4px'}}>
+    <div style={{display:'flex',justifyContent:'space-between',marginBottom:6}}>
+      <span className="lbl">Hold · {held}d of {maxHold}d</span>
+      <span className="lbl" style={{color:remaining<=1?'var(--warn)':'var(--ink3)'}}>{remaining}d left</span></div>
+    <div className="mkt-bar"><div className="mkt-bar-fill" style={{width:pct+'%',background:'var(--lime)'}}/></div>
+  </div>);}
+
+function SwingOpenCard({p,idx}){
+  const ind=parseInd(p);
+  const long=(p.direction||'').toUpperCase()==='LONG';
+  const entry=+p.spot_entry||0,sl=+p.spot_sl||0,t1=+p.spot_target1||0;
+  const ltp=p.live_ltp!=null?+p.live_ltp:null;
+  const pnlPct=p.live_pnl_pct!=null?+p.live_pnl_pct:null;
+  const estRs=p.live_est_pnl_rs!=null?+p.live_est_pnl_rs:null;
+  const up=(pnlPct||0)>=0;
+  return(<div className="poscard">
+    <div className="pos-top"><span className="pos-idx">{String(idx+1).padStart(2,'0')}</span><span className="pos-lbl">Swing · paper</span>
+      <span className="pos-live"><span className="d"/>{p.live_ts?('LIVE · '+p.live_ts):'AWAITING QUOTE'}</span></div>
+    <div className="pos-name">{swName(p.instrument)} <span className="ot">{p.option_type||''}</span></div>
+    <div className="pos-meta">{long?'LONG':'SHORT'}{ind.confidence?(' · CONF '+ind.confidence):''} · ENTERED {fmtDay(p.entry_date)}{p.option_symbol?(' · '+humanizeOpt(p.option_symbol)):''}</div>
+    <SwingHoldBar held={p.held_days||0} maxHold={p.max_hold_days||5} remaining={p.days_remaining!=null?p.days_remaining:'—'}/>
+    <div className="legbar" style={{marginTop:12}}>
+      <div className="leg"><div className="k">Entry</div><div className="v">₹{entry?entry.toFixed(1):'—'}</div></div>
+      <div className="leg"><div className="k">Stop</div><div className="v dn">₹{sl?sl.toFixed(1):'—'}</div></div>
+      <div className="leg"><div className="k">Tgt 1</div><div className="v up">₹{t1?t1.toFixed(1):'—'}</div></div>
+      <div className="leg"><div className="k">Now</div><div className={'v '+(ltp!=null?(up?'up':'dn'):'')}>₹{ltp!=null?ltp.toFixed(1):'—'}</div></div></div>
+    <div className="pos-pnl">
+      <div><div className="k">P&amp;L · Unrealised</div>
+        <div className={'v '+(up?'up':'dn')}>{pnlPct!=null?((pnlPct>=0?'+':'−')+Math.abs(pnlPct).toFixed(1)+'%'):'—'}
+          {estRs!=null&&<span className={'pct '+(estRs>=0?'up':'dn')}>{estRs>=0?'+':'−'}₹{fmt(estRs)} est</span>}</div></div>
+      <span className="pos-stat" style={{color:'var(--lime)'}}><span className="d"/>OPEN</span></div>
+    {estRs!=null&&<div className="pos-note">Rupee figure is an estimate (delta-0.5 model on {humanizeOpt(p.option_symbol)||'the option'}), spot % is exact.</div>}
+  </div>);}
+
+function SwingTab({swing}){
+  const open=(swing&&swing.open)||[];
+  const closed=(swing&&swing.closed)||[];
+  const sum=(swing&&swing.summary)||{};
+  const pnlUp=(sum.est_total_pnl||0)>=0;
+  return(<>
+    <section className="panel g-kpi kpi"><div className="k">Open · paper</div><div className="v ac">{open.length}</div><div className="s">auto-tracked signals</div></section>
+    <section className="panel g-kpi kpi"><div className="k">Closed · {sum.window_days||30}d</div><div className="v">{sum.total||0}</div><div className="s">{sum.wins||0}W · {sum.losses||0}L</div></section>
+    <section className="panel g-kpi kpi"><div className="k">Win rate</div><div className="v">{(sum.win_rate||0).toFixed(1)}%</div><div className="s">swing paper trades</div></section>
+    <section className="panel g-kpi kpi"><div className="k">Est P&amp;L · {sum.window_days||30}d</div><div className={'v '+(pnlUp?'up':'dn')}>{pnlUp?'+':'−'}₹{fmt(sum.est_total_pnl)}</div><div className="s">delta-0.5 estimate</div></section>
+
+    <section className="panel g12"><div className="head"><span className="t"><b>//</b> Open swing positions</span><span className="r lbl">{open.length}</span></div>
+      {open.length===0&&<div className="empty" style={{padding:'26px 0'}}>No open swing positions · new alerts auto-track here</div>}
+      {open.map((p,i)=><SwingOpenCard key={p.id||i} p={p} idx={i}/>)}</section>
+
+    <section className="panel g12"><div className="head"><span className="t"><b>//</b> Swing outcomes</span><span className="r lbl">last {sum.window_days||30}d</span></div>
+      <div className="tbl"><div className="hr"><span>Exit</span><span>Instrument</span><span className="cs">Side</span><span className="cp">What happened</span><span className="r">P&amp;L</span></div>
+        {closed.length===0&&<div className="empty">No closed swing trades yet · outcomes land here after SL / target / max-hold</div>}
+        {closed.map((s,i)=>{const win=(s.result||'')==='WIN';const pnl=+s.pnl_rupees||0;const pct=s.pnl_pct!=null?+s.pnl_pct:null;
+          return(<div className="row" key={s.id||i} style={{animationDelay:(i*0.015)+'s'}}>
+            <span className="t">{fmtDay(s.exit_date)}</span>
+            <div className="ins"><div className="s">{swName(s.instrument)}</div><div className="c">{humanizeOpt(s.option_symbol)||('held '+(s.hold_days!=null?s.hold_days:'—')+'d')}</div></div>
+            <span className="cside"><span className={'chip '+((s.direction||'')==='LONG'?'long':'short')}>{s.direction||'—'}</span></span>
+            <span className="px cpx">{exitLabel(s.exit_reason)} · held <b>{s.hold_days!=null?s.hold_days:'—'}d</b>{s.exit_price?(' · out ₹'+(+s.exit_price).toFixed(1)):''}</span>
+            <span className={'pnl '+(win?'up':'dn')}>{pnl>=0?'+':'−'}₹{fmt(pnl)}<span className="st">{(s.result||'')+(pct!=null?(' · '+(pct>=0?'+':'')+pct.toFixed(1)+'%'):'')}</span></span>
+          </div>);})}</div></section>
+  </>);}
+
 function WakeLockBtn(){
   const [open,setOpen]=useState(false);
   const [mode,setMode]=useState(null); // null | '∞' | 15 | 30 | 60
@@ -966,6 +1036,8 @@ function App(){
   const hist=usePoll('/api/history?limit=50&date='+todayISO(),15000,!needsSetup);
   const metrics=usePoll('/api/metrics',15000,!needsSetup);
   const candleData=usePoll('/api/historical/BANKNIFTY?days=2&interval=FIVE_MINUTE',45000,!needsSetup);
+  const swing=usePoll('/api/swing/results?days=30',60000,!needsSetup);
+  const swingOpen=(swing&&swing.open&&swing.open.length)||0;
   const [busy,setBusy]=useState(false);
 
   const todayCandles=useMemo(()=>{const arr=(candleData&&candleData.candles)||[];const t=todayISO();return arr.filter(c=>(c.t||'').slice(0,10)===t);},[candleData]);
@@ -1015,7 +1087,7 @@ function App(){
 
   if(needsSetup)return <Setup onDone={()=>{setNeedsSetup(false);ensureAudio();}}/>;
   const day=istNow().toLocaleDateString('en-GB',{weekday:'short',day:'2-digit',month:'short'}).toUpperCase();
-  const NAV=[['overview',I.grid,'Overview'],['signals',I.list,'Signals'],['chain',I.layers,'Chain']];
+  const NAV=[['overview',I.grid,'Overview'],['signals',I.list,'Signals'],['swing',I.trend,'Swing'],['chain',I.layers,'Chain']];
 
   const kpis=(<>
     <section className="panel g-kpi kpi"><div className="k">Net P&amp;L</div><div className={'v '+(net>=0?'up':'dn')}>{net>=0?'+':'−'}₹{fmt(netCU)}</div><div className="s">{closed.length} closed · {open.length} open</div><div className="spark"><Area pts={equity} color={net>=0?'var(--up)':'var(--dn)'} h={42}/></div></section>
@@ -1055,7 +1127,7 @@ function App(){
   return(<div className="shell">
     {toast&&<div className="toast" onClick={()=>setToast(null)}><div className="tt">{toast.tt}</div>{toast.tb&&<div className="tb">{toast.tb}</div>}</div>}
     <nav className="rail"><div className="logo">I</div>
-      {NAV.map(([id,icon,label])=>(<button key={id} className={'rbtn '+(view===id?'on':'')} onClick={()=>setView(id)} aria-label={label} style={{position:'relative'}}><Ico d={icon}/><span className="tip">{label}</span><span className="blabel">{label}</span>{id==='signals'&&open.length>0&&<span className="sig-badge">{open.length}</span>}</button>))}
+      {NAV.map(([id,icon,label])=>(<button key={id} className={'rbtn '+(view===id?'on':'')} onClick={()=>setView(id)} aria-label={label} style={{position:'relative'}}><Ico d={icon}/><span className="tip">{label}</span><span className="blabel">{label}</span>{id==='signals'&&open.length>0&&<span className="sig-badge">{open.length}</span>}{id==='swing'&&swingOpen>0&&<span className="sig-badge">{swingOpen}</span>}</button>))}
       <div className="rspace"/>
       <button className="rbtn theme-rbtn" onClick={toggle} aria-label="Theme"><Ico d={theme==='dark'?I.sun:I.moon}/><span className="tip">{theme==='dark'?'Light':'Dark'}</span><span className="blabel">Theme</span></button>
       <div className={'estat '+eng} title={'Engine '+eng}><span className={'rdot '+eng}/><span className="blabel">{eng==='live'?'Live':eng==='off'?'Off':'···'}</span></div>
@@ -1079,11 +1151,12 @@ function App(){
           <button className="ib" onClick={()=>{setSettingsName(localStorage.getItem('ie-user')||'');setSettingsCap(+localStorage.getItem('ie-capital')||20000);setShowSettings(true);}} aria-label="Settings"><Ico d={I.gear}/></button></div>
         </div>
       </div>
-      <div className="tabs">{NAV.map(([id,icon,label])=>(<button key={id} className={'tab '+(view===id?'on':'')} onClick={()=>setView(id)}>{label}{id==='signals'&&open.length>0&&<span className="sig-badge">{open.length}</span>}</button>))}</div>
+      <div className="tabs">{NAV.map(([id,icon,label])=>(<button key={id} className={'tab '+(view===id?'on':'')} onClick={()=>setView(id)}>{label}{id==='signals'&&open.length>0&&<span className="sig-badge">{open.length}</span>}{id==='swing'&&swingOpen>0&&<span className="sig-badge">{swingOpen}</span>}</button>))}</div>
       {countdown&&<div className={"mkt-cd "+(countdown.open?"open":"closed")}><div className="mkt-cd-row"><span className="dot"/><span className="cdlabel">{countdown.label}</span><span className="cdtime mono">{countdown.time}</span></div><div className="mkt-bar"><div className="mkt-bar-fill" style={{width:(countdown.pct||0)+"%"}}/></div></div>}
 
       {view==='overview'&&<div className="grid">{kpis}{chartCard}<SignalCard sig={bnf} marketOpen={status&&status.market_open} market={status&&status.market}/>{open.length>0&&openCard}{signalsTable(true)}{open.length===0&&openCard}{gatesCard}{feedCard}</div>}
       {view==='signals'&&<div className="grid">{kpis}{signalsTable(true)}{openCard}{feedCard}</div>}
+      {view==='swing'&&<div className="grid"><SwingTab swing={swing}/></div>}
       {view==='chain'&&<div className="grid"><LiveChainView enabled={view==='chain'}/></div>}
     </main>
     {showSettings&&<div onClick={e=>{if(e.target===e.currentTarget)setShowSettings(false);}} style={{
