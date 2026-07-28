@@ -166,10 +166,14 @@ CONFIG = {
     "anthropic_cache_enabled": os.environ.get("ANTHROPIC_CACHE_ENABLED", "true").lower() == "true",
 
     # ── Strategy selector (Phase 2) ──────────────────────────────────────────
-    # "v1" = legacy 13-indicator heuristic scorer (default — proven, but unverified edge)
-    # "v2" = trend-momentum 3-of-4 confluence (research-backed, see PLAN_V2.md)
-    # Flip via env var on Railway — no code redeploy. Default v1 = zero risk to live.
-    "strategy":          os.environ.get("STRATEGY", "v1").lower(),
+    # "auto"      = regime router: ADX trend day → conductor, range day → reverter
+    #               (default — covers both regimes instead of starving one)
+    # "conductor" = 5-dim confluence only (the pre-router production setting)
+    # "v1" = legacy 13-indicator heuristic scorer (unverified edge)
+    # "v2" = trend-momentum 3-of-4 confluence (parked, anti-edge confirmed)
+    # Flip via env var on Railway — no code redeploy. NOTE: if STRATEGY is set
+    # explicitly on Railway it overrides this default; unset it to get "auto".
+    "strategy":          os.environ.get("STRATEGY", "auto").lower(),
     # When STRATEGY=v2 AND DRY_RUN_V2=true, signals fire to Slack (with [DRY RUN] tag)
     # and log lines, but are NOT saved to the signals table and DO NOT trigger
     # OptPicker / kill-switch / Layer B. Use to observe v2 signal quality live
@@ -216,8 +220,10 @@ PORT = int(os.environ.get("PORT", "5050"))
 # ═══════════════════════════════════════════════════════════════════
 INSTRUMENTS = {
     "NIFTY": {
+        # Lot 75 per NSE's Nov-2024 revision (matches conductor.py and
+        # SWING_STOCKS). Was 65, which skewed qty sizing and the Rs-profit gate.
         "symbol": "NIFTY", "token": "99926000", "exchange": "NSE",
-        "option_exchange": "NFO", "lot_size": 65, "strike_gap": 50,
+        "option_exchange": "NFO", "lot_size": 75, "strike_gap": 50,
         "expiry_prefix": "NIFTY", "expiry_day": 1, "expiry_type": "weekly",  # Tuesday weekly
     },
     "BANKNIFTY": {
@@ -226,8 +232,9 @@ INSTRUMENTS = {
         "expiry_prefix": "BANKNIFTY", "expiry_day": 1, "expiry_type": "monthly",  # Last Tuesday monthly
     },
     "FINNIFTY": {
+        # Lot 65 per NSE's Nov-2024 revision (matches conductor.py). Was 60.
         "symbol": "NIFTY FIN SERVICE", "token": "99926037", "exchange": "NSE",
-        "option_exchange": "NFO", "lot_size": 60, "strike_gap": 50,
+        "option_exchange": "NFO", "lot_size": 65, "strike_gap": 50,
         "expiry_prefix": "FINNIFTY", "expiry_day": 1, "expiry_type": "monthly",  # Last Tuesday monthly
     },
 }
@@ -241,7 +248,7 @@ SWING_STOCKS = {
     # ── Indices — swing uses monthly expiry ─────────────────────────
     "NIFTY_SW":     {"nse_sym":"Nifty 50",           "nse_fo":"NIFTY",      "exchange":"NSE","type":"INDEX","fo_eligible":True,"lot_size":75,  "strike_gap":50,  "token":"99926000"},  # NSE revised Jan-2026: 75 (weekly) – monthly still 75; kept as-is
     "BANKNIFTY_SW": {"nse_sym":"Nifty Bank",          "nse_fo":"BANKNIFTY",  "exchange":"NSE","type":"INDEX","fo_eligible":True,"lot_size":30,  "strike_gap":100, "token":"99926009"},
-    "FINNIFTY_SW":  {"nse_sym":"Nifty Fin Services",  "nse_fo":"FINNIFTY",   "exchange":"NSE","type":"INDEX","fo_eligible":True,"lot_size":60,  "strike_gap":50,  "token":"99926037"},
+    "FINNIFTY_SW":  {"nse_sym":"Nifty Fin Services",  "nse_fo":"FINNIFTY",   "exchange":"NSE","type":"INDEX","fo_eligible":True,"lot_size":65,  "strike_gap":50,  "token":"99926037"},
     # ── Nifty 50 stocks ─────────────────────────────────────────────
     # lot_size values verified against NSE F&O lot size circular (Jan 2026) via Dhan
     "RELIANCE":    {"nse_sym":"RELIANCE",   "nse_fo":"RELIANCE",   "exchange":"NSE","type":"STOCK","fo_eligible":True,"lot_size":500, "strike_gap":20},
@@ -846,6 +853,21 @@ def init_db():
         )
     """)
 
+    # ── gate_rejections (shadow log) ──────────────────────────────────
+    # Every signal the engine generated but did NOT alert, with the gate
+    # that killed it. After a couple of weeks this table answers "which
+    # gate is eating profitable signals" with data instead of guesses.
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS gate_rejections (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            ts TEXT NOT NULL, date TEXT NOT NULL,
+            instrument TEXT NOT NULL, gate TEXT NOT NULL,
+            direction TEXT, confidence INTEGER,
+            index_price REAL, detail TEXT
+        )
+    """)
+    c.execute("CREATE INDEX IF NOT EXISTS idx_gate_rej_date ON gate_rejections(date, gate)")
+
     conn.commit(); conn.close()
     log.info("📊 Database ready")
 
@@ -908,7 +930,9 @@ def hydrate_runtime_config():
             CONFIG[key] = v
     # Step 2: env-var override for strategy (if explicitly set, write through)
     env_strategy = os.environ.get("STRATEGY", "").strip().lower()
-    if env_strategy and env_strategy in ("v1", "v2", "conductor"):
+    if env_strategy and env_strategy in ("auto", "v1", "v2", "conductor", "scalper_v3",
+                                          "reverter", "nifty_windows", "deadzone_fade",
+                                          "patterns"):
         if CONFIG.get("strategy") != env_strategy:
             log.info(f"🛠️  STRATEGY env var override: {CONFIG.get('strategy')} → {env_strategy}")
             CONFIG["strategy"] = env_strategy
@@ -1898,11 +1922,63 @@ class SignalGen:
     # that Conductor was crashing on every call and v1 was running instead.
     last_dispatch: dict = {"strategy": None, "actually_ran": None, "error": None, "ts": None}
 
+    @staticmethod
+    def classify_regime(df):
+        """Classify the CURRENT intraday regime as 'trend' or 'range' using
+        ADX(14) on the 5-min bars, with the VWAP-cross count as a tiebreak.
+
+        Thresholds (env-tunable, defaults from practitioner literature —
+        ADX(14) is too slow on 5-min bars, period 10 is the documented
+        compromise; <20 = range regime, >25 = trend regime):
+          AUTO_ADX_PERIOD (default 10)
+          AUTO_ADX_TREND (default 25) — ADX at/above this = trending
+          AUTO_ADX_RANGE (default 20) — ADX at/below this = ranging
+          Between the two, price chopping across VWAP (≥4 crosses today)
+          resolves to 'range', otherwise 'trend'.
+
+        Returns (label, diag). Fails open to 'trend' (Conductor is the only
+        engine with validated live edge, so it keeps priority on errors).
+        """
+        try:
+            adx_period = int(os.environ.get("AUTO_ADX_PERIOD", "10"))
+            adx_trend = float(os.environ.get("AUTO_ADX_TREND", "25"))
+            adx_range = float(os.environ.get("AUTO_ADX_RANGE", "20"))
+            adx_ser, _pdi, _mdi = TA.adx(df, adx_period)
+            adx_now = float(adx_ser.iloc[-1])
+            adx_is_nan = adx_now != adx_now   # NaN (early window / dead tape)
+            if not adx_is_nan:
+                if adx_now >= adx_trend:
+                    return "trend", {"adx": round(adx_now, 1)}
+                if adx_now <= adx_range:
+                    return "range", {"adx": round(adx_now, 1)}
+            adx_now = None if adx_is_nan else adx_now
+            # NaN or grey zone → fall through to the VWAP-cross tiebreak.
+            # Grey zone: count today's VWAP crosses — a magnet day is a range day
+            ts_col = "ts" if "ts" in df.columns else "timestamp"
+            ts_ser = pd.to_datetime(df[ts_col])
+            today = df.loc[ts_ser.dt.date == ts_ser.dt.date.iloc[-1]]
+            if len(today) >= 6:
+                tp = (today["high"] + today["low"] + today["close"]) / 3
+                vol = today["volume"].replace(0, 1).fillna(1) if "volume" in today.columns \
+                    else pd.Series(1.0, index=today.index)
+                vwap = (tp * vol).cumsum() / vol.cumsum()
+                above = (today["close"] > vwap)
+                crosses = int((above != above.shift(1)).fillna(False).sum())
+                label = "range" if crosses >= 4 else "trend"
+                return label, {"adx": (round(adx_now, 1) if adx_now is not None else None),
+                                "vwap_crosses": crosses}
+            return "trend", {"adx": (round(adx_now, 1) if adx_now is not None else None),
+                              "note": "few_bars"}
+        except Exception as e:
+            return "trend", {"adx": None, "note": f"classify_err:{type(e).__name__}"}
+
     def analyze(self, df, weight_adj=None, blocked_windows=None, symbol=None,
                 chain_analytics=None):
         """Score candle data into a directional signal.
 
         Routes to strategy named by CONFIG['strategy']. Supported:
+          • 'auto'      — regime router: ADX trend day → conductor,
+                          range day → reverter (recommended default)
           • 'conductor' — 5-dim orthogonal confluence scout (production)
           • 'v2'        — legacy 4-of-6 confluence (parked, anti-edge confirmed)
           • 'v1'        — original heuristic (default fallback)
@@ -1954,6 +2030,65 @@ class SignalGen:
         # Strategies were written against 'ts'. One line shields all of them.
         if df is not None and not df.empty and "timestamp" in df.columns and "ts" not in df.columns:
             df = df.rename(columns={"timestamp": "ts"})
+
+        # ── Layer C learned time-window block — ALL strategies ────────────
+        # Claude's EOD review writes "avoid 11:30-12:30" style windows after a
+        # losing day. These previously gated only the parked v1 path, so the
+        # entire learning loop was a no-op for the strategies actually running.
+        if blocked_windows:
+            now_hm = datetime.now(IST).strftime("%H:%M")
+            for _win in blocked_windows:
+                try:
+                    _a, _b = _win.split("-")
+                    if _a.strip() <= now_hm <= _b.strip():
+                        SignalGen.last_dispatch["actually_ran"] = "blocked_window"
+                        SignalGen.last_dispatch["blocked_window"] = _win
+                        return None
+                except Exception:
+                    continue
+
+        # ── AUTO regime router: trend day → Conductor, range day → Reverter ──
+        # The two engines are complements built for opposite regimes; running
+        # only Conductor starved range-bound days (most NIFTY days) of any
+        # signal source. ADX(14) on the 5-min bars picks the engine per scan.
+        if strategy == "auto":
+            regime_label, rdiag = SignalGen.classify_regime(df)
+            # Midday dead zone (U-shaped intraday volatility: realized vol
+            # troughs ~12:00-13:45 IST while theta bleeds continuously) —
+            # trend entries there are the documented negative-EV zone, so the
+            # dead zone always routes to the mean-reversion engine.
+            try:
+                _dz_a = os.environ.get("AUTO_DZ_START", "12:00")
+                _dz_b = os.environ.get("AUTO_DZ_END", "13:45")
+                _hm = datetime.now(IST).strftime("%H:%M")
+                if _dz_a <= _hm <= _dz_b:
+                    regime_label = "range"
+                    rdiag = dict(rdiag); rdiag["note"] = "midday_dead_zone"
+            except Exception:
+                pass
+            SignalGen.last_dispatch["auto_regime"] = regime_label
+            SignalGen.last_dispatch["auto_adx"] = rdiag.get("adx")
+            engine_mod = "conductor" if regime_label == "trend" else "reverter"
+            try:
+                if engine_mod == "conductor":
+                    from conductor import Conductor
+                    result = Conductor.analyze(df, symbol=symbol or "",
+                                                chain_analytics=chain_analytics)
+                else:
+                    from signal_reverter import Reverter
+                    result = Reverter.analyze(df, symbol=symbol or "",
+                                               chain_analytics=chain_analytics)
+                SignalGen.last_dispatch["actually_ran"] = f"auto:{engine_mod}"
+                if result is not None:
+                    result["regime_route"] = regime_label
+                    result.setdefault("reasons", []).append(
+                        f"Regime router: {regime_label} day (ADX {rdiag.get('adx', '?')}) → {engine_mod}")
+                return result
+            except Exception as e:
+                SignalGen.last_dispatch["actually_ran"] = None
+                SignalGen.last_dispatch["error"] = f"{type(e).__name__}: {e}"
+                log.error(f"❌ auto/{engine_mod} crashed — NO fallback, returning None: {e}", exc_info=True)
+                return None
 
         # ── Conductor dispatch (production for BANKNIFTY) ─────────────────
         if strategy == "conductor":
@@ -3310,6 +3445,26 @@ class PLTracker:
             log.debug(f"  option price fetch err: {e}")
         return None
 
+    def _time_stop_due(self, s, opt_entry, cur_opt):
+        """True when the trade is older than TIME_STOP_MIN minutes and its
+        premium has never advanced TIME_STOP_MIN_GAIN_PCT % over entry (peak
+        included, so a trade that ran up and pulled back is NOT time-stopped)."""
+        try:
+            ts_min = float(os.environ.get("TIME_STOP_MIN", "30") or 0)
+            if ts_min <= 0:
+                return False
+            gain_pct = float(os.environ.get("TIME_STOP_MIN_GAIN_PCT", "15")) / 100.0
+            ts_raw = str(s.get("timestamp") or "")
+            opened = datetime.strptime(ts_raw, "%Y-%m-%d %H:%M:%S").replace(tzinfo=IST)
+            age_min = (datetime.now(IST) - opened).total_seconds() / 60.0
+            if age_min < ts_min:
+                return False
+            hurdle = opt_entry * (1.0 + gain_pct)
+            peak = self._best_premium.get(s["id"], cur_opt)
+            return cur_opt < hurdle and peak < hurdle
+        except Exception:
+            return False
+
     def check(self):
         today = datetime.now(IST).strftime("%Y-%m-%d")
         opens = db_exec("SELECT * FROM signals WHERE status='OPEN' AND date=?", (today,), fetch=True)
@@ -3400,6 +3555,13 @@ class PLTracker:
                     result = "WIN"; exit_opt = cur_opt
                 elif opt_sl > 0 and cur_opt <= opt_sl:
                     result = "LOSS"; exit_opt = max(cur_opt, opt_sl)
+                elif self._time_stop_due(s, opt_entry, cur_opt):
+                    # Time stop: an option buy that hasn't moved ≥15% in its
+                    # favor within 30 min is statistically paying theta for
+                    # nothing — documented as the cheapest theta defense for
+                    # intraday buyers. Env: TIME_STOP_MIN (0 disables),
+                    # TIME_STOP_MIN_GAIN_PCT.
+                    result = "TIME_STOP"; exit_opt = cur_opt
 
                 # Two-tick confirmation: never close on a single quote. A lone
                 # bad tick (2026-06-12: phantom ₹244 print on an option really
@@ -3548,6 +3710,13 @@ class Engine:
         self.client=AngelClient();self.sgen=SignalGen();self.opick=OptPicker()
         self.tracker=PLTracker(self.client);self.latest={};self.alerts=[]
         self.running=False;self._prev={};self._last_signal={}
+        # Set by stop() (operator-initiated) and cleared by start(). The
+        # scheduler's catch-up auto-ON respects this so a deliberate stop
+        # isn't undone 10 minutes later.
+        self._manual_stop=False
+        # Shadow log dedupe: last time each (instrument, gate) was written,
+        # so persistent conditions don't flood the gate_rejections table.
+        self._gate_logged={}
         # Chain cache: 30s TTL per instrument. Now stores raw chain for delta recomputes.
         # { name: {ts, ts_str, chain, opt, atm} }
         self._chain_cache={}
@@ -3602,6 +3771,9 @@ class Engine:
         }
         # Daily kill-switch latch — once tripped today, stops new alerts until 00:00 next day.
         self._killswitch_tripped = False
+        # Premium ORB state — { instrument: {"date", "CE": {...}, "PE": {...}} }.
+        # Each side tracks its chosen strike + the premium's own opening range.
+        self._porb = {}
 
     def start(self):
         if not self.client.login(): return{"status":"error","message":"Login failed"}
@@ -3618,6 +3790,7 @@ class Engine:
             return {"status":"error","message":f"Strategy {CONFIG.get('strategy','v1')} smoke test failed: {smoke_err}"}
 
         self.running=True
+        self._manual_stop=False
         threading.Thread(target=self._loop,daemon=True).start()
         SlackAlert.send(f"🚀 *Signal Engine Started*\nStrategy: `{CONFIG.get('strategy','v1')}` (smoke-test passed)\nInstruments: {os.environ.get('ENABLED_INSTRUMENTS','NIFTY,BANKNIFTY,FINNIFTY')}")
         return{"status":"ok","message":"Engine started"}
@@ -3691,7 +3864,7 @@ class Engine:
             return (False, f"{type(e).__name__}: {e}")
 
     def stop(self):
-        self.running=False;self.tracker.close_all()
+        self.running=False;self._manual_stop=True;self.tracker.close_all()
         SlackAlert.send("🔴 *Signal Engine Stopped*")
         return{"status":"ok"}
 
@@ -3792,6 +3965,261 @@ class Engine:
         except Exception as e:
             log.warning(f"  killswitch check err: {e}")
             return False
+
+    def _log_gate(self, name, gate, sig=None, detail=None):
+        """Shadow-log a gate rejection to the gate_rejections table.
+
+        Deduped in-memory per (instrument, gate, direction) for 10 minutes so
+        a persistent condition (e.g. a cooldown re-checked every 30s) writes
+        one row, not 20. Never raises.
+        """
+        try:
+            direction = (sig or {}).get("direction")
+            key = (name, gate, direction)
+            now_ts = time.time()
+            if now_ts - self._gate_logged.get(key, 0) < 600:
+                return
+            self._gate_logged[key] = now_ts
+            now = datetime.now(IST)
+            db_exec(
+                "INSERT INTO gate_rejections (ts, date, instrument, gate, direction, "
+                "confidence, index_price, detail) VALUES (?,?,?,?,?,?,?,?)",
+                (now.strftime("%Y-%m-%d %H:%M:%S"), now.strftime("%Y-%m-%d"),
+                 name, gate, direction,
+                 (sig or {}).get("confidence"), (sig or {}).get("price"),
+                 json.dumps(detail) if detail else None))
+        except Exception as e:
+            log.warning(f"  gate shadow-log failed ({gate}): {e}")
+
+    def _premium_orb_tick(self, name, inst, df):
+        """Premium-breakout ORB — the only cost-inclusive, positive-expectancy
+        NIFTY option-BUYING backtest found in published research (Zerodha
+        'In The Money', Jan 2022 - Feb 2026, slippage + brokerage included,
+        ~48% WR with a 20% premium SL).
+
+        Mechanics (all env-tunable):
+          • At ~09:16 pick the CE and the PE whose premium is nearest
+            PREMIUM_ORB_TARGET_PREM (default ₹200) — a premium-normalized
+            proxy that lands near ATM.
+          • 09:16 → PREMIUM_ORB_OR_END (default 11:15): record each side's
+            premium high/low (sampled from the prefetched chain cache).
+          • After the window: BUY a side when its premium breaks above its
+            own opening-range high. Max 1 CE + 1 PE per day. No entries
+            after PREMIUM_ORB_LAST_ENTRY (default 14:30).
+          • SL 20% of entry premium / T1 +50% / T2 +100%; the standard
+            PLTracker premium exits + time stop manage the trade.
+          • Regime gate (PREMIUM_ORB_REGIME_GATE, default on): skip entries
+            while the ADX classifier reads 'range' — the study's losing
+            year (2025) was exactly low-vol chop.
+
+        Sampling caveat: premium hi/lo is observed on the chain-prefetch
+        cadence (~2 min), not tick data — the recorded range is slightly
+        narrower than reality, which makes breakout entries CONSERVATIVE
+        (never premature).
+
+        Enabled per-instrument via PREMIUM_ORB_INSTRUMENTS (default NIFTY —
+        this module exists to fill the NIFTY signal hole; BANKNIFTY already
+        has Conductor edge).
+        """
+        if os.environ.get("PREMIUM_ORB_ENABLED", "true").lower() != "true":
+            return
+        allowed = {x.strip().upper() for x in
+                   os.environ.get("PREMIUM_ORB_INSTRUMENTS", "NIFTY").split(",") if x.strip()}
+        if name.upper() not in allowed:
+            return
+
+        now = datetime.now(IST)
+        hm = now.strftime("%H:%M")
+        today = now.strftime("%Y-%m-%d")
+        or_end     = os.environ.get("PREMIUM_ORB_OR_END", "11:15")
+        last_entry = os.environ.get("PREMIUM_ORB_LAST_ENTRY", "14:30")
+        if hm < "09:16" or hm >= last_entry:
+            return
+        target_prem = float(os.environ.get("PREMIUM_ORB_TARGET_PREM", "200"))
+        sl_pct = float(os.environ.get("PREMIUM_ORB_SL_PCT", "0.20"))
+        t1_pct = float(os.environ.get("PREMIUM_ORB_T1_PCT", "0.50"))
+        t2_pct = float(os.environ.get("PREMIUM_ORB_T2_PCT", "1.00"))
+
+        st = self._porb.get(name)
+        if not st or st.get("date") != today:
+            st = {"date": today, "CE": None, "PE": None}
+            self._porb[name] = st
+
+        # Warm the chain cache if the scanning strategy didn't already
+        # (TTL-guarded — no extra API call when auto/conductor prefetched).
+        self._ensure_chain_analytics(name, inst, df)
+        chain = (self._chain_cache.get(name) or {}).get("chain") or []
+        if not chain:
+            return
+
+        # ── Strike selection (once per day per side) ──────────────────────
+        for side in ("CE", "PE"):
+            if st[side] is None:
+                cands = [r for r in chain if r.get("type") == side and (r.get("ltp") or 0) > 0]
+                if not cands:
+                    continue
+                pick = min(cands, key=lambda r: abs(float(r["ltp"]) - target_prem))
+                st[side] = {
+                    "symbol": pick["symbol"], "token": pick["token"],
+                    "strike": pick["strike"], "expiry": pick.get("expiry", ""),
+                    "or_high": float(pick["ltp"]), "or_low": float(pick["ltp"]),
+                    "fired": False, "picked_at": hm,
+                }
+                log.info(f"🎯 PremiumORB {name} {side}: tracking {pick['symbol']} "
+                         f"@ ₹{pick['ltp']} (target ₹{target_prem:.0f})")
+
+        # ── Update each side's premium range / check breakout ─────────────
+        for side in ("CE", "PE"):
+            sd = st[side]
+            if not sd:
+                continue
+            row = next((r for r in chain if str(r.get("token")) == str(sd["token"])), None)
+            if not row or not (row.get("ltp") or 0) > 0:
+                continue
+            ltp = float(row["ltp"])
+
+            if hm < or_end:
+                sd["or_high"] = max(sd["or_high"], ltp)
+                sd["or_low"] = min(sd["or_low"], ltp)
+                continue
+
+            if sd["fired"] or sd["or_high"] <= 0:
+                continue
+            # Entry: premium breaks its own opening-range high (0.1% buffer
+            # against the mid-price jitter of the sampled range).
+            if ltp < sd["or_high"] * 1.001:
+                continue
+
+            # Regime gate — skip while classifier reads 'range'.
+            if os.environ.get("PREMIUM_ORB_REGIME_GATE", "true").lower() == "true":
+                label, rdiag = SignalGen.classify_regime(df)
+                if label == "range":
+                    self._log_gate(name, "PORB_RANGE_REGIME", None,
+                                   {"side": side, "ltp": ltp, "adx": rdiag.get("adx")})
+                    continue
+            if self._check_killswitch():
+                continue
+            _max_open = int(os.environ.get("MAX_OPEN_POSITIONS", "2") or 0)
+            if _max_open > 0:
+                try:
+                    open_cnt_row = db_exec(
+                        "SELECT COUNT(*) as cnt FROM signals WHERE status='OPEN' AND date=?",
+                        (today,), fetchone=True)
+                    if int(dict(open_cnt_row).get("cnt", 0)) >= _max_open:
+                        self._log_gate(name, "PORB_MAX_OPEN", None, {"side": side})
+                        continue
+                except Exception:
+                    pass
+
+            sd["fired"] = True
+            spot = float(df["close"].iloc[-1]) if df is not None and len(df) else 0.0
+            entry_prem = ltp
+            sl_prem = round(entry_prem * (1 - sl_pct), 2)
+            t1_prem = round(entry_prem * (1 + t1_pct), 2)
+            t2_prem = round(entry_prem * (1 + t2_pct), 2)
+            direction = "LONG" if side == "CE" else "SHORT"
+            # Index-level display approximations at delta ≈ 0.5 (exits are
+            # premium-based via PLTracker; these only render on the card).
+            idx_sl_dist = (entry_prem * sl_pct) / 0.5
+            idx_t1_dist = (entry_prem * t1_pct) / 0.5
+            sgn = 1 if direction == "LONG" else -1
+            sig = {
+                "direction": direction, "confidence": 70,
+                "price": round(spot, 2), "entry": round(spot, 2),
+                "sl": round(spot - sgn * idx_sl_dist, 2),
+                "target1": round(spot + sgn * idx_t1_dist, 2),
+                "target2": round(spot + sgn * idx_t1_dist * 2, 2),
+                "risk_reward": round(t1_pct / sl_pct, 2),
+                "reasons": [
+                    f"Premium ORB breakout: {sd['symbol']} broke its 09:16-{or_end} "
+                    f"premium range high ₹{sd['or_high']:.1f} (now ₹{ltp:.1f})",
+                    f"Premium SL -{sl_pct*100:.0f}% / T1 +{t1_pct*100:.0f}% / T2 +{t2_pct*100:.0f}%",
+                    "Basis: Zerodha ITM cost-inclusive NIFTY ORB backtest (2022-2026)",
+                ],
+                "indicators": {"or_high": sd["or_high"], "or_low": sd["or_low"],
+                                "entry_premium": entry_prem},
+                "strategy": "premium_orb",
+                "timestamp": now.strftime("%H:%M:%S"),
+            }
+            lots = 1
+            opt = {
+                "symbol": sd["symbol"], "strike": sd["strike"], "type": side,
+                "expiry": sd["expiry"], "token": sd["token"],
+                "entry": entry_prem, "ltp": entry_prem,
+                "sl": sl_prem, "target1": t1_prem, "target2": t2_prem,
+                "lot_size": inst.get("lot_size", 75), "lots": lots,
+                "capital": round(entry_prem * inst.get("lot_size", 75) * lots, 0),
+            }
+            save_signal(name, sig, opt)
+            self.metrics["signals_generated"] += 1
+            self.metrics["signals_alerted"] += 1
+            self._last_signal[name] = now
+            self.alerts.insert(0, {
+                "id": int(time.time() * 1000),
+                "time": now.strftime("%H:%M:%S"), "date": today,
+                "iso_ts": now.strftime("%Y-%m-%d %H:%M:%S"),
+                "weekday": now.strftime("%a"),
+                "instrument": name, "signal": sig, "option": opt,
+                "timing": None, "ai": None,
+            })
+            self.alerts = self.alerts[:100]
+            log.info(f"🚨 PremiumORB {name} {side} BUY {sd['symbol']} @ ₹{entry_prem} "
+                     f"(OR high ₹{sd['or_high']:.1f}) SL ₹{sl_prem} T1 ₹{t1_prem}")
+            SlackAlert.send(
+                f"🚨 *Premium ORB — {name} {side} BUY*\n"
+                f"{sd['symbol']}  ·  Entry ₹{entry_prem}  (premium broke its "
+                f"morning range high ₹{sd['or_high']:.1f})\n"
+                f"SL ₹{sl_prem} (-{sl_pct*100:.0f}%)  ·  T1 ₹{t1_prem} (+{t1_pct*100:.0f}%)  ·  "
+                f"T2 ₹{t2_prem} (+{t2_pct*100:.0f}%)\n"
+                f"1 lot = {opt['lot_size']} qty ≈ ₹{opt['capital']:.0f}  ·  "
+                f"Time-stop: exit if premium hasn't gained 15% in 30 min\n"
+                f"_Basis: cost-inclusive NIFTY options ORB backtest (Zerodha ITM, 2022-2026)_")
+
+    def _ensure_chain_analytics(self, name, inst, df):
+        """Return fresh chain analytics for `name`, fetching the option chain
+        proactively when the cache is older than CHAIN_PREFETCH_TTL (default
+        120s). This feeds Conductor's flow dimension BEFORE the signal call.
+
+        Fetch cost: one option_chain call per instrument per TTL window —
+        modest next to the candle fetches already happening each scan. Never
+        raises; on any failure it returns whatever the cache can serve, else
+        None (flow dimension simply abstains, exactly as before).
+        """
+        try:
+            ttl = int(os.environ.get("CHAIN_PREFETCH_TTL", "120") or 120)
+        except Exception:
+            ttl = 120
+        now_ts = time.time()
+        _cc = self._chain_cache.get(name, {})
+        age = now_ts - _cc.get("ts", 0)
+        if age >= ttl or not _cc.get("chain"):
+            try:
+                spot = float(df["close"].iloc[-1])
+                chain, atm_val = self.client.option_chain(inst, spot)
+                if chain:
+                    self._update_oi_history(name, chain, now_ts)
+                    self._chain_cache[name] = {
+                        "ts": now_ts,
+                        "ts_str": datetime.now(IST).strftime("%H:%M:%S"),
+                        "chain": chain,
+                        # No option picked in the prefetch path; STEP 1 picks
+                        # one when a signal actually fires.
+                        "opt": _cc.get("opt"),
+                        "atm": atm_val,
+                    }
+                    _cc = self._chain_cache[name]
+            except Exception as e:
+                _k = ("chain_prefetch", name)
+                if self._cond_diag_last.get(_k) != str(e)[:80]:
+                    self._cond_diag_last[_k] = str(e)[:80]
+                    log.warning(f"  {name} chain prefetch failed (flow dimension abstains): {e}")
+        if _cc.get("chain") and _cc.get("atm") is not None:
+            try:
+                oi_d = self._compute_oi_delta(name)
+                return OptPicker.chain_analytics(_cc["chain"], _cc["atm"], oi_delta=oi_d)
+            except Exception:
+                return None
+        return None
 
     def _update_oi_history(self, name, chain, now_ts):
         """Record OI + volume snapshot for each (strike, type) pair.
@@ -4046,25 +4474,25 @@ class Engine:
                         except Exception as e:
                             log.warning(f"  regime filter crashed (failing open): {e}")
 
-                    # For Conductor strategy: fetch chain analytics BEFORE
-                    # the signal call so the flow dimension can vote. v2/v1
-                    # don't use this — extra fetch is conditional.
+                    # Fetch chain analytics BEFORE the signal call so the flow
+                    # dimension (PCR / IV skew / OI velocity) can actually vote.
+                    # The old code only read a cache that was populated AFTER a
+                    # signal fired — a chicken-and-egg that starved the flow
+                    # dimension on nearly every scan, silently turning the
+                    # "3-of-5" confluence gate into 3-of-4. Now we proactively
+                    # fetch the chain on a CHAIN_PREFETCH_TTL cadence (default
+                    # 120s) for flow-aware strategies.
                     _chain_anal_for_sig = None
-                    if strategy == "conductor":
-                        # Try to get chain analytics from the recent cache (set
-                        # by an earlier scan within the last 30s). If miss,
-                        # we'll fetch the chain after the signal fires anyway.
-                        _cc = self._chain_cache.get(name, {})
-                        if (time.time() - _cc.get("ts", 0)) < 30:
-                            cached_chain = _cc.get("chain") or []
-                            atm_cached = _cc.get("atm")
-                            if cached_chain and atm_cached is not None:
-                                try:
-                                    _oi_d = self._compute_oi_delta(name)
-                                    _chain_anal_for_sig = OptPicker.chain_analytics(
-                                        cached_chain, atm_cached, oi_delta=_oi_d)
-                                except Exception:
-                                    _chain_anal_for_sig = None
+                    if strategy in ("conductor", "auto"):
+                        _chain_anal_for_sig = self._ensure_chain_analytics(name, inst, df)
+
+                    # ── Premium ORB module (independent of strategy dispatch) ──
+                    # Evidence-backed premium-breakout buyer for NIFTY; manages
+                    # its own once-per-side-per-day state and delivery.
+                    try:
+                        self._premium_orb_tick(name, inst, df)
+                    except Exception as _pe:
+                        log.warning(f"  PremiumORB tick error {name}: {_pe}")
 
                     sig=self.sgen.analyze(df, weight_adj=self._weight_adj,
                                           blocked_windows=self._blocked_windows,
@@ -4101,13 +4529,21 @@ class Engine:
                     # / …). It used to live only in-process — invisible. Surface it
                     # via /api/status and loud-log the no-signal reason (change-only,
                     # so a 14:30+ AFTER_WINDOW doesn't spam 120×/hour).
-                    if strategy == "conductor":
+                    if strategy in ("conductor", "auto"):
                         try:
-                            from conductor import Conductor
-                            cdiag = dict(Conductor.last_decision or {})
+                            _ran = (SignalGen.last_dispatch or {}).get("actually_ran") or ""
+                            if _ran.endswith("reverter"):
+                                from signal_reverter import Reverter as _DiagEngine
+                            else:
+                                from conductor import Conductor as _DiagEngine
+                            cdiag = dict(_DiagEngine.last_decision or {})
                             if cdiag:
                                 cdiag["scan_at"] = datetime.now(IST).strftime("%Y-%m-%d %H:%M:%S")
                                 cdiag["instrument"] = name
+                                cdiag["engine"] = _ran or strategy
+                                if strategy == "auto":
+                                    cdiag["auto_regime"] = (SignalGen.last_dispatch or {}).get("auto_regime")
+                                    cdiag["auto_adx"] = (SignalGen.last_dispatch or {}).get("auto_adx")
                                 self._cond_diag[name] = cdiag
                                 if not sig:
                                     _ck = (cdiag.get("verdict"),)
@@ -4121,8 +4557,14 @@ class Engine:
 
                     # ── MACD Scalper runs alongside Conductor — no strategy switch needed ──
                     # Fires independently on MACD histogram zero-line crossover + EMA9/EMA21.
-                    # Only activates when Conductor is quiet (avoids duplicate signals on same bar).
-                    if not sig and strategy == "conductor":
+                    # Only activates when Conductor is quiet (avoids duplicate signals on same
+                    # bar). Under 'auto' it piggybacks only on trend-routed scans — MACD
+                    # crossovers are a trend tool; firing them on range days is the exact
+                    # whipsaw the 90d backtests already killed.
+                    _cond_ran = strategy == "conductor" or (
+                        strategy == "auto"
+                        and ((SignalGen.last_dispatch or {}).get("actually_ran") or "").endswith("conductor"))
+                    if not sig and _cond_ran:
                         try:
                             from macd_scalper import MACDScalper
                             _ms = MACDScalper.analyze(df, symbol=name)
@@ -4209,12 +4651,28 @@ class Engine:
                     if _cc_age < 30 and _cc.get("opt") is not None:
                         opt     = _cc["opt"]
                         atm_val = _cc["atm"]
+                        chain   = _cc.get("chain")
                         # Recompute analytics with FRESH oi_delta even on cache hit —
                         # volume velocity changes every few seconds even when chain prices don't
                         cached_chain = _cc.get("chain") or []
                         chain_anal = OptPicker.chain_analytics(cached_chain, atm_val, oi_delta=oi_delta)
                         log.info(f"  {name}: using cached chain (age {_cc_age:.0f}s) | "
                                  f"OI shift={chain_anal.get('oi_shift_signal','?')}")
+                    elif _cc_age < 30 and _cc.get("chain") and _cc.get("atm") is not None:
+                        # Prefetch path cached a raw chain (no option picked yet).
+                        # Pick from the cached chain instead of re-fetching.
+                        chain   = _cc["chain"]
+                        atm_val = _cc["atm"]
+                        try:
+                            expiry = chain[0].get("expiry", "") if chain else ""
+                            greeks = self.client.option_greeks(
+                                inst.get("expiry_prefix", name), expiry) if expiry else None
+                            opt = self.opick.pick(sig, inst, chain, atm_val,
+                                                  CONFIG.get("budget", 20000), greeks=greeks)
+                            self._chain_cache[name]["opt"] = opt
+                        except Exception as e:
+                            log.warning(f"  {name}: pick from prefetched chain failed: {e}")
+                        chain_anal = OptPicker.chain_analytics(chain, atm_val, oi_delta=oi_delta)
                     elif sig.get("direction") in ("LONG", "SHORT"):
                         try:
                             chain, atm_val = self.client.option_chain(inst, sig["price"])
@@ -4250,6 +4708,7 @@ class Engine:
                             # can't be acted on — but skipping silently all day is
                             # the 2-week-Conductor-bug pattern. Slack the failure,
                             # rate-limited to once per 15 min per instrument.
+                            self._log_gate(name, "CHAIN_FETCH_FAIL", sig, {"error": str(ce)[:200]})
                             _last_warn = self._chain_fail_alerted.get(name, 0)
                             if now_ts - _last_warn > 900:
                                 self._chain_fail_alerted[name] = now_ts
@@ -4377,6 +4836,8 @@ class Engine:
                                     f"composite={_oi_intel['composite']:+.3f} contradicts direction. "
                                     f"Signal suppressed this cycle."
                                 )
+                                self._log_gate(name, "OPTIONS_INTEL_BLOCK", sig,
+                                               {"composite": _oi_intel.get("composite")})
                                 self._prev[name] = {
                                     "instrument": name, "signal": sig,
                                     "option": opt, "chain_analytics": chain_anal,
@@ -4418,7 +4879,10 @@ class Engine:
                     # STEP 3: 15-min cooldown gates ALERT ONLY — not chain fetch
                     # ════════════════════════════════════════════════════════
                     _last_t = self._last_signal.get(name)
-                    if _last_t and (datetime.now(IST) - _last_t).total_seconds() < 900: continue
+                    if _last_t and (datetime.now(IST) - _last_t).total_seconds() < 900:
+                        self._log_gate(name, "ALERT_COOLDOWN", sig,
+                                       {"since_last_s": int((datetime.now(IST) - _last_t).total_seconds())})
+                        continue
 
                     result = {"instrument": name, "lot_size": inst["lot_size"],
                               "signal": sig, "option": opt,
@@ -4435,10 +4899,13 @@ class Engine:
                         self.metrics["rr_blocked"] += 1
                         log.info(f"⛔ R:R gate blocked {name} {sig['direction']} "
                                  f"RR={sig.get('risk_reward',0)} (need ≥{min_rr_floor})")
+                        self._log_gate(name, "RR_BELOW_FLOOR", sig,
+                                       {"rr": sig.get("risk_reward"), "floor": min_rr_floor})
                         self._prev[name] = result
                         continue
                     # Daily kill-switch — stops new alerts after loss limit or trade cap.
                     if self._check_killswitch():
+                        self._log_gate(name, "KILLSWITCH", sig)
                         self._prev[name] = result
                         continue
 
@@ -4488,15 +4955,21 @@ class Engine:
                             mins_left = int((cd_until - datetime.now(IST)).total_seconds() / 60) + 1
                             log.info(f"⏸ {name} {sig['direction']} skipped — "
                                      f"loss cooldown active ({mins_left}m remaining)")
-                            self._last_signal[name] = datetime.now(IST)
+                            self._log_gate(name, "LOSS_COOLDOWN", sig,
+                                           {"mins_left": mins_left})
+                            # NOTE: deliberately NOT setting _last_signal here.
+                            # Burning the 15-min alert cooldown on a skip used to
+                            # suppress a real signal that appeared right after the
+                            # loss cooldown expired. This check is cheap (no API
+                            # call), so re-evaluating every scan is fine.
                             continue
 
                         # ── Max open positions cap (env-tunable) ──────
-                        # During live-verification of a new strategy we cap
-                        # to 1 simultaneous open position. Keeps damage bounded
-                        # while we confirm backtest results hold live. Override
-                        # by setting MAX_OPEN_POSITIONS env var on Railway.
-                        _max_open = int(os.environ.get("MAX_OPEN_POSITIONS", "1") or 0)
+                        # Default 2: one trending-index trade plus one
+                        # counter-setup can coexist; a cap of 1 was starving
+                        # the alert stream whenever any position sat open.
+                        # Override with MAX_OPEN_POSITIONS env var (0 = off).
+                        _max_open = int(os.environ.get("MAX_OPEN_POSITIONS", "2") or 0)
                         if _max_open > 0:
                             try:
                                 today_str = datetime.now(IST).strftime("%Y-%m-%d")
@@ -4508,7 +4981,11 @@ class Engine:
                                 if open_cnt >= _max_open:
                                     log.info(f"⏸ {name} {sig['direction']} skipped — "
                                              f"max open positions cap ({open_cnt}/{_max_open})")
-                                    self._last_signal[name] = datetime.now(IST)
+                                    self._log_gate(name, "MAX_OPEN_CAP", sig,
+                                                   {"open": open_cnt, "cap": _max_open})
+                                    # No _last_signal here — see loss-cooldown note.
+                                    # The cap check is a cheap DB count; the moment a
+                                    # position closes, the next scan can alert again.
                                     continue
                             except Exception as e:
                                 log.warning(f"  max_open check failed: {e}")
@@ -4525,6 +5002,8 @@ class Engine:
                             else: self.metrics["ai_waited"] += 1
                             log.info(f"🤖 AI {v} {name} {sig['direction']} — "
                                      f"{ai_result.get('reasoning','')[:80]}")
+                            self._log_gate(name, f"AI_{v}", sig,
+                                           {"reasoning": (ai_result.get("reasoning") or "")[:200]})
                             self._prev[name] = result
                             # BUG FIX #5: Always update _last_signal so the 15-min cooldown
                             # kicks in even on AI SKIP/WAIT. Without this, every 5-second tick
@@ -4536,13 +5015,16 @@ class Engine:
                         # Re-pick option with AI-suggested position_pct (may scale down)
                         if chain and ai_result and ai_result.get("position_pct"):
                             try:
-                                opt = self.opick.pick(sig, inst, chain, atm,
+                                # Was `atm` (undefined) — the NameError was swallowed
+                                # by this except, so the AI position-pct re-pick
+                                # silently never ran since the day it shipped.
+                                opt = self.opick.pick(sig, inst, chain, atm_val,
                                                       CONFIG.get("budget", 20000),
                                                       greeks=greeks,
                                                       position_pct=ai_result["position_pct"]) or opt
                                 result["option"] = opt
-                            except Exception:
-                                pass
+                            except Exception as e:
+                                log.warning(f"  {name}: AI position re-pick failed: {e}")
 
                         # Apply adj to confidence for display (don't re-gate)
                         adj = int((ai_result or {}).get("confidence_adj") or 0)
@@ -4575,6 +5057,9 @@ class Engine:
                         # Previously this was set unconditionally at the bottom of the loop,
                         # wasting a cooldown window on every sub-threshold scan.
                         self._last_signal[name] = datetime.now(IST)
+                    else:
+                        self._log_gate(name, "CONF_BELOW_FLOOR", sig,
+                                       {"confidence": sig.get("confidence"), "floor": conf_floor})
 
                     self._prev[name]=result;self.latest[name]=result
                     # _last_signal is now ONLY set when an alert fires (TAKE) or when
@@ -5038,11 +5523,17 @@ class SwingEngine:
         if sig["confidence"] >= self.ALERT_CONF:
             log.info(f"[Swing] 🎯 {name} {sig['direction']} conf={sig['confidence']}% "
                      f"price={sig['price']} rr={sig['risk_reward']}")
-            # Swing alerts are intentionally muted on Slack — the user only
-            # wants intraday signals (NIFTY/BANKNIFTY/FINNIFTY) there. Swing
-            # signals are still produced + visible on the dashboard if the
-            # Swing tab is reintroduced; just no Slack pings.
-            # SlackAlert.send(self._format_slack(name, sig, opt))
+            # Swing Slack alerts re-enabled (2026-07-28): the engine was
+            # producing signals with no delivery channel at all. Mute again
+            # with SWING_SLACK_ENABLED=false if the pings get noisy.
+            if os.environ.get("SWING_SLACK_ENABLED", "true").lower() == "true":
+                # Dedupe: one Slack ping per instrument+direction per day —
+                # the 30-min swing cycle re-detects the same setup all day.
+                _key = f"{name}:{sig['direction']}:{datetime.now(IST).strftime('%Y-%m-%d')}"
+                if not hasattr(self, "_slack_sent"): self._slack_sent = set()
+                if _key not in self._slack_sent:
+                    self._slack_sent.add(_key)
+                    SlackAlert.send(self._format_slack(name, sig, opt))
 
     def _pick_option(self, name, info, sig, spot):
         """Select swing option (monthly expiry, ≥15 DTE, ATM strike)."""
@@ -5181,10 +5672,17 @@ ORIGINAL ENTRY REASONS:
                 last_ai_reasoning=reasoning,
                 last_ai_ts=now_str)
             log.info(f"[Swing] AI exit #{pos['id']} {name}: {decision} — {reasoning[:60]}")
-            # Swing exit Slack pings muted — user wants intraday-only Slack.
-            # Decision still logged + persisted to DB.
-            if decision in ("EXIT","PARTIAL_EXIT"):
-                pass
+            # Swing exit Slack pings re-enabled (2026-07-28) for actionable
+            # decisions only. Mute with SWING_SLACK_ENABLED=false.
+            if decision in ("EXIT","PARTIAL_EXIT") and \
+                    os.environ.get("SWING_SLACK_ENABLED", "true").lower() == "true":
+                urgency = ai.get("urgency", "SOON")
+                SlackAlert.send(
+                    f"📤 *Swing {decision.replace('_', ' ').title()}: {name} "
+                    f"{pos.get('direction','')}* ({urgency})\n"
+                    f"{pos.get('option_symbol') or 'equity'} · entry ₹{entry} · "
+                    f"now ₹{round(cur_price, 2)} ({pnl_pct:+.1f}%)\n"
+                    f"_{reasoning[:200]}_")
             return ai
         except Exception as e:
             log.warning(f"[Swing] AI exit post-processing error: {e}")
@@ -6097,6 +6595,29 @@ def api_metrics():
     })
 
 
+@app.route("/api/gate-stats")
+def api_gate_stats():
+    """Shadow-log analytics: which gate is eating signals, and the most
+    recent rejections. ?days=N (default 7) restricts the window."""
+    try:
+        days = max(1, min(int(flask_request.args.get("days", 7)), 90))
+    except Exception:
+        days = 7
+    since = (datetime.now(IST) - timedelta(days=days)).strftime("%Y-%m-%d")
+    counts = db_exec(
+        "SELECT gate, instrument, COUNT(*) as cnt FROM gate_rejections "
+        "WHERE date >= ? GROUP BY gate, instrument ORDER BY cnt DESC",
+        (since,), fetch=True) or []
+    recent = db_exec(
+        "SELECT * FROM gate_rejections WHERE date >= ? ORDER BY id DESC LIMIT 50",
+        (since,), fetch=True) or []
+    return jsonify({
+        "since": since, "days": days,
+        "by_gate": [dict(r) for r in counts],
+        "recent": [dict(r) for r in recent],
+    })
+
+
 @app.route("/api/signals/<int:sig_id>/void", methods=["POST"])
 @require_auth
 def api_void_signal(sig_id):
@@ -6155,9 +6676,10 @@ def api_strategy_get():
     without polling /api/metrics (which is bigger).
     """
     return jsonify({
-        "strategy":   CONFIG.get("strategy", "v1"),
+        "strategy":   CONFIG.get("strategy", "auto"),
         "dry_run_v2": bool(CONFIG.get("dry_run_v2", False)),
-        "available":  ["v1", "v2"],
+        "available":  ["auto", "conductor", "reverter", "scalper_v3",
+                        "nifty_windows", "deadzone_fade", "patterns", "v1", "v2"],
         "updated_at": get_engine_state("strategy_updated_at", default=None),
     })
 
@@ -6180,9 +6702,9 @@ def api_strategy_set():
 
     if new_strategy is not None:
         s = str(new_strategy).lower()
-        if s not in ("v1", "v2", "conductor", "scalper_v3", "reverter",
+        if s not in ("auto", "v1", "v2", "conductor", "scalper_v3", "reverter",
                      "nifty_windows", "deadzone_fade", "patterns"):
-            return jsonify({"error": "strategy must be 'v1', 'v2', 'conductor', 'scalper_v3', 'reverter', 'nifty_windows', 'deadzone_fade', or 'patterns'"}), 400
+            return jsonify({"error": "strategy must be 'auto', 'v1', 'v2', 'conductor', 'scalper_v3', 'reverter', 'nifty_windows', 'deadzone_fade', or 'patterns'"}), 400
         CONFIG["strategy"] = s
         set_engine_state("strategy", s)
 
@@ -6691,11 +7213,13 @@ def _scheduler():
             day = now.weekday()       # Mon=0 ... Sun=6
             day_key = now.strftime("%Y-%m-%d")
             hh, mm = now.hour, now.minute
-            # Default ON — strategy is under rebuild, do not auto-fire trades.
-            # Explicit override: set INTRADAY_RESEARCH_MODE=0 on Railway to re-enable
-            # auto-start after the new strategy passes backtest + live verification.
-            _rm = os.getenv("INTRADAY_RESEARCH_MODE", "1").strip()
-            research_mode = (_rm != "0")
+            # Default OFF — the engine auto-starts every trading morning. The old
+            # default ("1") combined with the loop's daily 15:15 self-stop meant the
+            # engine silently never scanned again after day one unless the container
+            # restarted. Set INTRADAY_RESEARCH_MODE=1 on Railway to pause auto-start
+            # during a strategy rebuild.
+            _rm = os.getenv("INTRADAY_RESEARCH_MODE", "0").strip()
+            research_mode = (_rm == "1")
 
             # ── Auto-ON: weekdays at 08:45 IST ────────────────────────────
             if day <= 4 and hh == 8 and mm == 45:
@@ -6720,6 +7244,25 @@ def _scheduler():
                             log.warning(f"⏰ auto-ON failed: {e}")
                     else:
                         log.info("⏰ Scheduler: 08:45 IST hit, engine already running")
+
+            # ── Catch-up auto-ON: engine down during market hours ─────────
+            # The 08:45 slot fires exactly once; if the container was asleep,
+            # restarting, or login failed at that minute, the engine stayed
+            # dead all day. Retry every ~10 min during market hours unless the
+            # operator stopped it manually or research mode is on.
+            if (day <= 4 and not research_mode and not engine.running
+                    and not getattr(engine, "_manual_stop", False)
+                    and (915 <= hh * 100 + mm < 1500)):
+                key = f"{day_key}-catchup-{hh:02d}{mm // 10}"
+                if not last_fired.get(key):
+                    last_fired[key] = True
+                    log.info("⏰ Scheduler: engine down during market hours — catch-up start")
+                    try:
+                        res = engine.start()
+                        if (res or {}).get("status") == "ok":
+                            SlackAlert.send("⏰ *Engine catch-up start* — was down during market hours")
+                    except Exception as e:
+                        log.warning(f"⏰ catch-up start failed: {e}")
 
             # ── Auto-OFF: weekdays at 15:30 IST ───────────────────────────
             if day <= 4 and hh == 15 and mm == 30:

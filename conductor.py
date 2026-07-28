@@ -313,13 +313,19 @@ class Conductor:
             pcr = float(ca.get("pcr") or 1.0)
             iv_skew = float(ca.get("iv_skew") or 0)
             oi_shift = str(ca.get("oi_shift_signal") or "NONE")
-            # Bullish flow: low PCR + call premium skew, OR OI shift signals bullish
+            # OI-shift velocity is the primary flow evidence — academic work on
+            # NSE data finds OI-change beats volume/PCR as a predictor, while
+            # raw PCR only has predictive value at multi-day horizons (no
+            # intraday edge). So PCR+skew alone votes only at EXTREMES
+            # (<0.8 / >1.25); mild readings no longer count as flow.
             # CE_ROLL_BULLISH = calls being placed near ATM (bullish)
             # PE_BUILD = fresh put writing = support forming (bullish for underlying)
-            bullish_flow = (pcr < 0.9 and iv_skew < 0) or oi_shift in ("CE_ROLL_BULLISH", "PE_BUILD")
+            bullish_flow = oi_shift in ("CE_ROLL_BULLISH", "PE_BUILD") or \
+                           (pcr < 0.80 and iv_skew < 0)
             # PE_ROLL_BEARISH = puts being placed near ATM (bearish)
             # CE_BUILD = fresh call writing = resistance forming (bearish for underlying)
-            bearish_flow = (pcr > 1.1 and iv_skew > 0) or oi_shift in ("PE_ROLL_BEARISH", "CE_BUILD")
+            bearish_flow = oi_shift in ("PE_ROLL_BEARISH", "CE_BUILD") or \
+                           (pcr > 1.25 and iv_skew > 0)
             # Note: "bullish flow for LONGS" means underlying going UP, but
             # bearish flow can also support a SHORT (i.e., flow_vote=-1).
             if bullish_flow: flow_vote = +1; flow_note = f"PCR {pcr:.2f}, skew {iv_skew:+.1f}, shift {oi_shift}"
