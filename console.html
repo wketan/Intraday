@@ -6,12 +6,14 @@
 <title>Intraday Console</title>
 <!-- iPhone home-screen app (PWA) -->
 <link rel="manifest" href="console.webmanifest"/>
-<meta name="theme-color" content="#0a0b0e"/>
+<meta name="theme-color" content="#172B1E"/>
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black"/>
 <meta name="apple-mobile-web-app-title" content="Console"/>
 <link rel="apple-touch-icon" href="icon-180.png"/>
+<link rel="icon" href="logo.svg" type="image/svg+xml"/>
+<link rel="icon" href="icon-192.png" type="image/png" sizes="192x192"/>
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
 <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700;800&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet"/>
@@ -458,8 +460,9 @@ html,body,button,input{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',s
 .top .clock b,.top b{color:#F1EDE0!important;}
 .top .led{color:#8FAE96!important;border-color:rgba(241,237,224,0.12)!important;background:transparent!important;}
 .top .led.live{color:var(--up)!important;border-color:var(--up-soft)!important;background:var(--up-soft)!important;}
-/* Rail logo and active nav button accent color */
-.rail .logo{background:linear-gradient(135deg,#B87428,#3D6848)!important;color:#F1EDE0!important;border-radius:6px!important;box-shadow:none!important;}
+/* Rail logo: brand mark image (logo.svg), no painted background */
+.rail .logo{background:transparent!important;box-shadow:none!important;overflow:hidden;}
+.rail .logo img,.scard .logo img{width:100%;height:100%;object-fit:contain;display:block;}
 @media(min-width:681px){
   .rbtn.on{color:#B87428!important;background:rgba(184,116,40,0.12)!important;}
   .rbtn.on::before{background:#B87428!important;box-shadow:none!important;}
@@ -469,7 +472,7 @@ html,body,button,input{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',s
 /* Setup screen */
 .setup{background:var(--bg)!important;}
 .scard{background:var(--panel)!important;border:1px solid var(--line)!important;border-radius:0!important;}
-.scard .logo{background:linear-gradient(135deg,#B87428,#3D6848)!important;color:#F1EDE0!important;border-radius:6px!important;}
+.scard .logo{background:transparent!important;border-radius:0!important;}
 .scard h1 em{color:#B87428!important;}
 .fld input{background:var(--panel2)!important;border-color:var(--line)!important;color:var(--ink)!important;border-radius:0!important;}
 .fld input:focus{border-color:#B87428!important;outline:none!important;}
@@ -637,7 +640,7 @@ function Setup({onDone}){
   const [err,setErr]=useState(''),[busy,setBusy]=useState(false);
   const go=async()=>{setBusy(true);setErr('');try{setServer(url);setToken(tok);if(name)localStorage.setItem('ie-user',name);
     const r=await apiFetch('/api/ping');if(!r.ok)throw new Error('Ping failed ('+r.status+')');onDone();}catch(e){setErr(e.message||'Could not reach server');}finally{setBusy(false);}};
-  return(<div className="setup"><div className="scard"><div className="logo">I</div><h1>Intraday <em>Console</em></h1>
+  return(<div className="setup"><div className="scard"><div className="logo"><img src="logo.svg" alt="Intraday"/></div><h1>Intraday <em>Console</em></h1>
     <p>Connect to your engine. Reuses the same server &amp; token as your main dashboard — leave URL blank to use this page's origin.</p>
     {err&&<div className="serr">{err}</div>}
     <div className="fld"><label>Your name</label><input value={name} onChange={e=>setName(e.target.value)} placeholder="Ketan"/></div>
@@ -1126,7 +1129,7 @@ function App(){
 
   return(<div className="shell">
     {toast&&<div className="toast" onClick={()=>setToast(null)}><div className="tt">{toast.tt}</div>{toast.tb&&<div className="tb">{toast.tb}</div>}</div>}
-    <nav className="rail"><div className="logo">I</div>
+    <nav className="rail"><div className="logo"><img src="logo.svg" alt="Intraday"/></div>
       {NAV.map(([id,icon,label])=>(<button key={id} className={'rbtn '+(view===id?'on':'')} onClick={()=>setView(id)} aria-label={label} style={{position:'relative'}}><Ico d={icon}/><span className="tip">{label}</span><span className="blabel">{label}</span>{id==='signals'&&open.length>0&&<span className="sig-badge">{open.length}</span>}{id==='swing'&&swingOpen>0&&<span className="sig-badge">{swingOpen}</span>}</button>))}
       <div className="rspace"/>
       <button className="rbtn theme-rbtn" onClick={toggle} aria-label="Theme"><Ico d={theme==='dark'?I.sun:I.moon}/><span className="tip">{theme==='dark'?'Light':'Dark'}</span><span className="blabel">Theme</span></button>

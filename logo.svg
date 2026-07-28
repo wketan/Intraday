@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- INTRADAY logo mark: two-tone forest rounded square + gold trend zigzag -->
+  <defs>
+    <clipPath id="sq">
+      <rect x="96" y="86" width="330" height="330" rx="86"/>
+    </clipPath>
+  </defs>
+  <!-- dark forest base -->
+  <rect x="96" y="86" width="330" height="330" rx="86" fill="#1C4630"/>
+  <!-- lighter forest above/left of the trend line -->
+  <polygon clip-path="url(#sq)" fill="#3F7355"
+           points="0,512 70,392 220,222 290,332 462,84 462,0 0,0"/>
+  <!-- gold-edged trend band (extends past the square corners) -->
+  <g fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <polyline points="70,392 220,222 290,332 462,84" stroke="#E3C27E" stroke-width="38"/>
+    <polyline points="70,392 220,222 290,332 462,84" stroke="#1C4630" stroke-width="20"/>
+  </g>
+</svg>
