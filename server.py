@@ -5807,7 +5807,10 @@ class SwingEngine:
         chosen = options[0]
         # Rough premium estimate: ~2.5% of spot for ATM monthly
         est_prem = round(float(spot) * 0.025, 1)
-        lot = info.get("lot_size", 50)
+        # Lot size: prefer the exchange's own value from Angel's instrument
+        # master (revised quarterly per stock) over the hardcoded SWING_STOCKS
+        # table, which goes stale — the NIFTY 65-vs-75 bug all over again.
+        lot = int(chosen.get("lotsize") or 0) or info.get("lot_size", 50)
         capital = round(est_prem * lot, 0)
         sl_prem  = round(est_prem * 0.4, 1)   # 60% premium SL (2 ATR index move)
         t1_prem  = round(est_prem * 2.0, 1)   # 100% gain at T1
@@ -5957,7 +5960,7 @@ ORIGINAL ENTRY REASONS:
         if opt:
             msg += (f"\n📋 *Option:* {opt['symbol']} {opt['dte']}DTE"
                     f" | Entry ~₹{opt['entry']} · SL ₹{opt['sl']} · T1 ₹{opt['target1']}"
-                    f" | Capital ~₹{opt.get('capital','?')}")
+                    f" | 1 lot = {opt.get('lot_size','?')} qty · Capital ~₹{opt.get('capital','?')}")
         reasons = sig.get("reasons",[])[:3]
         if reasons:
             msg += "\nReasons: " + " · ".join(reasons)

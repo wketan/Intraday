@@ -940,7 +940,7 @@ function SwingOpenCard({p,idx}){
     <div className="pos-top"><span className="pos-idx">{String(idx+1).padStart(2,'0')}</span><span className="pos-lbl">Swing · paper</span>
       <span className="pos-live"><span className="d"/>{hasLive?<>LIVE&nbsp;·&nbsp;<b>{p.live_ts||''}</b></>:'AWAITING QUOTE'}</span></div>
     <div className="pos-name">{swName(p.instrument)} <span className="ot">{p.option_type||''}</span></div>
-    <div className="pos-meta">{long?'LONG':'SHORT'}{ind.confidence?(' · CONF '+ind.confidence):''} · ENTERED {fmtDay(p.entry_date)}{p.option_symbol?(' · '+humanizeOpt(p.option_symbol)):''}</div>
+    <div className="pos-meta">{long?'LONG':'SHORT'}{ind.confidence?(' · CONF '+ind.confidence):''} · ENTERED {fmtDay(p.entry_date)}{p.option_symbol?(' · '+humanizeOpt(p.option_symbol)):''}{p.lot_size?(' · LOT '+p.lot_size):''}</div>
     <SwingHoldBar held={p.held_days||0} maxHold={p.max_hold_days||5} remaining={p.days_remaining!=null?p.days_remaining:'—'}/>
     <div className="pos-prices">
       <div className="pp"><div className="k">Entry</div><div className="v">₹{entry?entry.toFixed(1):'—'}</div></div>
@@ -958,7 +958,7 @@ function SwingOpenCard({p,idx}){
         <div className={'v '+(up?'up':'dn')}>{estRs!=null?((estRs>=0?'+':'−')+'₹'+fmt(estRs)):(pnlPct>=0?'+':'−')+Math.abs(pnlPct).toFixed(1)+'%'}
           {estRs!=null&&<span className={'pct '+(up?'up':'dn')}>{pnlPct>=0?'+':''}{pnlPct.toFixed(1)}%</span>}</div></div>
       <span className="pos-stat" style={{color:up?'var(--up)':'var(--warn)'}}><span className="d"/>{up?'RUNNING':'WATCH'}</span></div>
-    <div className="pos-note">{estRs!=null?('₹ figure = 1 lot of '+(humanizeOpt(p.option_symbol)||'the ATM option')+' (delta-0.5 estimate) · spot % is exact.'):'Spot % move since entry · option estimate appears once a quote lands.'}</div>
+    <div className="pos-note">{estRs!=null?('₹ figure = 1 lot of '+(humanizeOpt(p.option_symbol)||'the ATM option')+(p.lot_size?(' = '+p.lot_size+' qty'):'')+' (delta-0.5 estimate) · spot % is exact.'):'Spot % move since entry · option estimate appears once a quote lands.'}</div>
   </div>);}
 
 const SWING_SORTS=[
