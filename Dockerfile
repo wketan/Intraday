@@ -32,9 +32,11 @@ COPY signal_reverter.py .
 COPY signal_nifty_regime.py .
 COPY signal_patterns.py .
 COPY conductor.py .
+COPY macd_scalper.py .
 COPY options_intel.py .
 COPY regime.py .
 COPY events.json .
+COPY swing_backfill.json .
 COPY index.html .
 COPY manifest.json .
 COPY start.sh .
