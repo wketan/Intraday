@@ -359,6 +359,26 @@ class Conductor:
             direction = "SHORT"
             n_dims = short_dims
         else:
+            direction = None
+        # Family-span check: {trend, momentum, pattern} are one correlated
+        # family (they all read price direction); structure and flow are the
+        # orthogonal ones. Three same-family votes are one opinion repeated —
+        # ensemble value comes from ERROR DECORRELATION, so demand votes
+        # from >= 2 families. (Extra 4th/5th votes set SIZE, not gating.)
+        if direction is not None:
+            want = +1 if direction == "LONG" else -1
+            fam_a = any(v == want for v in (trend_vote, momentum_vote, pattern_vote))
+            fam_b = struct_vote == want
+            fam_c = flow_vote == want
+            if (int(fam_a) + int(fam_b) + int(fam_c)) < 2:
+                _last_decision_set({
+                    "verdict": "SINGLE_FAMILY_CONFLUENCE",
+                    "note": "votes all from the correlated price family — no orthogonal confirmation",
+                    "votes": {"trend": trend_vote, "momentum": momentum_vote,
+                               "structure": struct_vote, "flow": flow_vote, "pattern": pattern_vote},
+                })
+                return None
+        if direction is None:
             _last_decision_set({
                 "verdict": "INSUFFICIENT_CONFLUENCE",
                 "long_dims": long_dims, "short_dims": short_dims,
@@ -469,6 +489,8 @@ class Conductor:
                 "flow_note":     flow_note,
             },
             "strategy":   "conductor",
+            # 4th/5th confirming dimensions upgrade SIZE, never gate entry.
+            "priority":   "full" if n_dims >= 4 else "half",
             "v2_score":   n_dims,
             "v2_diag":    diag,
             "timestamp":  cur_ts.strftime("%H:%M:%S") if hasattr(cur_ts, "strftime") else "",

@@ -547,7 +547,7 @@ class SlackAlert:
         # Sign-guard: LOSS must read negative regardless of how pnl was passed.
         raw = float(pnl or 0)
         if result == "LOSS":                pnl_signed = -abs(raw)
-        elif result in ("WIN", "T1", "T2"): pnl_signed =  abs(raw)
+        elif result in ("WIN", "T1", "T2", "TRAIL"): pnl_signed =  abs(raw)
         else:                               pnl_signed =  raw
         sign = "+" if pnl_signed >= 0 else "−"
         amt = int(round(abs(pnl_signed)))
@@ -597,7 +597,7 @@ class SlackAlert:
         # absolute magnitude). Mirrors the guard in format_daily_summary_blocks.
         raw = float(pnl or 0)
         if result == "LOSS":                       pnl_signed = -abs(raw)
-        elif result in ("WIN", "T1", "T2"):        pnl_signed =  abs(raw)
+        elif result in ("WIN", "T1", "T2", "TRAIL"):        pnl_signed =  abs(raw)
         else:                                      pnl_signed =  raw
         sign = "+" if pnl_signed >= 0 else "−"
         amt = int(round(abs(pnl_signed)))
@@ -640,7 +640,7 @@ Win rate: *{perf["win_rate"]}%*  ·  Net P&L: *{'+' if perf["total_pnl"]>=0 else
                 result = r.get("result") or "OPEN"
                 pnl_abs = abs(raw_pnl)
                 pnl = -pnl_abs if result == "LOSS" else (
-                       pnl_abs if result in ("WIN", "T1", "T2") else raw_pnl)
+                       pnl_abs if result in ("WIN", "T1", "T2", "TRAIL") else raw_pnl)
                 sign = "+" if pnl >= 0 else ""
                 emoji = "🎯" if result == "T2" else ("✅" if result == "WIN" else
                         ("❌" if result == "LOSS" else "⊙"))
@@ -699,7 +699,7 @@ Win rate: *{perf["win_rate"]}%*  ·  Net P&L: *{'+' if perf["total_pnl"]>=0 else
                 pnl_abs = int(round(abs(raw_pnl)))
                 if result == "LOSS":
                     pnl = -pnl_abs
-                elif result in ("WIN", "T1", "T2"):
+                elif result in ("WIN", "T1", "T2", "TRAIL"):
                     pnl = pnl_abs
                 else:
                     pnl = int(round(raw_pnl))  # OPEN / EXPIRED keep their sign
@@ -1051,21 +1051,21 @@ def get_perf(date=None):
                 "total_brokerage":0,"total_slippage":0,
                 "avg_win":0,"avg_loss":0,"best_trade":0,"worst_trade":0}
     rows = [dict(r) for r in rows]
-    wins = [r for r in rows if r["result"] in ("WIN", "T1", "T2")]
+    wins = [r for r in rows if r["result"] in ("WIN", "T1", "T2", "TRAIL")]
     losses = [r for r in rows if r["result"] == "LOSS"]
     # Sign-guard: same defensive normalization the formatters use, so the
     # aggregate Net P&L can't show "+₹2,606" when every trade is a LOSS.
     def _signed_pnl(r):
         raw = float(r.get("pnl_rupees") or 0)
         if r.get("result") == "LOSS":               return -abs(raw)
-        if r.get("result") in ("WIN", "T1", "T2"):  return  abs(raw)
+        if r.get("result") in ("WIN", "T1", "T2", "TRAIL"):  return  abs(raw)
         return raw
     def _signed_pnl_net(r):
         raw = r.get("pnl_rupees_net")
         if raw is None: raw = r.get("pnl_rupees") or 0
         raw = float(raw)
         if r.get("result") == "LOSS":               return -abs(raw)
-        if r.get("result") in ("WIN", "T1", "T2"):  return  abs(raw)
+        if r.get("result") in ("WIN", "T1", "T2", "TRAIL"):  return  abs(raw)
         return raw
     pnls     = [_signed_pnl(r)     for r in rows]
     pnls_net = [_signed_pnl_net(r) for r in rows]
@@ -1923,6 +1923,62 @@ class SignalGen:
     last_dispatch: dict = {"strategy": None, "actually_ran": None, "error": None, "ts": None}
 
     @staticmethod
+    def trend_day_score(df):
+        """0-5 trend-day PRE-classifier (Crabel/Raschke family + relative
+        volume) — fires at the open, hours before ADX(10) can confirm:
+          +1 gap >= 0.4% of prior close
+          +1 gap survives (first 5-min bar closes in the gap direction)
+          +1 prior day compressed (< 0.6x avg of available prior day ranges)
+          +1 open outside the prior day's range
+          +1 first-15-min volume >= 1.5x the same window on prior days
+        Returns (score, diag) or (None, {}) when there's no prior-day data.
+        """
+        try:
+            ts_col = "ts" if "ts" in df.columns else "timestamp"
+            ts = pd.to_datetime(df[ts_col])
+            dates = ts.dt.date
+            today = dates.iloc[-1]
+            tdf = df.loc[dates == today]
+            prev_dates = sorted(set(d for d in dates if d != today))
+            if len(tdf) < 1 or not prev_dates:
+                return None, {}
+            yday = df.loc[dates == prev_dates[-1]]
+            prev_close = float(yday["close"].iloc[-1])
+            prev_high = float(yday["high"].max())
+            prev_low = float(yday["low"].min())
+            open_ = float(tdf["open"].iloc[0])
+            gap = open_ - prev_close
+            gap_pct = abs(gap) / prev_close * 100 if prev_close else 0
+            score = 0
+            d = {"gap_pct": round(gap_pct, 2)}
+            if gap_pct >= 0.4:
+                score += 1
+            b1o, b1c = float(tdf["open"].iloc[0]), float(tdf["close"].iloc[0])
+            if gap_pct >= 0.15 and ((gap > 0 and b1c > b1o) or (gap < 0 and b1c < b1o)):
+                score += 1   # gap survival
+            day_ranges = []
+            for dt_ in prev_dates:
+                dd = df.loc[dates == dt_]
+                day_ranges.append(float(dd["high"].max() - dd["low"].min()))
+            if day_ranges and (prev_high - prev_low) < 0.6 * (sum(day_ranges) / len(day_ranges)):
+                score += 1   # compression before expansion
+            if open_ > prev_high or open_ < prev_low:
+                score += 1   # open outside prior range
+            if "volume" in df.columns and len(tdf) >= 3:
+                v_now = float(tdf["volume"].iloc[:3].sum())
+                prior_v = []
+                for dt_ in prev_dates:
+                    dd = df.loc[dates == dt_]
+                    if len(dd) >= 3:
+                        prior_v.append(float(dd["volume"].iloc[:3].sum()))
+                if prior_v and v_now >= 1.5 * (sum(prior_v) / len(prior_v)):
+                    score += 1   # opening relative volume
+            d["score"] = score
+            return score, d
+        except Exception:
+            return None, {}
+
+    @staticmethod
     def classify_regime(df):
         """Classify the CURRENT intraday regime as 'trend' or 'range' using
         ADX(14) on the 5-min bars, with the VWAP-cross count as a tiebreak.
@@ -1940,6 +1996,26 @@ class SignalGen:
         engine with validated live edge, so it keeps priority on errors).
         """
         try:
+            # ── Early-session pre-classifier ─────────────────────────────
+            # ADX(10) needs ~an hour of bars to see a trend; gap structure,
+            # compression, and opening relative volume classify the day at
+            # 09:30. Until AUTO_PRECLASS_UNTIL (bar time, default 10:30) the
+            # pre-classifier outranks ADX.
+            pre_until = os.environ.get("AUTO_PRECLASS_UNTIL", "10:30")
+            try:
+                _tc = "ts" if "ts" in df.columns else "timestamp"
+                bar_hm = pd.to_datetime(df[_tc].iloc[-1]).strftime("%H:%M")
+            except Exception:
+                bar_hm = "12:00"
+            if bar_hm < pre_until:
+                score, sdiag = SignalGen.trend_day_score(df)
+                if score is not None:
+                    if score >= 3:
+                        return "trend", {"pre_score": score, **sdiag}
+                    if score <= 1 and sdiag.get("gap_pct", 1.0) < 0.28:
+                        # small gap + no trend markers: 62% of sub-70pt NIFTY
+                        # gaps fill within 90 min — mean-reversion morning
+                        return "range", {"pre_score": score, **sdiag}
             adx_period = int(os.environ.get("AUTO_ADX_PERIOD", "10"))
             adx_trend = float(os.environ.get("AUTO_ADX_TREND", "25"))
             adx_range = float(os.environ.get("AUTO_ADX_RANGE", "20"))
@@ -3549,12 +3625,32 @@ class PLTracker:
             result = None
             exit_opt = None
             if cur_opt is not None and opt_entry > 0:
+                # ── Exit v2 (INTRADAY_EXIT_V2, default on) ───────────────
+                # Fixed +50%/+100% targets amputate the right tail that a
+                # ~40%-win momentum profile depends on (Zarattini-style
+                # systems use trails, not caps). Ladder becomes:
+                #   +25% premium  → SL locks to breakeven
+                #   +50% premium  → 25%-below-peak trail arms, T1/T2 caps off
+                # SL -35% and the 30-min time stop stay as-is.
+                _v2 = os.environ.get("INTRADAY_EXIT_V2", "true").lower() == "true"
+                if _v2:
+                    _best = self._best_premium.get(s["id"], opt_entry)
+                    if _best >= opt_entry * 1.25:
+                        opt_sl = max(opt_sl, opt_entry)
+                    if _best >= opt_entry * 1.5:
+                        opt_sl = max(opt_sl, round(_best * 0.75, 2))
+                        opt_t1 = 0; opt_t2 = 0   # uncap: the trail is the exit
                 if opt_t2 > 0 and cur_opt >= opt_t2:
                     result = "T2"; exit_opt = cur_opt
                 elif opt_t1 > 0 and cur_opt >= opt_t1:
                     result = "WIN"; exit_opt = cur_opt
                 elif opt_sl > 0 and cur_opt <= opt_sl:
                     result = "LOSS"; exit_opt = max(cur_opt, opt_sl)
+                    # A stop above entry is a profitable trail/breakeven
+                    # exit, not a stop-out — label it so, and keep it from
+                    # tripping the direction loss-cooldown.
+                    if exit_opt >= opt_entry:
+                        result = "TRAIL"
                 elif self._time_stop_due(s, opt_entry, cur_opt):
                     # Time stop: an option buy that hasn't moved ≥15% in its
                     # favor within 30 min is statistically paying theta for
@@ -3562,6 +3658,19 @@ class PLTracker:
                     # intraday buyers. Env: TIME_STOP_MIN (0 disables),
                     # TIME_STOP_MIN_GAIN_PCT.
                     result = "TIME_STOP"; exit_opt = cur_opt
+
+                # Expiry-day flat: never carry a weekly-expiry option past
+                # 14:00 — ATM decay runs ₹20-40+/hour into the close and
+                # premiums collapse regardless of direction.
+                if result is None:
+                    try:
+                        from regime import RegimeFilter as _RF
+                        _nw = datetime.now(IST)
+                        if _RF._is_expiry_day(_nw, s["instrument"]) and \
+                                _nw.strftime("%H:%M") >= os.environ.get("EXPIRY_FLAT_AT", "14:00"):
+                            result = "EXPIRY_FLAT"; exit_opt = cur_opt
+                    except Exception:
+                        pass
 
                 # Two-tick confirmation: never close on a single quote. A lone
                 # bad tick (2026-06-12: phantom ₹244 print on an option really
@@ -3990,6 +4099,34 @@ class Engine:
                  json.dumps(detail) if detail else None))
         except Exception as e:
             log.warning(f"  gate shadow-log failed ({gate}): {e}")
+
+    def _oi_wall_veto(self, name, chain, spot, direction):
+        """Veto an entry aimed into a REINFORCED OI wall within
+        OI_WALL_VETO_PCT (default 0.20%) of spot.
+
+        SPX analog: call walls hold intraday in 83% of sessions, put walls
+        89% — but a wall whose OI is UNWINDING as price approaches often
+        breaks and accelerates, so only building walls veto. Returns
+        (veto: bool, note: str). Never raises."""
+        try:
+            if not chain or not spot:
+                return False, ""
+            side = "CE" if direction == "LONG" else "PE"
+            rows = [o for o in chain if o.get("type") == side and (o.get("oi") or 0) > 0
+                    and ((o["strike"] > spot) if direction == "LONG" else (o["strike"] < spot))]
+            if not rows:
+                return False, ""
+            wall = max(rows, key=lambda o: o.get("oi") or 0)
+            dist_pct = abs(wall["strike"] - spot) / spot * 100
+            if dist_pct > float(os.environ.get("OI_WALL_VETO_PCT", "0.20")):
+                return False, ""
+            hist = (self._oi_history.get(name) or {}).get((wall["strike"], side))
+            if hist and len(hist) >= 2 and (hist[-1].get("oi") or 0) <= (hist[0].get("oi") or 0):
+                return False, f"{side} wall {wall['strike']:.0f} unwinding — break allowed"
+            return True, (f"{side} OI wall {wall['strike']:.0f} "
+                          f"({(wall.get('oi') or 0):,} OI) only {dist_pct:.2f}% away and holding/building")
+        except Exception:
+            return False, ""
 
     def _premium_orb_tick(self, name, inst, df):
         """Premium-breakout ORB — the only cost-inclusive, positive-expectancy
@@ -4578,6 +4715,25 @@ class Engine:
                         except Exception as _mse:
                             log.warning(f"  MACD Scalper error: {_mse}")
 
+                    # ── Expiry-day gamma-blast piggyback (14:15-14:45) ──
+                    # Compressed expiry afternoons attacking a strike can 2-3x
+                    # premium in minutes; most attempts die — HALF SIZE only.
+                    if not sig and strategy in ("conductor", "auto"):
+                        try:
+                            from regime import RegimeFilter as _RF
+                            _nw = datetime.now(IST)
+                            if _RF._is_expiry_day(_nw, name) and \
+                                    "14:15" <= _nw.strftime("%H:%M") <= "14:45":
+                                from signal_gamma import SignalGenGamma
+                                _g = SignalGenGamma.analyze(df, symbol=name)
+                                if _g:
+                                    _g["priority"] = "half"
+                                    _g.setdefault("reasons", []).append(
+                                        "Expiry gamma window — HALF SIZE, lottery-risk profile")
+                                    sig = _g
+                        except Exception as _ge:
+                            log.warning(f"  gamma piggyback error: {_ge}")
+
                     if not sig:
                         # Either too few bars OR analyzer returned None due to a blocked
                         # time window or hard time-gate (post-14:50). Track the window hits.
@@ -4592,6 +4748,38 @@ class Engine:
                                 except Exception: continue
                         continue
                     self.metrics["signals_generated"] += 1
+
+                    # ── Signal-bar volume check (soft — confidence, not gate) ──
+                    try:
+                        if "volume" in df.columns and len(df) >= 21:
+                            _vr = float(df["volume"].iloc[-1]) / \
+                                max(1.0, float(df["volume"].iloc[-21:-1].mean()))
+                            if _vr < 1.2:
+                                sig["confidence"] = max(10, int(sig["confidence"]) - 8)
+                                sig.setdefault("reasons", []).append(
+                                    f"Thin signal-bar volume {_vr:.2f}× (<1.2×): confidence -8")
+                    except Exception:
+                        pass
+
+                    # ── Weekly-expiry-day structure ──
+                    # 09:15-10:30 = gamma zone (buys OK, tight rules) ·
+                    # 10:30-14:00 = theta zone (no new buys) · 14:00+ flat
+                    # (tracker enforces); gamma piggyback re-enters 14:15+.
+                    try:
+                        from regime import RegimeFilter as _RF
+                        _nw = datetime.now(IST)
+                        if _RF._is_expiry_day(_nw, name):
+                            _hm = _nw.strftime("%H:%M")
+                            if "10:30" <= _hm < "14:00":
+                                self._log_gate(name, "EXPIRY_MIDDAY_BLOCK", sig,
+                                               {"window": "10:30-14:00 theta zone"})
+                                continue
+                            if _hm < "10:30":
+                                sig.setdefault("reasons", []).append(
+                                    "Expiry morning gamma window: ATM only · 30% SL · "
+                                    "30-min cut · flat by 14:00")
+                    except Exception:
+                        pass
 
                     # ── DRY_RUN_V2 (Phase 2): observe v2 signals live without trading ──
                     # When STRATEGY=v2 AND DRY_RUN_V2=true: fire to Slack + log only.
@@ -4814,6 +5002,17 @@ class Engine:
                     # BLOCK = options market strongly contradicts direction;
                     # skip saving the signal this cycle.
                     # ════════════════════════════════════════════════════════
+                    # ── OI-wall veto: don't buy INTO a reinforced wall ──
+                    if chain and sig.get("direction") in ("LONG", "SHORT"):
+                        _wv, _wnote = self._oi_wall_veto(name, chain, sig.get("price"),
+                                                          sig["direction"])
+                        if _wv:
+                            log.info(f"  ⛔ {name} OI-wall veto: {_wnote}")
+                            self._log_gate(name, "OI_WALL_VETO", sig, {"note": _wnote})
+                            self._prev[name] = {"instrument": name, "signal": sig,
+                                                 "option": opt, "chain_analytics": chain_anal}
+                            continue
+
                     _oi_intel = None
                     if chain_anal:
                         try:

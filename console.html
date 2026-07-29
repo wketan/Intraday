@@ -547,8 +547,8 @@ const fmtDay=(iso)=>{if(!iso)return'';const m=String(iso).match(/(\d{4})-(\d{2})
 const fmt=(n)=>Math.abs(Math.round(n||0)).toLocaleString('en-IN');
 const fmtK=(n)=>{n=Math.abs(+n||0);return n>=1e7?(n/1e7).toFixed(2)+'Cr':n>=1e5?(n/1e5).toFixed(2)+'L':n>=1e3?(n/1e3).toFixed(1)+'k':String(Math.round(n));};
 function humanizeOpt(sym){if(!sym)return'';const m=String(sym).toUpperCase().match(/^([A-Z]+?)(\d{2})([A-Z]{3})(\d{2})(\d+)(CE|PE)$/);return m?`${m[5]} ${m[6]} · ${m[2]} ${m[3]}`:String(sym);}
-const sgn=(s)=>{const raw=(s.pnl_rupees_net!=null?+s.pnl_rupees_net:+s.pnl_rupees)||0;if(s.result==='LOSS')return -Math.abs(raw);if(['WIN','T1','T2'].includes(s.result))return Math.abs(raw);return raw;};
-const isWin=(r)=>['WIN','T1','T2'].includes(r);
+const sgn=(s)=>{const raw=(s.pnl_rupees_net!=null?+s.pnl_rupees_net:+s.pnl_rupees)||0;if(s.result==='LOSS')return -Math.abs(raw);if(['WIN','T1','T2','TRAIL'].includes(s.result))return Math.abs(raw);return raw;};
+const isWin=(r)=>['WIN','T1','T2','TRAIL'].includes(r);
 const verdictClass=(v)=>{v=(v||'').toUpperCase();return v==='TAKE'?'take':(v==='SKIP'||v==='PASS')?'skip':'watch';};
 
 function usePoll(path,ms,enabled){const [data,setData]=useState(null);
