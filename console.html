@@ -916,27 +916,42 @@ function SwingOpenCard({p,idx}){
   const ind=parseInd(p);
   const long=(p.direction||'').toUpperCase()==='LONG';
   const entry=+p.spot_entry||0,sl=+p.spot_sl||0,t1=+p.spot_target1||0;
-  const ltp=p.live_ltp!=null?+p.live_ltp:null;
-  const pnlPct=p.live_pnl_pct!=null?+p.live_pnl_pct:null;
+  let t2=+p.spot_target2||0;if(!t2&&t1&&entry)t2=t1+(t1-entry);
+  const hasLive=p.live_ltp!=null;
+  const cur=hasLive?+p.live_ltp:entry;
+  // Track geometry: normalize so "favorable" always runs left → right,
+  // exactly like the live option card (works for SHORT too).
+  const m=long?1:-1,f=x=>m*x;
+  const a=Math.min(f(sl||entry),f(entry)),b=Math.max(f(t2||t1||entry),f(cur)),span=(b-a)||1;
+  const P=x=>Math.max(0,Math.min(100,((f(x)-a)/span)*100));
+  const enP=P(entry),t1P=P(t1||entry),curP=P(cur);
+  const pnlPct=p.live_pnl_pct!=null?+p.live_pnl_pct:(entry?m*(cur-entry)/entry*100:0);
   const estRs=p.live_est_pnl_rs!=null?+p.live_est_pnl_rs:null;
-  const up=(pnlPct||0)>=0;
+  const up=(pnlPct||0)>=0,dc=up?'var(--up)':'var(--dn)';
+  const grad=`linear-gradient(90deg,var(--dn) 0%,var(--dn) ${(enP*0.5).toFixed(0)}%,#d98b2e ${enP.toFixed(0)}%,var(--up) ${t1P.toFixed(0)}%,#4f8cff 100%)`;
   return(<div className="poscard">
     <div className="pos-top"><span className="pos-idx">{String(idx+1).padStart(2,'0')}</span><span className="pos-lbl">Swing · paper</span>
-      <span className="pos-live"><span className="d"/>{p.live_ts?('LIVE · '+p.live_ts):'AWAITING QUOTE'}</span></div>
+      <span className="pos-live"><span className="d"/>{hasLive?<>LIVE&nbsp;·&nbsp;<b>{p.live_ts||''}</b></>:'AWAITING QUOTE'}</span></div>
     <div className="pos-name">{swName(p.instrument)} <span className="ot">{p.option_type||''}</span></div>
     <div className="pos-meta">{long?'LONG':'SHORT'}{ind.confidence?(' · CONF '+ind.confidence):''} · ENTERED {fmtDay(p.entry_date)}{p.option_symbol?(' · '+humanizeOpt(p.option_symbol)):''}</div>
     <SwingHoldBar held={p.held_days||0} maxHold={p.max_hold_days||5} remaining={p.days_remaining!=null?p.days_remaining:'—'}/>
-    <div className="legbar" style={{marginTop:12}}>
-      <div className="leg"><div className="k">Entry</div><div className="v">₹{entry?entry.toFixed(1):'—'}</div></div>
-      <div className="leg"><div className="k">Stop</div><div className="v dn">₹{sl?sl.toFixed(1):'—'}</div></div>
-      <div className="leg"><div className="k">Tgt 1</div><div className="v up">₹{t1?t1.toFixed(1):'—'}</div></div>
-      <div className="leg"><div className="k">Now</div><div className={'v '+(ltp!=null?(up?'up':'dn'):'')}>₹{ltp!=null?ltp.toFixed(1):'—'}</div></div></div>
+    <div className="pos-prices">
+      <div className="pp"><div className="k">Entry</div><div className="v">₹{entry?entry.toFixed(1):'—'}</div></div>
+      <div className="pp r"><div className="k">Now · Live</div><div className={'v '+(hasLive?(up?'up':'dn'):'')}>₹{hasLive?cur.toFixed(1):'—'}</div></div></div>
+    <div className="track">
+      <span className="tk-lab l" style={{left:'0%'}}>SL</span><span className="tk-lab" style={{left:enP+'%'}}>ENTRY</span>
+      <span className="tk-lab" style={{left:t1P+'%'}}>T1</span><span className="tk-lab r" style={{left:'100%'}}>T2</span>
+      <div className="tk-bar" style={{background:grad}}>
+        <span className="tk-tick" style={{left:enP+'%'}}/><span className="tk-tick" style={{left:t1P+'%'}}/>
+        <span className="tk-dot" style={{left:curP+'%',color:dc,background:dc}}/></div>
+      <span className="tk-val l" style={{left:'0%'}}>₹{sl?sl.toFixed(0):'—'}</span><span className="tk-val" style={{left:enP+'%'}}>₹{entry.toFixed(0)}</span>
+      <span className="tk-val" style={{left:t1P+'%'}}>₹{t1?t1.toFixed(0):'—'}</span><span className="tk-val r" style={{left:'100%'}}>₹{t2?t2.toFixed(0):'—'}</span></div>
     <div className="pos-pnl">
-      <div><div className="k">P&amp;L · Unrealised</div>
-        <div className={'v '+(up?'up':'dn')}>{pnlPct!=null?((pnlPct>=0?'+':'−')+Math.abs(pnlPct).toFixed(1)+'%'):'—'}
-          {estRs!=null&&<span className={'pct '+(estRs>=0?'up':'dn')}>{estRs>=0?'+':'−'}₹{fmt(estRs)} est</span>}</div></div>
-      <span className="pos-stat" style={{color:'var(--lime)'}}><span className="d"/>OPEN</span></div>
-    {estRs!=null&&<div className="pos-note">Rupee figure is an estimate (delta-0.5 model on {humanizeOpt(p.option_symbol)||'the option'}), spot % is exact.</div>}
+      <div><div className="k">If taken · Unrealised</div>
+        <div className={'v '+(up?'up':'dn')}>{estRs!=null?((estRs>=0?'+':'−')+'₹'+fmt(estRs)):(pnlPct>=0?'+':'−')+Math.abs(pnlPct).toFixed(1)+'%'}
+          {estRs!=null&&<span className={'pct '+(up?'up':'dn')}>{pnlPct>=0?'+':''}{pnlPct.toFixed(1)}%</span>}</div></div>
+      <span className="pos-stat" style={{color:up?'var(--up)':'var(--warn)'}}><span className="d"/>{up?'RUNNING':'WATCH'}</span></div>
+    <div className="pos-note">{estRs!=null?('₹ figure = 1 lot of '+(humanizeOpt(p.option_symbol)||'the ATM option')+' (delta-0.5 estimate) · spot % is exact.'):'Spot % move since entry · option estimate appears once a quote lands.'}</div>
   </div>);}
 
 function SwingTab({swing}){
@@ -1039,7 +1054,7 @@ function App(){
   const hist=usePoll('/api/history?limit=50&date='+todayISO(),15000,!needsSetup);
   const metrics=usePoll('/api/metrics',15000,!needsSetup);
   const candleData=usePoll('/api/historical/BANKNIFTY?days=2&interval=FIVE_MINUTE',45000,!needsSetup);
-  const swing=usePoll('/api/swing/results?days=30',60000,!needsSetup);
+  const swing=usePoll('/api/swing/results?days=30',view==='swing'?15000:60000,!needsSetup);
   const swingOpen=(swing&&swing.open&&swing.open.length)||0;
   const [busy,setBusy]=useState(false);
 

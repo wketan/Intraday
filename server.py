@@ -5646,6 +5646,7 @@ class SwingEngine:
             "pnl_pct": round(favorable / max(float(pos.get("spot_entry") or 1), 0.01) * 100, 2),
             "est_pnl_rs": self._paper_est_option_pnl(pos, favorable),
             "ts": datetime.now(IST).strftime("%H:%M:%S"),
+            "epoch": time.time(),
         }
         return ltp
 
@@ -7259,13 +7260,33 @@ def api_swing_results():
     except Exception:
         days = 30
     since = (datetime.now(IST) - timedelta(days=days)).strftime("%Y-%m-%d")
-    live = getattr(swing_engine, "_paper_live", {}) or {}
     today = datetime.now(IST).date()
 
+    # On-request quote refresh: the swing cycle only updates every ~30 min,
+    # but the app wants a live "how much would I be making" read. Refresh
+    # stale quotes here (per-position TTL, default 45s; capped per request
+    # so a pile of open positions can't stall the endpoint or hit Angel
+    # rate limits).
+    try:
+        _ttl = float(os.environ.get("SWING_LIVE_TTL", "45"))
+    except Exception:
+        _ttl = 45.0
+    _fetched = 0
+    _now_ts = time.time()
+    open_src = [p for p in swing_pos_list(status="OPEN")
+                if (p.get("source") or "") == "AUTO_PAPER"]
+    for p in open_src:
+        lv = (getattr(swing_engine, "_paper_live", {}) or {}).get(p["id"], {})
+        if _fetched < 8 and (_now_ts - (lv.get("epoch") or 0)) >= _ttl:
+            try:
+                swing_engine._paper_live_quote(p)
+                _fetched += 1
+            except Exception:
+                pass
+    live = getattr(swing_engine, "_paper_live", {}) or {}
+
     open_rows = []
-    for p in swing_pos_list(status="OPEN"):
-        if (p.get("source") or "") != "AUTO_PAPER":
-            continue
+    for p in open_src:
         try:
             d0 = datetime.strptime(p.get("entry_date", ""), "%Y-%m-%d").date()
             held = (today - d0).days
