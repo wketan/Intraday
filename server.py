@@ -738,7 +738,19 @@ Win rate: *{perf["win_rate"]}%*  ·  Net P&L: *{'+' if perf["total_pnl"]>=0 else
 # ═══════════════════════════════════════════════════════════════════
 # DATABASE
 # ═══════════════════════════════════════════════════════════════════
-DB_PATH = os.environ.get("DB_PATH", "signals.db")
+# DB location. Auto-detect a mounted Railway volume: if /data exists and
+# DB_PATH isn't set explicitly, everything (signals, swing positions, AI
+# spend ledger) lands on the volume and survives redeploys with ZERO
+# further configuration. Without a volume the filesystem is ephemeral and
+# every deploy wipes state — mount one at /data in the Railway UI.
+DB_PATH = os.environ.get("DB_PATH") or (
+    "/data/signals.db" if os.path.isdir("/data") else "signals.db")
+if DB_PATH.startswith("/data"):
+    log.info("💾 Persistent volume detected — DB + AI ledger survive redeploys "
+             f"({DB_PATH})")
+else:
+    log.warning("⚠️ No /data volume — DB and AI spend ledger reset on every "
+                "redeploy. Add a Railway volume mounted at /data to fix.")
 
 def init_db():
     conn = sqlite3.connect(DB_PATH)
@@ -2436,11 +2448,35 @@ _AI_CAP_STATE = {"warned80": None, "capped_log": 0.0, "capped_slack": None}
 def _ai_month_key():
     return "ai_spend_inr_" + datetime.now(IST).strftime("%Y-%m")
 
-def _ai_spent_inr():
+# Ledger mirror file: lives next to the DB (i.e. on the /data volume when
+# one is mounted, or wherever AI_LEDGER_PATH points). The ledger reads the
+# MAX of DB and file, so losing either can only under-count a partial
+# month — the cap can never be tricked into overspending a running ledger.
+_AI_LEDGER_FILE = os.environ.get("AI_LEDGER_PATH") or os.path.join(
+    os.path.dirname(os.path.abspath(DB_PATH)), "ai_ledger.json")
+
+def _ai_ledger_file_read():
     try:
-        return float(get_engine_state(_ai_month_key(), default="0") or 0)
+        with open(_AI_LEDGER_FILE) as f:
+            d = json.load(f)
+        return float(d.get(datetime.now(IST).strftime("%Y-%m")) or 0)
     except Exception:
         return 0.0
+
+def _ai_ledger_file_write(spent):
+    try:
+        month = datetime.now(IST).strftime("%Y-%m")
+        with open(_AI_LEDGER_FILE, "w") as f:
+            json.dump({month: round(spent, 4)}, f)
+    except Exception:
+        pass
+
+def _ai_spent_inr():
+    try:
+        db_val = float(get_engine_state(_ai_month_key(), default="0") or 0)
+    except Exception:
+        db_val = 0.0
+    return max(db_val, _ai_ledger_file_read())
 
 def _ai_cap_inr():
     try:
@@ -2464,6 +2500,7 @@ def _ai_record_cost(model, usage):
         inr = usd * float(os.environ.get("AI_USD_INR", "88") or 88)
         spent = _ai_spent_inr() + inr
         set_engine_state(_ai_month_key(), f"{spent:.4f}")
+        _ai_ledger_file_write(spent)
         cap = _ai_cap_inr()
         month = datetime.now(IST).strftime("%Y-%m")
         if cap > 0 and spent >= 0.8 * cap and _AI_CAP_STATE["warned80"] != month:
