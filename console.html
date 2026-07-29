@@ -60,6 +60,9 @@ button{font-family:inherit;cursor:pointer;}input{font-family:inherit;}
 .up{color:var(--up);}.dn{color:var(--dn);}
 ::selection{background:var(--lime-soft);}
 .lbl{font-family:var(--mono);font-size:10px;font-weight:600;letter-spacing:.18em;text-transform:uppercase;color:var(--ink3);}
+.sortsel{appearance:none;-webkit-appearance:none;font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--ink2);background:var(--panel2);border:1px solid var(--line);border-radius:7px;padding:6px 24px 6px 10px;cursor:pointer;outline:none;
+  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='8' height='5' viewBox='0 0 8 5'><path d='M0 0l4 5 4-5z' fill='%238FAE96'/></svg>");background-repeat:no-repeat;background-position:right 8px center;}
+.sortsel:focus{border-color:var(--lime);}
 
 /* shell */
 .shell{position:relative;z-index:1;display:grid;grid-template-columns:72px 1fr;min-height:100vh;min-height:100dvh;}
@@ -954,25 +957,71 @@ function SwingOpenCard({p,idx}){
     <div className="pos-note">{estRs!=null?('₹ figure = 1 lot of '+(humanizeOpt(p.option_symbol)||'the ATM option')+' (delta-0.5 estimate) · spot % is exact.'):'Spot % move since entry · option estimate appears once a quote lands.'}</div>
   </div>);}
 
+const SWING_SORTS=[
+  ['pnl_desc','Profit first'],
+  ['pnl_asc','Loss first'],
+  ['rs_desc','Max ₹ gain'],
+  ['rs_asc','Max ₹ loss'],
+  ['expiry','Expiring soon'],
+  ['newest','Newest'],
+  ['conf','Confidence'],
+];
+function sortSwings(open,sortBy){
+  const pct=p=>p.live_pnl_pct!=null?+p.live_pnl_pct:null;
+  const rs=p=>p.live_est_pnl_rs!=null?+p.live_est_pnl_rs:null;
+  // Positions without a live quote yet sink to the bottom of P&L sorts.
+  const cmpNull=(ka,kb,desc)=>{
+    if(ka==null&&kb==null)return 0;if(ka==null)return 1;if(kb==null)return -1;
+    return desc?kb-ka:ka-kb;};
+  return [...open].sort((a,b)=>{
+    if(sortBy==='pnl_desc')return cmpNull(pct(a),pct(b),true);
+    if(sortBy==='pnl_asc') return cmpNull(pct(a),pct(b),false);
+    if(sortBy==='rs_desc') return cmpNull(rs(a),rs(b),true);
+    if(sortBy==='rs_asc')  return cmpNull(rs(a),rs(b),false);
+    if(sortBy==='expiry')  return ((a.days_remaining!=null?a.days_remaining:99)-(b.days_remaining!=null?b.days_remaining:99))||cmpNull(pct(a),pct(b),true);
+    if(sortBy==='newest')  return String((b.entry_date||'')+(b.entry_time||'')).localeCompare((a.entry_date||'')+(a.entry_time||''))||((b.id||0)-(a.id||0));
+    if(sortBy==='conf')    return (parseInd(b).confidence||0)-(parseInd(a).confidence||0);
+    return 0;});
+}
+
 function SwingTab({swing}){
   const open=(swing&&swing.open)||[];
   const closed=(swing&&swing.closed)||[];
   const sum=(swing&&swing.summary)||{};
   const pnlUp=(sum.est_total_pnl||0)>=0;
+  const [sortBy,setSortBy]=useState(()=>localStorage.getItem('ie-swing-sort')||'pnl_desc');
+  const setSort=(v)=>{setSortBy(v);localStorage.setItem('ie-swing-sort',v);};
+  const [closedSort,setClosedSort]=useState('recent');
+  const sortedOpen=useMemo(()=>sortSwings(open,sortBy),[open,sortBy]);
+  const sortedClosed=useMemo(()=>{
+    const arr=[...closed];
+    if(closedSort==='profit')arr.sort((a,b)=>(+b.pnl_rupees||0)-(+a.pnl_rupees||0));
+    else if(closedSort==='loss')arr.sort((a,b)=>(+a.pnl_rupees||0)-(+b.pnl_rupees||0));
+    return arr;},[closed,closedSort]);
   return(<>
     <section className="panel g-kpi kpi"><div className="k">Open · paper</div><div className="v ac">{open.length}</div><div className="s">auto-tracked signals</div></section>
     <section className="panel g-kpi kpi"><div className="k">Closed · {sum.window_days||30}d</div><div className="v">{sum.total||0}</div><div className="s">{sum.wins||0}W · {sum.losses||0}L</div></section>
     <section className="panel g-kpi kpi"><div className="k">Win rate</div><div className="v">{(sum.win_rate||0).toFixed(1)}%</div><div className="s">swing paper trades</div></section>
     <section className="panel g-kpi kpi"><div className="k">Est P&amp;L · {sum.window_days||30}d</div><div className={'v '+(pnlUp?'up':'dn')}>{pnlUp?'+':'−'}₹{fmt(sum.est_total_pnl)}</div><div className="s">delta-0.5 estimate</div></section>
 
-    <section className="panel g12"><div className="head"><span className="t"><b>//</b> Open swing positions</span><span className="r lbl">{open.length}</span></div>
+    <section className="panel g12"><div className="head"><span className="t"><b>//</b> Open swing positions</span>
+      <span className="r" style={{display:'flex',alignItems:'center',gap:8}}>
+        <select className="sortsel" value={sortBy} onChange={e=>setSort(e.target.value)} aria-label="Sort positions">
+          {SWING_SORTS.map(([v,l])=><option key={v} value={v}>{l}</option>)}
+        </select>
+        <span className="lbl">{open.length}</span></span></div>
       {open.length===0&&<div className="empty" style={{padding:'26px 0'}}>No open swing positions · new alerts auto-track here</div>}
-      {open.map((p,i)=><SwingOpenCard key={p.id||i} p={p} idx={i}/>)}</section>
+      {sortedOpen.map((p,i)=><SwingOpenCard key={p.id||i} p={p} idx={i}/>)}</section>
 
-    <section className="panel g12"><div className="head"><span className="t"><b>//</b> Swing outcomes</span><span className="r lbl">last {sum.window_days||30}d</span></div>
+    <section className="panel g12"><div className="head"><span className="t"><b>//</b> Swing outcomes</span>
+      <span className="r" style={{display:'flex',alignItems:'center',gap:8}}>
+        <select className="sortsel" value={closedSort} onChange={e=>setClosedSort(e.target.value)} aria-label="Sort outcomes">
+          <option value="recent">Recent</option><option value="profit">Profit first</option><option value="loss">Loss first</option>
+        </select>
+        <span className="lbl">last {sum.window_days||30}d</span></span></div>
       <div className="tbl"><div className="hr"><span>Exit</span><span>Instrument</span><span className="cs">Side</span><span className="cp">What happened</span><span className="r">P&amp;L</span></div>
         {closed.length===0&&<div className="empty">No closed swing trades yet · outcomes land here after SL / target / max-hold</div>}
-        {closed.map((s,i)=>{const win=(s.result||'')==='WIN';const pnl=+s.pnl_rupees||0;const pct=s.pnl_pct!=null?+s.pnl_pct:null;
+        {sortedClosed.map((s,i)=>{const win=(s.result||'')==='WIN';const pnl=+s.pnl_rupees||0;const pct=s.pnl_pct!=null?+s.pnl_pct:null;
           return(<div className="row" key={s.id||i} style={{animationDelay:(i*0.015)+'s'}}>
             <span className="t">{fmtDay(s.exit_date)}</span>
             <div className="ins"><div className="s">{swName(s.instrument)}</div><div className="c">{humanizeOpt(s.option_symbol)||('held '+(s.hold_days!=null?s.hold_days:'—')+'d')}</div></div>
