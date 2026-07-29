@@ -2416,6 +2416,93 @@ _ANTHROPIC_USAGE = {
 }
 
 
+# ─── AI monthly spend cap ─────────────────────────────────────────────
+# Hard budget lock: once the month's estimated Anthropic spend reaches
+# AI_MONTHLY_CAP_INR (default ₹1,000), every further AI call is refused
+# until the calendar month rolls over. All layers already handle a None
+# return gracefully (Layer B fails open, Layer D/regime/EOD just skip),
+# so the ENGINE keeps trading — it only loses the AI garnish.
+# Ledger lives in engine_state (SQLite): survives restarts, but NOT a
+# Railway redeploy until the /data volume + DB_PATH are set up — until
+# then the cap is per deploy-month, which can only under-count, never
+# let spend run away silently past a running month's ledger.
+_AI_PRICING_USD_PER_M = {   # (input, output, cache_write, cache_read)
+    "haiku":  (1.0,  5.0,  1.25,  0.10),
+    "sonnet": (3.0, 15.0,  3.75,  0.30),
+    "opus":  (15.0, 75.0, 18.75,  1.50),
+}
+_AI_CAP_STATE = {"warned80": None, "capped_log": 0.0, "capped_slack": None}
+
+def _ai_month_key():
+    return "ai_spend_inr_" + datetime.now(IST).strftime("%Y-%m")
+
+def _ai_spent_inr():
+    try:
+        return float(get_engine_state(_ai_month_key(), default="0") or 0)
+    except Exception:
+        return 0.0
+
+def _ai_cap_inr():
+    try:
+        return float(os.environ.get("AI_MONTHLY_CAP_INR", "1000") or 0)
+    except Exception:
+        return 1000.0
+
+def _ai_record_cost(model, usage):
+    """Convert one call's token usage to INR and add to the month ledger.
+    Never raises."""
+    try:
+        price = _AI_PRICING_USD_PER_M["sonnet"]
+        for k, p in _AI_PRICING_USD_PER_M.items():
+            if k in (model or ""):
+                price = p
+                break
+        usd = ((usage.get("input_tokens") or 0) * price[0]
+               + (usage.get("output_tokens") or 0) * price[1]
+               + (usage.get("cache_creation_input_tokens") or 0) * price[2]
+               + (usage.get("cache_read_input_tokens") or 0) * price[3]) / 1e6
+        inr = usd * float(os.environ.get("AI_USD_INR", "88") or 88)
+        spent = _ai_spent_inr() + inr
+        set_engine_state(_ai_month_key(), f"{spent:.4f}")
+        cap = _ai_cap_inr()
+        month = datetime.now(IST).strftime("%Y-%m")
+        if cap > 0 and spent >= 0.8 * cap and _AI_CAP_STATE["warned80"] != month:
+            _AI_CAP_STATE["warned80"] = month
+            SlackAlert.send(f"⚠️ *AI budget 80% used* — ₹{spent:,.0f} of the "
+                            f"₹{cap:,.0f}/month cap. AI layers switch off at the cap; "
+                            f"signals keep flowing without the AI check.")
+        return spent
+    except Exception as e:
+        log.warning(f"  AI cost ledger failed: {e}")
+        return None
+
+def _ai_budget_blocked():
+    """True when this month's spend has hit the cap. Logs (rate-limited)
+    and Slacks (once per day) when blocking."""
+    cap = _ai_cap_inr()
+    if cap <= 0:
+        return False
+    spent = _ai_spent_inr()
+    if spent < cap:
+        return False
+    now_ts = time.time()
+    if now_ts - _AI_CAP_STATE["capped_log"] > 3600:
+        _AI_CAP_STATE["capped_log"] = now_ts
+        log.warning(f"🔒 AI monthly cap hit: ₹{spent:,.0f} >= ₹{cap:,.0f} — "
+                    f"AI calls disabled until next month (engine keeps trading)")
+    today = datetime.now(IST).strftime("%Y-%m-%d")
+    if _AI_CAP_STATE["capped_slack"] != today:
+        _AI_CAP_STATE["capped_slack"] = today
+        try:
+            SlackAlert.send(f"🔒 *AI monthly budget cap hit* — ₹{spent:,.0f} of "
+                            f"₹{cap:,.0f}. All AI layers paused until the month rolls "
+                            f"over; the engine keeps generating signals without them. "
+                            f"Raise with AI_MONTHLY_CAP_INR if intended.")
+        except Exception:
+            pass
+    return True
+
+
 def _anthropic_call(prompt, model=None, max_tokens=800, temperature=0.2, timeout=20,
                     system=None, layer=None):
     """Low-level wrapper around Anthropic messages API. Returns parsed JSON dict
@@ -2431,6 +2518,8 @@ def _anthropic_call(prompt, model=None, max_tokens=800, temperature=0.2, timeout
     """
     api_key = CONFIG.get("anthropic_api_key", "")
     if not api_key:
+        return None
+    if _ai_budget_blocked():
         return None
     body = {
         "model": model or CONFIG.get("anthropic_model", "claude-sonnet-4-5"),
@@ -2476,6 +2565,7 @@ def _anthropic_call(prompt, model=None, max_tokens=800, temperature=0.2, timeout
         # Aggregate usage telemetry
         _ANTHROPIC_USAGE["calls"] += 1
         u = data.get("usage") or {}
+        _ai_record_cost(body["model"], u)   # monthly ₹ ledger + cap warnings
         _ANTHROPIC_USAGE["input_tokens"]          += int(u.get("input_tokens") or 0)
         _ANTHROPIC_USAGE["output_tokens"]         += int(u.get("output_tokens") or 0)
         _ANTHROPIC_USAGE["cache_read_tokens"]     += int(u.get("cache_read_input_tokens") or 0)
@@ -7426,6 +7516,14 @@ def api_metrics():
             "candles":   cache_stats,
             "anthropic": ant,
             "anthropic_caching_enabled": bool(CONFIG.get("anthropic_cache_enabled", True)),
+        },
+        # Live AI spend ledger — computed per call from the API's own usage
+        # numbers at official pricing, converted at AI_USD_INR (default 88).
+        "ai_budget": {
+            "month": datetime.now(IST).strftime("%Y-%m"),
+            "spent_inr": round(_ai_spent_inr(), 2),
+            "cap_inr": _ai_cap_inr(),
+            "blocked": _ai_spent_inr() >= _ai_cap_inr() > 0,
         },
         "time": datetime.now(IST).strftime("%H:%M:%S"),
     })

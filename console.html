@@ -1176,8 +1176,18 @@ function App(){
     {open.length===0&&<div className="empty" style={{padding:'28px 0'}}>Flat · watching for setups</div>}
     {open.map((p,i)=><PositionCard key={p.id||i} p={p} idx={i}/>)}</section>);
 
+  const aiBudget=(metrics&&metrics.ai_budget)||null;
   const gatesCard=(<section className="panel g-gates"><div className="head"><span className="t"><b>//</b> Pre-trade gates</span></div>
-    {gates.map((g,i)=>(<div className={'gaterow '+(g.ok?'ok':'bad')} key={i}><span className="ic"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d={g.ok?I.check:I.x}/></svg></span><span className="gl">{g.l}</span><span className="gn">{g.n}</span></div>))}</section>);
+    {gates.map((g,i)=>(<div className={'gaterow '+(g.ok?'ok':'bad')} key={i}><span className="ic"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d={g.ok?I.check:I.x}/></svg></span><span className="gl">{g.l}</span><span className="gn">{g.n}</span></div>))}
+    {aiBudget&&(()=>{const pct=aiBudget.cap_inr>0?Math.min(100,aiBudget.spent_inr/aiBudget.cap_inr*100):0;
+      const col=aiBudget.blocked?'var(--dn)':pct>=80?'var(--warn)':'var(--up)';
+      return(<div style={{marginTop:14,paddingTop:12,borderTop:'1px solid var(--line2)'}}>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',marginBottom:6}}>
+          <span className="lbl">AI spend · {aiBudget.month}</span>
+          <span className="mono" style={{fontSize:12,fontWeight:700,color:col}}>₹{(+aiBudget.spent_inr).toFixed(aiBudget.spent_inr<10?2:0)} <span style={{color:'var(--ink3)',fontWeight:400}}>/ ₹{fmt(aiBudget.cap_inr)}</span></span></div>
+        <div className="mkt-bar"><div className="mkt-bar-fill" style={{width:pct+'%',background:col}}/></div>
+        <div style={{fontFamily:'var(--mono)',fontSize:9,color:'var(--ink4)',marginTop:5,letterSpacing:'.04em'}}>{aiBudget.blocked?'CAP HIT — AI layers paused until next month':'live from API usage · hard-locks at cap'}</div>
+      </div>);})()}</section>);
 
   const feedCard=(<section className="panel g-feed"><div className="head"><span className="t"><b>//</b> Live feed</span><span className="r lbl">{alerts.length} alerts</span></div>
     <div className="scrolly">{(!alerts||alerts.length===0)&&<div className="empty" style={{padding:'22px 0'}}>Quiet · no alerts yet</div>}
