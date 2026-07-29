@@ -63,6 +63,10 @@ button{font-family:inherit;cursor:pointer;}input{font-family:inherit;}
 .sortsel{appearance:none;-webkit-appearance:none;font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--ink2);background:var(--panel2);border:1px solid var(--line);border-radius:7px;padding:6px 24px 6px 10px;cursor:pointer;outline:none;
   background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='8' height='5' viewBox='0 0 8 5'><path d='M0 0l4 5 4-5z' fill='%238FAE96'/></svg>");background-repeat:no-repeat;background-position:right 8px center;}
 .sortsel:focus{border-color:var(--lime);}
+/* Swing open positions: 2-up grid on desktop, single column on mobile */
+.swing-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;align-items:start;}
+.swing-grid .poscard{margin-top:0;}
+@media(max-width:900px){.swing-grid{grid-template-columns:1fr;}}
 
 /* shell */
 .shell{position:relative;z-index:1;display:grid;grid-template-columns:72px 1fr;min-height:100vh;min-height:100dvh;}
@@ -1011,7 +1015,7 @@ function SwingTab({swing}){
         </select>
         <span className="lbl">{open.length}</span></span></div>
       {open.length===0&&<div className="empty" style={{padding:'26px 0'}}>No open swing positions · new alerts auto-track here</div>}
-      {sortedOpen.map((p,i)=><SwingOpenCard key={p.id||i} p={p} idx={i}/>)}</section>
+      <div className="swing-grid">{sortedOpen.map((p,i)=><SwingOpenCard key={p.id||i} p={p} idx={i}/>)}</div></section>
 
     <section className="panel g12"><div className="head"><span className="t"><b>//</b> Swing outcomes</span>
       <span className="r" style={{display:'flex',alignItems:'center',gap:8}}>
