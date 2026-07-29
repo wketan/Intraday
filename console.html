@@ -907,7 +907,7 @@ function PositionCard({p,idx}){
 
 /* ── Swing tab ─────────────────────────────────────────────────────── */
 const swName=(n)=>String(n||'').replace(/_SW$/,'');
-const exitLabel=(r)=>({SL_HIT:'SL hit',T1_HIT:'T1 hit',T2_HIT:'T2 hit',MAX_HOLD:'Max hold'}[r]||r||'—');
+const exitLabel=(r)=>({SL_HIT:'SL hit',T1_HIT:'T1 hit',T2_HIT:'T2 hit',MAX_HOLD:'Max hold',STRENGTH_EXIT:'Strength exit',STAGNATION:'Stagnation',PREMIUM_BACKSTOP:'-50% premium'}[r]||r||'—');
 const parseInd=(p)=>{try{return JSON.parse(p.indicators||'{}')||{};}catch(e){return{};}};
 
 function SwingHoldBar({held,maxHold,remaining}){

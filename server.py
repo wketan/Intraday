@@ -5484,6 +5484,121 @@ class SwingAnalysis:
 
 
 # ═══════════════════════════════════════════════════════════════════
+# SWING PULLBACK v1 — momentum-filtered oversold pullback (LONG-ONLY)
+#
+# Built 2026-07-29 from a 4-track deep-research pass (~90 primary
+# sources). Full spec + evidence in SWING_STRATEGY.md. The one-line
+# thesis: momentum picks the stock, fear times the entry.
+#
+#   UNIVERSE  stock beats NIFTY over 126 days AND closes within 15% of
+#             its 252-day high (Indian momentum + 52wk-high effect —
+#             both academically validated on NSE).
+#   TRIGGER   uptrend intact (close > 200SMA and > 50SMA) AND a sharp
+#             2-5 day pullback: RSI(2) < 10, OR close at a 7-day
+#             closing low, OR 3 consecutive lower closes
+#             (Connors/Alvarez dip-buy family: 65-83% win rates,
+#             2-5 day holds, stops HURT this entry type).
+#   LONG-ONLY the short leg of momentum is where crashes live and
+#             India's market structure starves the short side; PE
+#             signals remain only in the legacy analyzer.
+#   EXITS     handled by the engine: first-strength exit (close > SMA5
+#             or RSI(2) > 65), stagnation stop, 10-session max hold,
+#             -50% premium backstop; the bought premium itself is the
+#             hard floor (why this entry suits option buying).
+# ═══════════════════════════════════════════════════════════════════
+class SwingPullback:
+    """Stateless analyze() per instrument. Returns a candidate dict or
+    None. Candidates are RANKED by the engine and only the top few are
+    alerted — selectivity is part of the documented edge."""
+
+    MIN_BARS = 220   # needs a real 200SMA + most of a 252d high window
+
+    @staticmethod
+    def analyze(name, candles, info, ctx):
+        """ctx: market context dict from SwingEngine._swing_market_ctx()
+        with nifty_ret126 (float) at minimum."""
+        try:
+            if len(candles) < SwingPullback.MIN_BARS:
+                return None
+            closes = pd.Series([c["close"] for c in candles], dtype=float)
+            highs  = pd.Series([c["high"]  for c in candles], dtype=float)
+            lows   = pd.Series([c["low"]   for c in candles], dtype=float)
+
+            c = float(closes.iloc[-1])
+            sma200 = float(closes.rolling(200).mean().iloc[-1])
+            sma100 = float(closes.rolling(100).mean().iloc[-1])
+            sma5   = float(closes.rolling(5).mean().iloc[-1])
+            # Trend gate uses the 100SMA (Alvarez's tested variant), NOT the
+            # 50SMA — a genuine 2-5 day dump often pierces the 50 while the
+            # uptrend stays perfectly intact; gating on it starves the entry.
+            if not (c > sma200 and c > sma100):
+                return None   # pullback must live inside an intact uptrend
+
+            # ── Momentum universe filters ─────────────────────────────
+            ret126 = c / float(closes.iloc[-127]) - 1.0
+            nifty_ret126 = float(ctx.get("nifty_ret126") or 0.0)
+            rs_excess = ret126 - nifty_ret126
+            if rs_excess <= 0:
+                return None   # must beat the index over ~6 months
+            hi252 = float(highs.iloc[-252:].max())
+            prox = c / hi252 if hi252 > 0 else 0
+            min_prox = float(os.environ.get("PULLBACK_MIN_52W_PROX", "0.85"))
+            if prox < min_prox:
+                return None   # too far below the 52-week high
+
+            # ── Pullback trigger (any one) ────────────────────────────
+            rsi2 = float(TA.rsi(closes, 2).iloc[-1])
+            seven_low = c <= float(closes.iloc[-8:-1].min())
+            three_down = all(closes.iloc[-i] < closes.iloc[-i - 1] for i in (1, 2, 3))
+            rsi2_max = float(os.environ.get("PULLBACK_RSI2_MAX", "10"))
+            triggers = []
+            if rsi2 < rsi2_max: triggers.append(f"RSI(2) {rsi2:.0f} < {rsi2_max:.0f}")
+            if seven_low:       triggers.append("7-day closing low")
+            if three_down:      triggers.append("3 consecutive lower closes")
+            if not triggers:
+                return None
+
+            # ── Levels ────────────────────────────────────────────────
+            # The SL here is a DISASTER floor (2x ATR), not a trading
+            # stop — Connors/Alvarez found stops hurt this entry; the
+            # real exits are strength / stagnation / time / premium.
+            tr = pd.concat([highs - lows, (highs - closes.shift()).abs(),
+                             (lows - closes.shift()).abs()], axis=1).max(axis=1)
+            atr = float(tr.rolling(14).mean().iloc[-1])
+            rsi14 = float(TA.rsi(closes, 14).iloc[-1])
+            sl = round(c - 2.0 * atr, 2)
+            t1 = round(c + 3.0 * atr, 2)
+            t2 = round(c + 5.0 * atr, 2)
+
+            # Rank score: how much it beats NIFTY + how close to highs.
+            score = round(rs_excess * 100 + (prox - min_prox) * 40, 2)
+            confidence = int(max(65, min(90, 70 + score / 2)))
+
+            return {
+                "direction": "LONG", "confidence": confidence,
+                "price": round(c, 2), "entry": round(c, 2),
+                "sl": sl, "target1": t1, "target2": t2,
+                "risk_reward": round((t1 - c) / max(c - sl, 0.01), 2),
+                "atr": round(atr, 2), "rsi": round(rsi14, 1),
+                "rsi2": round(rsi2, 1),
+                "score": score,
+                "reasons": [
+                    f"Momentum: +{ret126*100:.0f}% / 126d (NIFTY {nifty_ret126*100:+.0f}%) — beats index by {rs_excess*100:.0f}pts",
+                    f"Within {100-prox*100:.0f}% of 52-week high {hi252:.0f}",
+                    "Pullback trigger: " + " + ".join(triggers),
+                    f"Uptrend intact: close > 100SMA {sma100:.0f} and > 200SMA {sma200:.0f}",
+                    "Exits: first close > 5SMA / RSI(2)>65 · stagnation d5 · max 10 sessions · -50% premium floor",
+                ],
+                "sma5": round(sma5, 2),
+                "timeframe": "DAILY", "hold_days_est": "2-10 days",
+                "strategy": "pullback_v1",
+            }
+        except Exception as e:
+            log.warning(f"[Pullback] {name} error: {e}")
+            return None
+
+
+# ═══════════════════════════════════════════════════════════════════
 # SWING ENGINE — multi-day scanner + AI exit analysis
 # ═══════════════════════════════════════════════════════════════════
 class SwingEngine:
@@ -5536,13 +5651,201 @@ class SwingEngine:
                 time.sleep(60)
 
     def _scan_all(self):
-        log.info(f"[Swing] Scanning {len(SWING_STOCKS)} instruments...")
+        strategy = os.environ.get("SWING_STRATEGY", "pullback").lower()
+        if strategy != "pullback":
+            # Legacy multi-signal scorer — alerts every qualifying setup.
+            log.info(f"[Swing] Scanning {len(SWING_STOCKS)} instruments (legacy)...")
+            for name, info in SWING_STOCKS.items():
+                try:
+                    self._scan_instrument(name, info)
+                    time.sleep(0.5)   # gentle throttle
+                except Exception as e:
+                    log.warning(f"[Swing] {name} error: {e}")
+            return
+
+        # ── Pullback v1: gate → collect → rank → admit top slots ──────
+        ctx = self._swing_market_ctx()
+        log.info(f"[Swing] Pullback scan: regime={'OK' if ctx['long_ok'] else 'BLOCKED'} "
+                 f"({ctx['note']}) · {len(SWING_STOCKS)} instruments")
+        candidates = []
         for name, info in SWING_STOCKS.items():
             try:
-                self._scan_instrument(name, info)
-                time.sleep(0.5)   # gentle throttle
+                cand = self._scan_pullback(name, info, ctx)
+                if cand:
+                    candidates.append(cand)
+                time.sleep(0.5)
             except Exception as e:
                 log.warning(f"[Swing] {name} error: {e}")
+        try:
+            self._admit_pullback_candidates(candidates, ctx)
+        except Exception as e:
+            log.warning(f"[Swing] candidate admission failed: {e}")
+
+    # ── Pullback v1 machinery ─────────────────────────────────────────
+
+    def _swing_market_ctx(self):
+        """Market regime context, cached ~30 min. Gates NEW entries only:
+        NIFTY > 200SMA with a rising 50SMA (Faber-class trend filter),
+        India VIX band, and the macro event blackout. Exits always run."""
+        now_ts = time.time()
+        cached = getattr(self, "_mctx", None)
+        if cached and now_ts - cached.get("_ts", 0) < 1800:
+            return cached
+        ctx = {"_ts": now_ts, "long_ok": False, "nifty_ret126": 0.0,
+               "vix": None, "vix_band": "full", "note": ""}
+        notes = []
+        try:
+            candles = self.client.daily_candles("99926000", "NSE", days=400)
+            if len(candles) >= 220:
+                closes = pd.Series([c["close"] for c in candles], dtype=float)
+                c = float(closes.iloc[-1])
+                sma200 = float(closes.rolling(200).mean().iloc[-1])
+                sma50s = closes.rolling(50).mean()
+                slope_up = float(sma50s.iloc[-1]) > float(sma50s.iloc[-21])
+                ctx["nifty_ret126"] = c / float(closes.iloc[-127]) - 1.0
+                above200 = c > sma200
+                notes.append(f"NIFTY {'>' if above200 else '<'}200SMA, 50SMA {'rising' if slope_up else 'falling'}")
+                trend_ok = above200 and slope_up
+            else:
+                trend_ok = False
+                notes.append("NIFTY history short — trend gate failed closed")
+        except Exception as e:
+            trend_ok = False
+            notes.append(f"NIFTY fetch failed ({e}) — gate closed")
+        try:
+            vd = self.client.ltp("NSE", "India VIX", "26017")
+            vix = float((vd or {}).get("ltp") or 0)
+            if vix > 0:
+                ctx["vix"] = round(vix, 2)
+                vix_full = float(os.environ.get("PULLBACK_VIX_FULL", "20"))
+                vix_max = float(os.environ.get("PULLBACK_VIX_MAX", "25"))
+                ctx["vix_band"] = "full" if vix <= vix_full else ("half" if vix <= vix_max else "block")
+                notes.append(f"VIX {vix:.1f} ({ctx['vix_band']})")
+        except Exception:
+            notes.append("VIX unavailable (fails open)")
+        blackout = False
+        try:
+            blackout, ev = EventCalendar.in_blackout()
+            if blackout:
+                notes.append(f"event blackout: {(ev or {}).get('name', '?')}")
+        except Exception:
+            pass
+        ctx["long_ok"] = trend_ok and ctx["vix_band"] != "block" and not blackout
+        ctx["note"] = " · ".join(notes)
+        self._mctx = ctx
+        return ctx
+
+    def _scan_pullback(self, name, info, ctx):
+        """One instrument: run strength-exits on its open pullback rows
+        (always), then return a ranked entry candidate (only when the
+        regime allows new entries)."""
+        token, exch, sym = self._resolve_token(name, info)
+        if not token:
+            return None
+        candles = self.client.daily_candles(token, exch, days=400)
+        if len(candles) < 35:
+            return None
+
+        # Strength exit on open positions for this name (regime-independent)
+        try:
+            self._pullback_strength_exit(name, candles)
+        except Exception as e:
+            log.warning(f"[Swing] strength-exit check {name}: {e}")
+
+        if not ctx["long_ok"]:
+            return None
+        sig = SwingPullback.analyze(name, candles, info, ctx)
+        if not sig:
+            return None
+        ltp_data = self.client.ltp(exch, sym, token)
+        spot = (ltp_data or {}).get("ltp") or sig["price"]
+        sig["price"] = round(float(spot), 2)
+        self.signals[name] = {
+            "instrument": name, "type": info.get("type", "STOCK"),
+            "fo_name": info.get("nse_fo", ""), "signal": sig, "option": None,
+            "updated_at": datetime.now(IST).strftime("%H:%M:%S"),
+            "updated_date": datetime.now(IST).strftime("%Y-%m-%d"),
+        }
+        return {"name": name, "info": info, "sig": sig, "spot": float(spot)}
+
+    def _pullback_strength_exit(self, name, candles):
+        """Exit an open pullback position on the FIRST sign of strength —
+        close > 5SMA or RSI(2) > 65 (the Connors/Alvarez exit). This is
+        the profit-taking half of the mean-reversion trade."""
+        opens = [p for p in swing_pos_list(status="OPEN")
+                 if p.get("instrument") == name and (p.get("source") or "") == "AUTO_PAPER"]
+        if not opens:
+            return
+        closes = pd.Series([c["close"] for c in candles], dtype=float)
+        if len(closes) < 10:
+            return
+        c = float(closes.iloc[-1])
+        sma5 = float(closes.rolling(5).mean().iloc[-1])
+        rsi2 = float(TA.rsi(closes, 2).iloc[-1])
+        if not (c > sma5 or rsi2 > 65):
+            return
+        for pos in opens:
+            try:
+                if (json.loads(pos.get("indicators") or "{}") or {}).get("strategy") != "pullback_v1":
+                    continue   # legacy rows keep their SL/T1/T2 exits
+            except Exception:
+                continue
+            ltp = self._paper_live_quote(pos) or c
+            self._finalize_paper_close(
+                pos, float(ltp), "STRENGTH_EXIT",
+                note=f"close {c:.1f} > 5SMA {sma5:.1f}" if c > sma5 else f"RSI(2) {rsi2:.0f} > 65")
+
+    def _admit_pullback_candidates(self, candidates, ctx):
+        """Rank candidates by score and admit only into free slots —
+        selectivity is part of the edge (Zarattini; Turtle caps). Never
+        queue stale signals: whatever misses a slot today is discarded."""
+        if not candidates:
+            return
+        max_open = int(os.environ.get("SWING_MAX_OPEN", "4"))
+        account = float(os.environ.get("SWING_ACCOUNT_CAPITAL", "150000"))
+        open_rows = [p for p in swing_pos_list(status="OPEN")
+                     if (p.get("source") or "") == "AUTO_PAPER"]
+        open_names = {(p["instrument"], p.get("direction")) for p in open_rows}
+        slots = max_open - len(open_rows)
+        candidates.sort(key=lambda x: x["sig"].get("score", 0), reverse=True)
+        log.info(f"[Swing] {len(candidates)} pullback candidates, {max(0, slots)} free slots "
+                 f"(top: {', '.join(c['name'] + ' ' + str(c['sig'].get('score')) for c in candidates[:5])})")
+        if slots <= 0:
+            return
+        admitted = 0
+        for cand in candidates:
+            if admitted >= slots:
+                break
+            name, info, sig, spot = cand["name"], cand["info"], cand["sig"], cand["spot"]
+            if (name, "LONG") in open_names:
+                continue
+            opt = None
+            if info.get("fo_eligible"):
+                opt = self._pick_option(name, info, sig, spot, style="itm")
+            # Affordability gate: 1-lot premium must fit the account.
+            cap_frac = float(os.environ.get("PULLBACK_MAX_PREMIUM_FRAC", "0.10"))
+            if opt and account > 0 and (opt.get("capital") or 0) > account * cap_frac:
+                log.info(f"[Swing] {name} skipped — 1 lot ≈ ₹{opt.get('capital'):,.0f} "
+                         f"> {cap_frac*100:.0f}% of ₹{account:,.0f} account")
+                continue
+            self.signals.setdefault(name, {})["option"] = opt
+            half = ctx.get("vix_band") == "half"
+            if os.environ.get("SWING_SLACK_ENABLED", "true").lower() == "true":
+                _key = f"{name}:LONG:{datetime.now(IST).strftime('%Y-%m-%d')}"
+                if not hasattr(self, "_slack_sent"): self._slack_sent = set()
+                if _key not in self._slack_sent:
+                    self._slack_sent.add(_key)
+                    msg = self._format_slack(name, sig, opt)
+                    msg = f"🎯 *Pullback v1 · rank #{admitted+1} · score {sig.get('score')}*\n" + msg
+                    if half:
+                        msg += "\n⚠️ VIX 20-25: elevated-vol regime — half-size territory"
+                    SlackAlert.send(msg)
+            try:
+                sig_for_open = dict(sig)
+                self._open_paper_position(name, info, sig_for_open, opt)
+            except Exception as e:
+                log.warning(f"[Swing] paper-open failed {name}: {e}")
+            admitted += 1
 
     def _resolve_token(self, name, info):
         """Return (equity_token, ltp_exchange, ltp_symbol) for candle + LTP calls."""
@@ -5646,7 +5949,13 @@ class SwingEngine:
                 "rsi": sig.get("rsi"),
                 "risk_reward": sig.get("risk_reward"),
                 "hold_days_est": sig.get("hold_days_est"),
-                "max_hold_days": SwingEngine._paper_max_hold_days(),
+                "strategy": sig.get("strategy"),
+                "score": sig.get("score"),
+                # Pullback winners need room to run (right-tail evidence);
+                # legacy rows keep the shorter default.
+                "max_hold_days": (int(os.environ.get("PULLBACK_MAX_HOLD_DAYS", "10"))
+                                   if sig.get("strategy") == "pullback_v1"
+                                   else SwingEngine._paper_max_hold_days()),
             },
         }
         if opt:
@@ -5742,6 +6051,14 @@ class SwingEngine:
         except Exception:
             max_hold = SwingEngine._paper_max_hold_days()
 
+        try:
+            ind = json.loads(pos.get("indicators") or "{}") or {}
+        except Exception:
+            ind = {}
+        is_pullback = ind.get("strategy") == "pullback_v1"
+        opt_entry = float(pos.get("option_entry") or 0)
+        favorable = (ltp - entry) if direction == "LONG" else (entry - ltp)
+
         exit_reason = None
         if direction == "LONG":
             if sl > 0 and ltp <= sl:      exit_reason = "SL_HIT"
@@ -5751,11 +6068,41 @@ class SwingEngine:
             if sl > 0 and ltp >= sl:      exit_reason = "SL_HIT"
             elif t2 > 0 and ltp <= t2:    exit_reason = "T2_HIT"
             elif t1 > 0 and ltp <= t1:    exit_reason = "T1_HIT"
+        # Premium backstop: est option premium down ~50% from entry
+        # (delta-0.5 model → spot has moved a full premium against us).
+        if exit_reason is None and opt_entry > 0 and favorable * 0.5 <= -0.5 * opt_entry:
+            exit_reason = "PREMIUM_BACKSTOP"
+        # Stagnation stop (pullback only): an option that hasn't earned
+        # ~+25% premium after 5 sessions is just feeding theta.
+        if exit_reason is None and is_pullback:
+            stag_days = int(os.environ.get("PULLBACK_STAG_DAYS", "5"))
+            stag_gain = float(os.environ.get("PULLBACK_STAG_MIN_GAIN_PCT", "25"))
+            if held >= stag_days:
+                gain_pct = (favorable * 0.5 / opt_entry * 100) if opt_entry > 0 \
+                    else (favorable / entry * 100 / 0.03)   # spot proxy
+                if gain_pct < stag_gain:
+                    exit_reason = "STAGNATION"
         if exit_reason is None and held >= max_hold:
             exit_reason = "MAX_HOLD"
         if exit_reason is None:
             return
+        self._finalize_paper_close(pos, ltp, exit_reason, held=held, max_hold=max_hold)
 
+    def _finalize_paper_close(self, pos, ltp, exit_reason, note=None,
+                              held=None, max_hold=None):
+        """Close a paper position at `ltp` with `exit_reason`, persist the
+        outcome, and Slack the result. Shared by the price/time tracker and
+        the pullback strength-exit path."""
+        direction = pos.get("direction", "LONG")
+        entry = float(pos.get("spot_entry") or 0)
+        if entry <= 0:
+            return
+        if held is None:
+            try:
+                d0 = datetime.strptime(pos.get("entry_date", ""), "%Y-%m-%d").date()
+                held = (datetime.now(IST).date() - d0).days
+            except Exception:
+                held = 0
         favorable = (ltp - entry) if direction == "LONG" else (entry - ltp)
         pnl_pct = round(favorable / entry * 100, 2)
         est_rs = self._paper_est_option_pnl(pos, favorable)
@@ -5777,9 +6124,15 @@ class SwingEngine:
             "SL_HIT": "stop-loss hit",
             "T1_HIT": "target 1 hit",
             "T2_HIT": "target 2 hit",
-            "MAX_HOLD": f"max hold ({max_hold}d) reached",
-        }[exit_reason]
-        emoji = "🎯" if exit_reason == "T2_HIT" else ("✅" if result == "WIN" else "❌")
+            "MAX_HOLD": f"max hold ({max_hold or '?'}d) reached",
+            "STRENGTH_EXIT": "strength exit (mean-reversion target)",
+            "STAGNATION": "stagnation stop (no progress, theta bleeding)",
+            "PREMIUM_BACKSTOP": "premium backstop (-50% est)",
+        }.get(exit_reason, exit_reason)
+        if note:
+            story += f" — {note}"
+        emoji = "🎯" if exit_reason in ("T2_HIT", "STRENGTH_EXIT") and result == "WIN" \
+            else ("✅" if result == "WIN" else "❌")
         log.info(f"[Swing] {emoji} paper #{pos['id']} {pos['instrument']} {direction} "
                  f"CLOSED ({story}) after {held}d: {pnl_pct:+.1f}% spot"
                  + (f", est ₹{est_rs:+,.0f}" if est_rs is not None else ""))
@@ -5796,17 +6149,37 @@ class SwingEngine:
                 f"₹{entry:,.1f} → ₹{ltp:,.1f} ({pnl_pct:+.1f}% spot)"
                 f"{opt_line}")
 
-    def _pick_option(self, name, info, sig, spot):
-        """Select swing option (monthly expiry, ≥15 DTE, ATM strike)."""
+    def _pick_option(self, name, info, sig, spot, style=None):
+        """Select swing option (monthly expiry, ≥15 DTE).
+
+        style=None  → ATM (legacy behavior).
+        style='itm' → one strike in-the-money (~0.60-0.70 delta). For
+        multi-day holds ITM cuts flat-market theta bleed ~30% vs ATM
+        while still capturing ~0.7x of the spot move — the documented
+        sweet spot for 3-10 day option buys.
+        """
         fo = info.get("nse_fo", name)
         direction = sig["direction"]
         options = _master.find_swing_options(fo, spot, direction, min_dte=15)
         if not options: return None
-        # Pick closest strike to ATM
-        options.sort(key=lambda o: abs(o["strike"] - spot))
-        chosen = options[0]
-        # Rough premium estimate: ~2.5% of spot for ATM monthly
-        est_prem = round(float(spot) * 0.025, 1)
+        if style == "itm":
+            # ITM = strike below spot for CE, above spot for PE.
+            itm = [o for o in options if (o["strike"] < spot if direction == "LONG"
+                                           else o["strike"] > spot)]
+            pool = itm or options
+            # Nearest ITM strike to spot = roughly 0.6-0.7 delta.
+            pool.sort(key=lambda o: abs(o["strike"] - spot))
+            chosen = pool[0]
+            intrinsic = max(0.0, (spot - chosen["strike"]) if direction == "LONG"
+                            else (chosen["strike"] - spot))
+            # Premium ≈ intrinsic + ~1.5% of spot extrinsic (monthly, slight ITM)
+            est_prem = round(intrinsic + float(spot) * 0.015, 1)
+        else:
+            # Pick closest strike to ATM
+            options.sort(key=lambda o: abs(o["strike"] - spot))
+            chosen = options[0]
+            # Rough premium estimate: ~2.5% of spot for ATM monthly
+            est_prem = round(float(spot) * 0.025, 1)
         # Lot size: prefer the exchange's own value from Angel's instrument
         # master (revised quarterly per stock) over the hardcoded SWING_STOCKS
         # table, which goes stale — the NIFTY 65-vs-75 bug all over again.
