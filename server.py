@@ -5266,6 +5266,61 @@ def swing_perf():
     }
 
 
+def restore_swing_backfill():
+    """One-shot restore of paper swing positions from swing_backfill.json.
+
+    Railway's filesystem is EPHEMERAL: signals.db is wiped on every deploy
+    until a volume is mounted (set DB_PATH to the volume, e.g.
+    DB_PATH=/data/signals.db). This backfill re-seeds paper positions
+    (recovered from the Slack alert history) whenever the table has no
+    AUTO_PAPER rows at boot, so a wipe doesn't erase live tracking.
+
+    Guards:
+      • No-op when any AUTO_PAPER row exists (open OR closed) — a live DB
+        is never touched.
+      • Rows older than SWING_RESTORE_MAX_AGE_DAYS (default 7) are skipped:
+        restoring them as OPEN would make the tracker book bogus MAX_HOLD
+        outcomes at whatever today's price happens to be.
+    """
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "swing_backfill.json")
+    if not os.path.exists(path):
+        return
+    try:
+        rows = json.load(open(path))
+    except Exception as e:
+        log.warning(f"📼 swing backfill unreadable: {e}")
+        return
+    try:
+        existing = db_exec("SELECT COUNT(*) as c FROM swing_positions "
+                           "WHERE source='AUTO_PAPER'", fetchone=True)
+        if existing and int(dict(existing).get("c") or 0) > 0:
+            return
+    except Exception as e:
+        log.warning(f"📼 swing backfill precheck failed: {e}")
+        return
+    try:
+        max_age = int(os.environ.get("SWING_RESTORE_MAX_AGE_DAYS", "7"))
+    except Exception:
+        max_age = 7
+    today = datetime.now(IST).date()
+    n = skipped = 0
+    for r in rows:
+        try:
+            d0 = datetime.strptime(r.get("entry_date", ""), "%Y-%m-%d").date()
+            if (today - d0).days > max_age:
+                skipped += 1
+                continue
+            swing_pos_save(r)
+            n += 1
+        except Exception as e:
+            log.warning(f"📼 backfill row failed ({r.get('instrument')}): {e}")
+    if n or skipped:
+        log.info(f"📼 Swing backfill: restored {n} paper positions"
+                 + (f", skipped {skipped} older than {max_age}d" if skipped else ""))
+
+restore_swing_backfill()
+
+
 # ═══════════════════════════════════════════════════════════════════
 # SWING ANALYSIS  — daily-timeframe technical signal engine
 # ═══════════════════════════════════════════════════════════════════
