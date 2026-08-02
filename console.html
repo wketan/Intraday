@@ -989,6 +989,42 @@ function sortSwings(open,sortBy){
     return 0;});
 }
 
+function SwingOutcomeDetail({s}){
+  const long=(s.direction||'').toUpperCase()==='LONG';
+  let reasons=[];try{reasons=JSON.parse(s.reasons||'[]')||[];}catch(e){}
+  let ind={};try{ind=JSON.parse(s.indicators||'{}')||{};}catch(e){}
+  const win=isWin(s.result);
+  const cap=+s.capital||((+s.option_entry||0)*(+s.lot_size||0)*(+s.lots||1))||null;
+  const pnl=+s.pnl_rupees||0;
+  return(<div style={{background:'var(--panel2)',border:'1px solid var(--line)',borderLeft:'3px solid '+(win?'var(--up)':'var(--dn)'),padding:'14px 16px',margin:'2px 0 12px'}}>
+    <div style={{display:'flex',alignItems:'center',gap:10,flexWrap:'wrap',marginBottom:11}}>
+      <span className="pos-name" style={{fontSize:17}}>{swName(s.instrument)}</span>
+      <span className={'chip '+(long?'long':'short')}>{s.direction}</span>
+      <span className={'mc '+(win?'take':'skip')}>{s.result} · {exitLabel(s.exit_reason)}</span>
+      {ind.strategy&&<span className="lbl" style={{marginLeft:'auto'}}>{String(ind.strategy).replace(/_/g,' ').toUpperCase()}</span>}
+    </div>
+    <div style={{fontFamily:'var(--mono)',fontSize:11,color:'var(--ink2)',marginBottom:12}}>
+      Signal given {fmtDay(s.entry_date)}{s.entry_time?(' · '+s.entry_time+' IST'):''} → exited {fmtDay(s.exit_date)} · held {s.hold_days!=null?s.hold_days:'—'} day{s.hold_days===1?'':'s'}
+      {ind.confidence?(' · conf '+ind.confidence+'%'):''}{ind.score!=null?(' · rank score '+ind.score):''}
+    </div>
+    <div className="legbar" style={{marginBottom:12}}>
+      <div className="leg"><div className="k">Entry</div><div className="v">₹{(+s.spot_entry||0).toFixed(1)}</div></div>
+      <div className="leg"><div className="k">Stop</div><div className="v dn">{s.spot_sl?('₹'+(+s.spot_sl).toFixed(1)):'—'}</div></div>
+      <div className="leg"><div className="k">Tgt 1 / 2</div><div className="v up" style={{fontSize:13}}>{s.spot_target1?('₹'+(+s.spot_target1).toFixed(0)):'—'}{s.spot_target2?(' / '+(+s.spot_target2).toFixed(0)):''}</div></div>
+      <div className="leg"><div className="k">Exited at</div><div className={'v '+(win?'up':'dn')}>{s.exit_price?('₹'+(+s.exit_price).toFixed(1)):'—'}</div></div></div>
+    {s.option_symbol&&<div className="optline" style={{marginBottom:12}}>
+      <span className="opttag">BUY {s.option_type||''}</span>
+      <span className="optsym">{humanizeOpt(s.option_symbol)}</span>
+      <span className="optmeta">LOT {s.lot_size||'—'}{cap?(' · needs ₹'+fmt(cap)):''}{s.option_entry?(' · est ₹'+(+s.option_entry).toFixed(1)+(s.option_exit?(' → ₹'+(+s.option_exit).toFixed(1)):'')):''}</span></div>}
+    <div style={{display:'flex',gap:12,alignItems:'baseline'}}>
+      <span className="lbl">Outcome</span>
+      <span className="mono" style={{fontSize:17,fontWeight:800,color:win?'var(--up)':'var(--dn)'}}>{(pnl>=0?'+':'−')+'₹'+fmt(pnl)}</span>
+      {s.pnl_pct!=null&&<span className={'pct mono '+(+s.pnl_pct>=0?'up':'dn')} style={{fontSize:11,fontWeight:700,padding:'2px 7px',borderRadius:6}}>{(+s.pnl_pct>=0?'+':'')+(+s.pnl_pct).toFixed(1)+'% spot'}</span>}
+    </div>
+    {reasons.length>0&&<ul className="reasons">{reasons.slice(0,6).map((r,i)=><li key={i}>{r}</li>)}</ul>}
+  </div>);
+}
+
 function SwingTab({swing}){
   const open=(swing&&swing.open)||[];
   const closed=(swing&&swing.closed)||[];
@@ -997,6 +1033,7 @@ function SwingTab({swing}){
   const [sortBy,setSortBy]=useState(()=>localStorage.getItem('ie-swing-sort')||'pnl_desc');
   const setSort=(v)=>{setSortBy(v);localStorage.setItem('ie-swing-sort',v);};
   const [closedSort,setClosedSort]=useState('recent');
+  const [openRow,setOpenRow]=useState(null);
   const sortedOpen=useMemo(()=>sortSwings(open,sortBy),[open,sortBy]);
   const sortedClosed=useMemo(()=>{
     const arr=[...closed];
@@ -1026,14 +1063,19 @@ function SwingTab({swing}){
         <span className="lbl">last {sum.window_days||30}d</span></span></div>
       <div className="tbl"><div className="hr"><span>Exit</span><span>Instrument</span><span className="cs">Side</span><span className="cp">What happened</span><span className="r">P&amp;L</span></div>
         {closed.length===0&&<div className="empty">No closed swing trades yet · outcomes land here after SL / target / max-hold</div>}
-        {sortedClosed.map((s,i)=>{const win=(s.result||'')==='WIN';const pnl=+s.pnl_rupees||0;const pct=s.pnl_pct!=null?+s.pnl_pct:null;
-          return(<div className="row" key={s.id||i} style={{animationDelay:(i*0.015)+'s'}}>
+        {sortedClosed.map((s,i)=>{const win=isWin(s.result);const pnl=+s.pnl_rupees||0;const pct=s.pnl_pct!=null?+s.pnl_pct:null;
+          const rid=s.id||i;const isOpen=openRow===rid;
+          return(<React.Fragment key={rid}>
+          <div className="row" style={{animationDelay:(i*0.015)+'s',cursor:'pointer'}}
+               onClick={()=>setOpenRow(isOpen?null:rid)} title="Tap for full details">
             <span className="t">{fmtDay(s.exit_date)}</span>
-            <div className="ins"><div className="s">{swName(s.instrument)}</div><div className="c">{humanizeOpt(s.option_symbol)||('held '+(s.hold_days!=null?s.hold_days:'—')+'d')}</div></div>
+            <div className="ins"><div className="s">{swName(s.instrument)} <span style={{color:'var(--ink4)',fontSize:10}}>{isOpen?'▾':'▸'}</span></div><div className="c">{humanizeOpt(s.option_symbol)||('held '+(s.hold_days!=null?s.hold_days:'—')+'d')}</div></div>
             <span className="cside"><span className={'chip '+((s.direction||'')==='LONG'?'long':'short')}>{s.direction||'—'}</span></span>
             <span className="px cpx">{exitLabel(s.exit_reason)} · held <b>{s.hold_days!=null?s.hold_days:'—'}d</b>{s.exit_price?(' · out ₹'+(+s.exit_price).toFixed(1)):''}</span>
             <span className={'pnl '+(win?'up':'dn')}>{pnl>=0?'+':'−'}₹{fmt(pnl)}<span className="st">{(s.result||'')+(pct!=null?(' · '+(pct>=0?'+':'')+pct.toFixed(1)+'%'):'')}</span></span>
-          </div>);})}</div></section>
+          </div>
+          {isOpen&&<SwingOutcomeDetail s={s}/>}
+          </React.Fragment>);})}</div></section>
   </>);}
 
 function WakeLockBtn(){

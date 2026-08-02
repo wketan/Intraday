@@ -5629,20 +5629,37 @@ def restore_swing_backfill():
     except Exception:
         max_age = 7
     today = datetime.now(IST).date()
-    n = skipped = 0
+    n = closed_n = skipped = 0
     for r in rows:
         try:
-            d0 = datetime.strptime(r.get("entry_date", ""), "%Y-%m-%d").date()
-            if (today - d0).days > max_age:
-                skipped += 1
-                continue
-            swing_pos_save(r)
-            n += 1
+            is_closed = (r.get("status") or "OPEN") == "CLOSED"
+            # The age guard protects against restoring STALE rows as OPEN
+            # (the tracker would book bogus MAX_HOLD outcomes). CLOSED rows
+            # are history — they restore regardless of age, results intact.
+            if not is_closed:
+                d0 = datetime.strptime(r.get("entry_date", ""), "%Y-%m-%d").date()
+                if (today - d0).days > max_age:
+                    skipped += 1
+                    continue
+            row_id = swing_pos_save(r)
+            if is_closed:
+                swing_pos_update(row_id, status="CLOSED",
+                                 exit_date=r.get("exit_date"),
+                                 exit_price=r.get("exit_price"),
+                                 option_exit=r.get("option_exit"),
+                                 pnl_pct=r.get("pnl_pct"),
+                                 pnl_rupees=r.get("pnl_rupees"),
+                                 result=r.get("result"),
+                                 hold_days=r.get("hold_days"),
+                                 exit_reason=r.get("exit_reason"))
+                closed_n += 1
+            else:
+                n += 1
         except Exception as e:
             log.warning(f"📼 backfill row failed ({r.get('instrument')}): {e}")
-    if n or skipped:
-        log.info(f"📼 Swing backfill: restored {n} paper positions"
-                 + (f", skipped {skipped} older than {max_age}d" if skipped else ""))
+    if n or closed_n or skipped:
+        log.info(f"📼 Swing backfill: restored {n} open + {closed_n} closed paper positions"
+                 + (f", skipped {skipped} stale-open older than {max_age}d" if skipped else ""))
 
 restore_swing_backfill()
 
