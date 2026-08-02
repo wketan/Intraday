@@ -64,8 +64,18 @@ button{font-family:inherit;cursor:pointer;}input{font-family:inherit;}
   background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='8' height='5' viewBox='0 0 8 5'><path d='M0 0l4 5 4-5z' fill='%238FAE96'/></svg>");background-repeat:no-repeat;background-position:right 8px center;}
 .sortsel:focus{border-color:var(--lime);}
 /* Swing open positions: 2-up grid on desktop, single column on mobile */
-.swing-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;align-items:start;}
-.swing-grid .poscard{margin-top:0;}
+.swing-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;align-items:stretch;}
+/* Beat .poscard+.poscard's stacking margin (equal specificity loses by
+   source order) — without this the 2nd card in each grid row sits 12px low. */
+.swing-grid .poscard+.poscard{margin-top:0;}
+.swing-grid .poscard{margin-top:0;height:100%;display:flex;flex-direction:column;}
+.swing-grid .poscard .pos-note{margin-top:auto;padding-top:11px;}
+@media(min-width:901px){
+  /* Reserve two text lines for name+meta so ENTRY rows, tracks, and P&L
+     line up across side-by-side cards even when one meta line wraps. */
+  .swing-grid .pos-name{min-height:26px;}
+  .swing-grid .pos-meta{min-height:30px;}
+}
 @media(max-width:900px){.swing-grid{grid-template-columns:1fr;}}
 
 /* shell */
