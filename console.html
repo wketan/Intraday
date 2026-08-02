@@ -959,7 +959,9 @@ function SwingOpenCard({p,idx}){
         <div className={'v '+(up?'up':'dn')}>{estRs!=null?((estRs>=0?'+':'−')+'₹'+fmt(estRs)):(pnlPct>=0?'+':'−')+Math.abs(pnlPct).toFixed(1)+'%'}
           {estRs!=null&&<span className={'pct '+(up?'up':'dn')}>{pnlPct>=0?'+':''}{pnlPct.toFixed(1)}%</span>}</div></div>
       <span className="pos-stat" style={{color:up?'var(--up)':'var(--warn)'}}><span className="d"/>{up?'RUNNING':'WATCH'}</span></div>
-    <div className="pos-note">{estRs!=null?('₹ figure = 1 lot of '+(humanizeOpt(p.option_symbol)||'the ATM option')+(p.lot_size?(' = '+p.lot_size+' qty'):'')+(cap?(' · needs ~₹'+fmt(cap)+' to take'):'')+' (delta-0.5 estimate) · spot % is exact.'):'Spot % move since entry · option estimate appears once a quote lands.'}</div>
+    <div className="pos-note">{estRs!=null?(p.live_pnl_basis==='live'
+      ?('₹ figure = REAL premium: '+(humanizeOpt(p.option_symbol)||'option')+' ₹'+(+p.option_entry||0).toFixed(1)+' → ₹'+(+p.live_opt_ltp||0).toFixed(1)+' × '+(p.lot_size||1)+' qty'+(cap?(' · needs ~₹'+fmt(cap)):''))
+      :('₹ figure = 1 lot of '+(humanizeOpt(p.option_symbol)||'the ATM option')+(p.lot_size?(' = '+p.lot_size+' qty'):'')+(cap?(' · needs ~₹'+fmt(cap)+' to take'):'')+' (delta-0.5 estimate) · spot % is exact.')):'Spot % move since entry · option estimate appears once a quote lands.'}</div>
   </div>);}
 
 const SWING_SORTS=[

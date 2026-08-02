@@ -6294,6 +6294,7 @@ class SwingEngine:
                 "hold_days_est": sig.get("hold_days_est"),
                 "strategy": sig.get("strategy"),
                 "score": sig.get("score"),
+                "premium_source": (opt or {}).get("premium_source"),
                 # Pullback winners need room to run (right-tail evidence);
                 # legacy rows keep the shorter default.
                 "max_hold_days": (int(os.environ.get("PULLBACK_MAX_HOLD_DAYS", "10"))
@@ -6348,14 +6349,66 @@ class SwingEngine:
             self._paper_live = {}
         favorable = (ltp - (pos.get("spot_entry") or ltp)) if pos.get("direction") == "LONG" \
             else ((pos.get("spot_entry") or ltp) - ltp)
+
+        # REAL option P&L: quote the actual contract when we have (or can
+        # resolve) its token. The delta-0.5 model stays only as fallback,
+        # and the basis is reported so the app can label it honestly.
+        opt_ltp = None
+        pnl_rs = None
+        basis = "model"
+        opt_entry = float(pos.get("option_entry") or 0)
+        if opt_entry > 0:
+            tok = pos.get("option_token") or self._resolve_paper_opt_token(pos)
+            if tok:
+                try:
+                    oq = self.client.ltp("NFO", pos.get("option_symbol") or "", str(tok))
+                    opt_ltp = float((oq or {}).get("ltp") or 0) or None
+                except Exception:
+                    opt_ltp = None
+            if opt_ltp:
+                lot = int(pos.get("lot_size") or 0) or 1
+                lots = int(pos.get("lots") or 1)
+                pnl_rs = round((opt_ltp - opt_entry) * lot * lots, 0)
+                basis = "live"
+        if pnl_rs is None:
+            pnl_rs = self._paper_est_option_pnl(pos, favorable)
+
         self._paper_live[pos["id"]] = {
             "ltp": ltp,
             "pnl_pct": round(favorable / max(float(pos.get("spot_entry") or 1), 0.01) * 100, 2),
-            "est_pnl_rs": self._paper_est_option_pnl(pos, favorable),
+            "est_pnl_rs": pnl_rs,
+            "opt_ltp": opt_ltp,
+            "pnl_basis": basis,
             "ts": datetime.now(IST).strftime("%H:%M:%S"),
             "epoch": time.time(),
         }
         return ltp
+
+    def _resolve_paper_opt_token(self, pos):
+        """Backfilled rows carry the option symbol but no token (Slack
+        alerts never included one). Resolve it from the instrument master
+        by (fo_name, strike, type, expiry) and persist it on the row so the
+        lookup happens once."""
+        try:
+            info = SWING_STOCKS.get(pos.get("instrument")) or {}
+            fo = info.get("nse_fo")
+            strike = float(pos.get("option_strike") or 0)
+            otype = pos.get("option_type") or ""
+            expiry = pos.get("option_expiry") or ""
+            if not (fo and strike and otype and expiry):
+                return None
+            if not _master.ensure():
+                return None
+            hit = _master.nfo.get((fo, strike, otype, expiry))
+            if not hit:
+                return None
+            tok = str(hit.get("token") or "") or None
+            if tok:
+                swing_pos_update(pos["id"], option_token=tok)
+                pos["option_token"] = tok
+            return tok
+        except Exception:
+            return None
 
     @staticmethod
     def _paper_est_option_pnl(pos, favorable_spot_move):
@@ -6448,11 +6501,33 @@ class SwingEngine:
                 held = 0
         favorable = (ltp - entry) if direction == "LONG" else (entry - ltp)
         pnl_pct = round(favorable / entry * 100, 2)
-        est_rs = self._paper_est_option_pnl(pos, favorable)
         result = "WIN" if favorable > 0 else "LOSS"
         opt_entry = float(pos.get("option_entry") or 0)
-        est_opt_exit = (max(0.05 * opt_entry, opt_entry + favorable * 0.5)
-                        if opt_entry > 0 else None)
+        # Prefer the REAL option premium at exit (fresh cache from
+        # _paper_live_quote, or a direct quote); delta-0.5 model only as
+        # the last resort.
+        real_exit = None
+        lv = (getattr(self, "_paper_live", {}) or {}).get(pos["id"], {})
+        if lv.get("opt_ltp") and time.time() - (lv.get("epoch") or 0) < 300:
+            real_exit = float(lv["opt_ltp"])
+        elif opt_entry > 0:
+            tok = pos.get("option_token") or self._resolve_paper_opt_token(pos)
+            if tok:
+                try:
+                    oq = self.client.ltp("NFO", pos.get("option_symbol") or "", str(tok))
+                    real_exit = float((oq or {}).get("ltp") or 0) or None
+                except Exception:
+                    real_exit = None
+        if real_exit and opt_entry > 0:
+            lot = int(pos.get("lot_size") or 0) or 1
+            lots = int(pos.get("lots") or 1)
+            est_rs = round((real_exit - opt_entry) * lot * lots, 0)
+            est_opt_exit = real_exit
+            result = "WIN" if est_rs > 0 else "LOSS"   # judge by the actual vehicle
+        else:
+            est_rs = self._paper_est_option_pnl(pos, favorable)
+            est_opt_exit = (max(0.05 * opt_entry, opt_entry + favorable * 0.5)
+                            if opt_entry > 0 else None)
         swing_pos_update(pos["id"], status="CLOSED",
                          exit_date=datetime.now(IST).strftime("%Y-%m-%d"),
                          exit_price=ltp,
@@ -6523,13 +6598,25 @@ class SwingEngine:
             chosen = options[0]
             # Rough premium estimate: ~2.5% of spot for ATM monthly
             est_prem = round(float(spot) * 0.025, 1)
+        # REAL premium: quote the chosen contract's live LTP from Angel.
+        # The old flat "% of spot" model badly understated ITM strikes
+        # (M&M 3200 CE: model ₹81 vs market ₹139 — it ignored intrinsic
+        # and real IV). Model stays only as a fallback when the quote
+        # fails, and the source is recorded so the app can label it.
+        real_prem = None
+        try:
+            q = self.client.ltp("NFO", chosen["symbol"], str(chosen["token"]))
+            real_prem = float((q or {}).get("ltp") or 0) or None
+        except Exception:
+            real_prem = None
+        prem = round(real_prem, 1) if real_prem else est_prem
         # Lot size: prefer the exchange's own value from Angel's instrument
         # master (revised quarterly per stock) over the hardcoded SWING_STOCKS
         # table, which goes stale — the NIFTY 65-vs-75 bug all over again.
         lot = int(chosen.get("lotsize") or 0) or info.get("lot_size", 50)
-        capital = round(est_prem * lot, 0)
-        sl_prem  = round(est_prem * 0.4, 1)   # 60% premium SL (2 ATR index move)
-        t1_prem  = round(est_prem * 2.0, 1)   # 100% gain at T1
+        capital = round(prem * lot, 0)
+        sl_prem  = round(prem * 0.4, 1)   # 60% premium SL (2 ATR index move)
+        t1_prem  = round(prem * 2.0, 1)   # 100% gain at T1
         return {
             "symbol":   chosen["symbol"],
             "strike":   chosen["strike"],
@@ -6538,7 +6625,8 @@ class SwingEngine:
             "token":    chosen["token"],
             "dte":      chosen.get("dte",20),
             "lot_size": lot,
-            "entry":    est_prem,
+            "entry":    prem,
+            "premium_source": "live" if real_prem else "model",
             "sl":       sl_prem,
             "target1":  t1_prem,
             "capital":  capital,
@@ -8086,6 +8174,8 @@ def api_swing_results():
         p["live_ltp"] = lv.get("ltp")
         p["live_pnl_pct"] = lv.get("pnl_pct")
         p["live_est_pnl_rs"] = lv.get("est_pnl_rs")
+        p["live_opt_ltp"] = lv.get("opt_ltp")
+        p["live_pnl_basis"] = lv.get("pnl_basis")
         p["live_ts"] = lv.get("ts")
         open_rows.append(p)
 
