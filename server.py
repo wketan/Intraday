@@ -1170,6 +1170,7 @@ class AngelClient:
         self._candle_cache = {}
         self._candle_cache_hits = 0
         self._candle_cache_misses = 0
+        self._daily_candle_cache = {}
 
     def option_greeks(self, name, expiry_ddmmmyyyy):
         """Fetch option greeks for an (underlying, expiry) pair, cached 60s.
@@ -1408,7 +1409,28 @@ class AngelClient:
     
     def daily_candles(self, token, exchange="NSE", days=90):
         """Fetch daily OHLCV candles — used for swing analysis.
-        Returns list of dicts {ts, open, high, low, close, volume} or []."""
+        Returns list of dicts {ts, open, high, low, close, volume} or [].
+
+        BUG FIX (2026-08-03): this had NO retry/backoff and NO cache, unlike
+        the intraday candles() method. Scanning 78 stocks every ~30 min (plus
+        the NIFTY regime check Pullback v1 added) burst far more Angel calls
+        than the account's rate limit tolerates, and a single "Access denied
+        because of exceeding access rate" response killed the ENTIRE fetch
+        with no retry — for NIFTY specifically, that meant the Pullback v1
+        regime gate saw "NIFTY history short" and failed closed on nearly
+        every cycle, silently blocking ALL new swing entries since launch.
+        Now mirrors candles()'s proven pattern: 3 attempts, 10s backoff on
+        rate-limit responses, and a cache (default 30 min — matches the scan
+        cadence, and daily bars only change once a day anyway) so a retry
+        that succeeds doesn't get thrown away next cycle.
+        """
+        cache_key = (str(token), exchange, int(days))
+        ttl = int(os.environ.get("DAILY_CANDLE_CACHE_TTL", "1800") or 0)
+        now = time.time()
+        if ttl > 0:
+            cached = self._daily_candle_cache.get(cache_key)
+            if cached and (now - cached["ts"] < ttl):
+                return cached["data"]
         try:
             if not self.ensure(): return []
             from_dt = (datetime.now(IST) - timedelta(days=days)).strftime("%Y-%m-%d 09:15")
@@ -1416,17 +1438,35 @@ class AngelClient:
             params  = {"exchange": exchange, "symboltoken": str(token),
                        "interval": "ONE_DAY", "fromdate": from_dt, "todate": to_dt}
             import concurrent.futures as _cf3
-            with _cf3.ThreadPoolExecutor(max_workers=1) as _ex3:
+            resp = None
+            for _attempt in range(3):
+                _rl = False
                 try:
-                    resp = _ex3.submit(self.api.getCandleData, params).result(timeout=15)
-                except _cf3.TimeoutError:
-                    log.error(f"[Swing] daily_candles timeout for token {token}")
-                    return []
+                    with _cf3.ThreadPoolExecutor(max_workers=1) as _ex3:
+                        resp = _ex3.submit(self.api.getCandleData, params).result(timeout=15)
+                except Exception as _ce:
+                    _m = str(_ce)
+                    _rl = ("rate" in _m.lower()) or ("access denied" in _m.lower())
+                    log.warning(f"[Swing] daily_candles attempt {_attempt+1}/3 "
+                               f"token={token}: {_m[:90]}")
+                    resp = None
+                if resp and resp.get("status") and resp.get("data"):
+                    break
+                if _attempt < 2:
+                    time.sleep((10 if _rl else 1) * (_attempt + 1))
             if resp and resp.get("status") and resp.get("data"):
                 raw = resp["data"]  # [[ts, o, h, l, c, v], ...]
-                return [{"ts": r[0], "open": float(r[1]), "high": float(r[2]),
-                         "low": float(r[3]), "close": float(r[4]),
-                         "volume": float(r[5])} for r in raw if len(r) >= 6]
+                out = [{"ts": r[0], "open": float(r[1]), "high": float(r[2]),
+                        "low": float(r[3]), "close": float(r[4]),
+                        "volume": float(r[5])} for r in raw if len(r) >= 6]
+                if ttl > 0:
+                    if len(self._daily_candle_cache) > 100:
+                        oldest = sorted(self._daily_candle_cache.items(),
+                                        key=lambda kv: kv[1]["ts"])[:20]
+                        for k, _ in oldest: self._daily_candle_cache.pop(k, None)
+                    self._daily_candle_cache[cache_key] = {"ts": now, "data": out}
+                return out
+            log.warning(f"[Swing] daily_candles: no data after 3 attempts, token={token}")
             return []
         except Exception as e:
             log.error(f"[Swing] daily_candles err token={token}: {e}")
@@ -6011,12 +6051,17 @@ class SwingEngine:
         log.info(f"[Swing] Pullback scan: regime={'OK' if ctx['long_ok'] else 'BLOCKED'} "
                  f"({ctx['note']}) · {len(SWING_STOCKS)} instruments")
         candidates = []
+        # Widened from 0.5s: 78 stocks back-to-back plus the intraday engine
+        # polling Angel concurrently every 30s was blowing through Angel's
+        # rate limit mid-scan (see daily_candles fix above). Configurable in
+        # case Angel's actual limit allows tighter spacing.
+        _stock_gap = float(os.environ.get("SWING_SCAN_GAP_SEC", "0.9") or 0.9)
         for name, info in SWING_STOCKS.items():
             try:
                 cand = self._scan_pullback(name, info, ctx)
                 if cand:
                     candidates.append(cand)
-                time.sleep(0.5)
+                time.sleep(_stock_gap)
             except Exception as e:
                 log.warning(f"[Swing] {name} error: {e}")
         try:
