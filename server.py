@@ -329,6 +329,39 @@ SWING_STOCKS = {
     "BIOCON":      {"nse_sym":"BIOCON",     "nse_fo":"BIOCON",     "exchange":"NSE","type":"STOCK","fo_eligible":True,"lot_size":2500,"strike_gap":5},
 }
 
+# Sector buckets for the swing universe — drives the max-2-per-sector
+# position cap (Turtle-style correlation control: two 1-lot positions in
+# the same sector behave like one double-size position in a sector shock).
+# NSE-classification-based; unknown names fall into "OTHER" (also capped).
+SECTOR_MAP = {
+    "NIFTY_SW": "INDEX", "BANKNIFTY_SW": "INDEX", "FINNIFTY_SW": "INDEX",
+    "TCS": "IT", "INFY": "IT", "WIPRO": "IT", "TECHM": "IT", "HCLTECH": "IT",
+    "NAUKRI": "INTERNET", "ZOMATO": "INTERNET",
+    "HDFCBANK": "BANK", "ICICIBANK": "BANK", "SBIN": "BANK", "KOTAKBANK": "BANK",
+    "AXISBANK": "BANK", "INDUSINDBK": "BANK", "CANBK": "BANK", "PNB": "BANK",
+    "FEDERALBNK": "BANK", "IDFCFIRSTB": "BANK", "BANKINDIA": "BANK",
+    "BAJFINANCE": "NBFC", "BAJAJFINSV": "NBFC", "SHRIRAMFIN": "NBFC",
+    "CHOLAFIN": "NBFC", "HDFCAMC": "NBFC", "MUTHOOTFIN": "NBFC", "SBICARD": "NBFC",
+    "SBILIFE": "INSURANCE", "HDFCLIFE": "INSURANCE", "ICICIGI": "INSURANCE",
+    "ICICIPRULI": "INSURANCE",
+    "MARUTI": "AUTO", "MM": "AUTO", "EICHERMOT": "AUTO", "HEROMOTOCO": "AUTO",
+    "BAJAJ_AUTO": "AUTO", "TATAMOTORS": "AUTO", "TVSMOTOR": "AUTO",
+    "MOTHERSON": "AUTO", "BALKRISIND": "AUTO",
+    "SUNPHARMA": "PHARMA", "CIPLA": "PHARMA", "DIVISLAB": "PHARMA",
+    "DRREDDY": "PHARMA", "BIOCON": "PHARMA", "APOLLOHOSP": "PHARMA",
+    "NESTLEIND": "CONSUMER", "BRITANNIA": "CONSUMER", "TATACONSUM": "CONSUMER",
+    "ITC": "CONSUMER", "ASIANPAINT": "CONSUMER", "TITAN": "CONSUMER",
+    "PIDILITIND": "CONSUMER", "HAVELLS": "CONSUMER", "INDHOTEL": "CONSUMER",
+    "JSWSTEEL": "METAL", "TATASTEEL": "METAL", "HINDALCO": "METAL",
+    "VEDL": "METAL", "SAIL": "METAL", "NMDC": "METAL",
+    "ULTRACEMCO": "INFRA", "GRASIM": "INFRA", "AMBUJACEM": "INFRA",
+    "LT": "INFRA", "ADANIPORTS": "INFRA", "ADANIENT": "INFRA",
+    "RELIANCE": "ENERGY", "ONGC": "ENERGY", "BPCL": "ENERGY",
+    "COALINDIA": "ENERGY", "NTPC": "ENERGY", "POWERGRID": "ENERGY",
+    "TATAPOWER": "ENERGY",
+    "HAL": "DEFENCE", "BEL": "DEFENCE", "IRCTC": "DEFENCE",
+}
+
 # ═══════════════════════════════════════════════════════════════════
 # LOGGING
 # ═══════════════════════════════════════════════════════════════════
@@ -879,6 +912,33 @@ def init_db():
         )
     """)
     c.execute("CREATE INDEX IF NOT EXISTS idx_gate_rej_date ON gate_rejections(date, gate)")
+
+    # ── earnings_calendar — upcoming results dates from BSE ───────────
+    # Every NSE F&O name is dual-listed on BSE, whose Corpforthresults API
+    # works from cloud IPs (NSE's own calendar is geo-blocked overseas
+    # since May 2025). Refreshed daily; drives the T-3 entry blackout and
+    # the T-1 exit rule around quarterly results (IV crush + gap risk).
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS earnings_calendar (
+            instrument TEXT PRIMARY KEY,
+            results_date TEXT NOT NULL,
+            fetched_at TEXT NOT NULL
+        )
+    """)
+
+    # ── iv_history — one ATM-IV observation per instrument per day ────
+    # Self-calibrating IV-percentile gate for swing entries: skip buys when
+    # today's IV sits in the top ~30% of the stock's own recent history
+    # (event premium priced in — the practical earnings/IV-crush proxy
+    # until a results-calendar feed exists). Gate stays dormant until a
+    # stock has >= 20 observations.
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS iv_history (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            date TEXT NOT NULL, instrument TEXT NOT NULL, iv REAL NOT NULL,
+            UNIQUE(date, instrument)
+        )
+    """)
 
     conn.commit(); conn.close()
     log.info("📊 Database ready")
@@ -5893,6 +5953,114 @@ class SwingAnalysis:
 
 
 # ═══════════════════════════════════════════════════════════════════
+# EARNINGS CALENDAR — upcoming quarterly-results dates via BSE
+# ═══════════════════════════════════════════════════════════════════
+class EarningsCalendar:
+    """Daily fetch of forthcoming results board meetings from BSE's
+    Corpforthresults API (every NSE F&O name is dual-listed on BSE; NSE's
+    own calendar is geo-blocked from overseas cloud IPs since May 2025).
+
+    Drives two rules with STRONG evidence behind them:
+      • ENTRY blackout: no new swing buy when results land within
+        EARNINGS_BLACKOUT_DAYS (default 3) — IV is pumped (you overpay)
+        and the post-event crush loses even directionally-right trades.
+      • EXIT rule: close any open swing position by T-1 before results —
+        overnight earnings gaps are unhedgeable for an option holder.
+
+    Fail policy: fail-OPEN with a loud once-a-day warning when the feed is
+    stale >48h (the IV-percentile gate still backstops event risk), so a
+    BSE outage degrades protection instead of halting the whole system.
+    """
+
+    _URL = "https://api.bseindia.com/BseIndiaAPI/api/Corpforthresults/w"
+    _HDRS = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                      "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36",
+        "Referer": "https://www.bseindia.com/",
+        "Origin": "https://www.bseindia.com",
+        "Accept": "application/json, text/plain, */*",
+    }
+    _refreshed_for = None
+    _warned_stale = None
+
+    @staticmethod
+    def _norm(s):
+        return "".join(ch for ch in (s or "").upper() if ch.isalnum())
+
+    @classmethod
+    def _symbol_lookup(cls):
+        """Normalized name → our SWING_STOCKS key (covers key, nse_fo, nse_sym)."""
+        lut = {}
+        for key, info in SWING_STOCKS.items():
+            for alias in (key, info.get("nse_fo"), info.get("nse_sym")):
+                if alias:
+                    lut[cls._norm(alias)] = key
+        return lut
+
+    @classmethod
+    def refresh(cls):
+        """Fetch the next ~21 days of results meetings; persist matches.
+        Runs at most once per day. Never raises."""
+        today = datetime.now(IST).strftime("%Y-%m-%d")
+        if cls._refreshed_for == today:
+            return
+        cls._refreshed_for = today   # even on failure, retry only tomorrow
+        try:
+            f = datetime.now(IST)
+            t = f + timedelta(days=21)
+            r = requests.get(cls._URL, params={
+                "scripcode": "", "fromdate": f.strftime("%Y%m%d"),
+                "todate": t.strftime("%Y%m%d")}, headers=cls._HDRS, timeout=15)
+            r.raise_for_status()
+            rows = r.json() or []
+            lut = cls._symbol_lookup()
+            now_str = datetime.now(IST).strftime("%Y-%m-%d %H:%M")
+            matched = 0
+            for row in rows:
+                key = lut.get(cls._norm(row.get("short_name"))) or \
+                      lut.get(cls._norm(row.get("Long_Name")))
+                if not key:
+                    continue
+                try:
+                    d = datetime.strptime(row.get("meeting_date", ""), "%d %b %Y")
+                except Exception:
+                    continue
+                db_exec("INSERT OR REPLACE INTO earnings_calendar "
+                        "(instrument, results_date, fetched_at) VALUES (?,?,?)",
+                        (key, d.strftime("%Y-%m-%d"), now_str))
+                matched += 1
+            log.info(f"📅 Earnings calendar refreshed: {len(rows)} BSE meetings, "
+                     f"{matched} matched to swing universe")
+        except Exception as e:
+            log.warning(f"📅 Earnings calendar refresh failed (fail-open): {e}")
+
+    @classmethod
+    def days_to_results(cls, instrument):
+        """Days until the instrument's next results date, or None. Warns
+        (once a day) when the stored feed is stale > 48h."""
+        try:
+            row = db_exec("SELECT results_date, fetched_at FROM earnings_calendar "
+                          "WHERE instrument=?", (instrument,), fetchone=True)
+            if not row:
+                return None
+            row = dict(row)
+            try:
+                fetched = datetime.strptime(row["fetched_at"], "%Y-%m-%d %H:%M")
+                if (datetime.now(IST).replace(tzinfo=None) - fetched).total_seconds() > 48 * 3600:
+                    today = datetime.now(IST).strftime("%Y-%m-%d")
+                    if cls._warned_stale != today:
+                        cls._warned_stale = today
+                        log.warning("📅 Earnings calendar is stale >48h — "
+                                    "blackout running on old dates (fail-open)")
+            except Exception:
+                pass
+            d = datetime.strptime(row["results_date"], "%Y-%m-%d").date()
+            return (d - datetime.now(IST).date()).days
+        except Exception:
+            return None
+
+
+# ═══════════════════════════════════════════════════════════════════
 # SWING PULLBACK v1 — momentum-filtered oversold pullback (LONG-ONLY)
 #
 # Built 2026-07-29 from a 4-track deep-research pass (~90 primary
@@ -6073,6 +6241,7 @@ class SwingEngine:
             return
 
         # ── Pullback v1: gate → collect → rank → admit top slots ──────
+        EarningsCalendar.refresh()   # once/day; drives T-3 blackout + T-1 exits
         ctx = self._swing_market_ctx()
         log.info(f"[Swing] Pullback scan: regime={'OK' if ctx['long_ok'] else 'BLOCKED'} "
                  f"({ctx['note']}) · {len(SWING_STOCKS)} instruments")
@@ -6160,6 +6329,17 @@ class SwingEngine:
         if len(candles) < 35:
             return None
 
+        # Breadth sample: is this stock above its own 50SMA? Costs nothing —
+        # the candles are already in hand. Aggregated after the loop into a
+        # market-internals gate (% of universe above 50DMA).
+        try:
+            if info.get("type") != "INDEX" and len(candles) >= 55:
+                closes = [c["close"] for c in candles]
+                ctx.setdefault("_breadth", []).append(
+                    closes[-1] > sum(closes[-50:]) / 50)
+        except Exception:
+            pass
+
         # Strength exit on open positions for this name (regime-independent)
         try:
             self._pullback_strength_exit(name, candles)
@@ -6213,19 +6393,38 @@ class SwingEngine:
         """Rank candidates by score and admit only into free slots —
         selectivity is part of the edge (Zarattini; Turtle caps). Never
         queue stale signals: whatever misses a slot today is discarded."""
+        # Market breadth (computed free from this scan's own candle fetches):
+        # when under PULLBACK_MIN_BREADTH % of the universe holds its 50DMA,
+        # the tape is too weak for dip-buying even if NIFTY itself is fine.
+        _b = ctx.get("_breadth") or []
+        breadth = round(100.0 * sum(_b) / len(_b), 1) if len(_b) >= 30 else None
+        self._breadth_last = {"pct": breadth, "n": len(_b),
+                              "ts": datetime.now(IST).strftime("%H:%M")}
+        min_breadth = float(os.environ.get("PULLBACK_MIN_BREADTH", "30"))
+        if breadth is not None and breadth < min_breadth:
+            log.info(f"[Swing] breadth gate: only {breadth}% of universe above "
+                     f"50DMA (<{min_breadth:.0f}%) — no new entries this cycle")
+            return
         if not candidates:
             return
         max_open = int(os.environ.get("SWING_MAX_OPEN", "4"))
+        max_sector = int(os.environ.get("SWING_MAX_PER_SECTOR", "2"))
         account = float(os.environ.get("SWING_ACCOUNT_CAPITAL", "150000"))
         open_rows = [p for p in swing_pos_list(status="OPEN")
                      if (p.get("source") or "") == "AUTO_PAPER"]
         open_names = {(p["instrument"], p.get("direction")) for p in open_rows}
+        sector_count = {}
+        for p in open_rows:
+            sec = SECTOR_MAP.get(p["instrument"], "OTHER")
+            sector_count[sec] = sector_count.get(sec, 0) + 1
         slots = max_open - len(open_rows)
         candidates.sort(key=lambda x: x["sig"].get("score", 0), reverse=True)
-        log.info(f"[Swing] {len(candidates)} pullback candidates, {max(0, slots)} free slots "
+        log.info(f"[Swing] {len(candidates)} pullback candidates, {max(0, slots)} free slots, "
+                 f"breadth {breadth}% "
                  f"(top: {', '.join(c['name'] + ' ' + str(c['sig'].get('score')) for c in candidates[:5])})")
         if slots <= 0:
             return
+        cooldown_days = int(os.environ.get("SWING_REENTRY_COOLDOWN_DAYS", "5"))
         admitted = 0
         for cand in candidates:
             if admitted >= slots:
@@ -6233,6 +6432,37 @@ class SwingEngine:
             name, info, sig, spot = cand["name"], cand["info"], cand["sig"], cand["spot"]
             if (name, "LONG") in open_names:
                 continue
+            # Earnings blackout: results within T-3 = pumped IV going in,
+            # crushed IV + gap risk coming out. Hard skip.
+            _dtr = EarningsCalendar.days_to_results(name)
+            _bl = int(os.environ.get("EARNINGS_BLACKOUT_DAYS", "3"))
+            if _dtr is not None and 0 <= _dtr <= _bl:
+                log.info(f"[Swing] {name} skipped — results in {_dtr}d (blackout T-{_bl})")
+                continue
+            # Sector cap: two same-sector longs behave like one double-size
+            # bet in a sector shock (Turtle correlation rule).
+            sec = SECTOR_MAP.get(name, "OTHER")
+            if sector_count.get(sec, 0) >= max_sector:
+                log.info(f"[Swing] {name} skipped — sector cap ({sec} already "
+                         f"has {sector_count[sec]} open)")
+                continue
+            # Loser re-entry cooldown: a name that just stopped out stays
+            # off-limits for a few sessions — its chart thesis is broken and
+            # immediate re-entries are churn, not signal.
+            try:
+                last = db_exec(
+                    "SELECT exit_date, result FROM swing_positions "
+                    "WHERE instrument=? AND source='AUTO_PAPER' AND status='CLOSED' "
+                    "ORDER BY id DESC LIMIT 1", (name,), fetchone=True)
+                if last and dict(last).get("result") == "LOSS":
+                    d_exit = datetime.strptime(dict(last)["exit_date"], "%Y-%m-%d").date()
+                    ago = (datetime.now(IST).date() - d_exit).days
+                    if ago < cooldown_days:
+                        log.info(f"[Swing] {name} skipped — lost here {ago}d ago "
+                                 f"(re-entry cooldown {cooldown_days}d)")
+                        continue
+            except Exception:
+                pass
             opt = None
             if info.get("fo_eligible"):
                 opt = self._pick_option(name, info, sig, spot, style="itm")
@@ -6242,6 +6472,21 @@ class SwingEngine:
                 log.info(f"[Swing] {name} skipped — 1 lot ≈ ₹{opt.get('capital'):,.0f} "
                          f"> {cap_frac*100:.0f}% of ₹{account:,.0f} account")
                 continue
+            # IV-percentile gate (self-calibrating earnings/IV-crush proxy):
+            # record today's IV; once >= 20 observations exist for the name,
+            # skip entries whose IV sits in the top 30% of its own history —
+            # rich premium usually means an event is priced in, and a buyer
+            # pays for it twice (entry cost + post-event crush).
+            if opt:
+                try:
+                    iv_ok, iv_note = self._iv_gate(name, info, opt)
+                    if iv_note:
+                        sig.setdefault("reasons", []).append(iv_note)
+                    if not iv_ok:
+                        log.info(f"[Swing] {name} skipped — {iv_note}")
+                        continue
+                except Exception as e:
+                    log.warning(f"[Swing] IV gate error {name} (failing open): {e}")
             self.signals.setdefault(name, {})["option"] = opt
             half = ctx.get("vix_band") == "half"
             if os.environ.get("SWING_SLACK_ENABLED", "true").lower() == "true":
@@ -6259,7 +6504,50 @@ class SwingEngine:
                 self._open_paper_position(name, info, sig_for_open, opt)
             except Exception as e:
                 log.warning(f"[Swing] paper-open failed {name}: {e}")
+            sector_count[sec] = sector_count.get(sec, 0) + 1
             admitted += 1
+
+    def _iv_gate(self, name, info, opt):
+        """Record today's IV for the picked strike and gate on the stock's
+        OWN IV history. Returns (ok, note). Fails open (ok=True) when IV is
+        unavailable or history is thin (< 20 observations)."""
+        iv = None
+        try:
+            greeks = self.client.option_greeks(info.get("nse_fo", name),
+                                               opt.get("expiry", ""))
+            if greeks:
+                want_strike = float(opt.get("strike") or 0)
+                want_type = (opt.get("type") or "CE").upper()
+                for g in greeks:
+                    try:
+                        if abs(float(g.get("strikePrice") or g.get("strike") or 0) - want_strike) < 0.01 \
+                                and (g.get("optionType") or "").upper() == want_type:
+                            iv = float(g.get("impliedVolatility") or g.get("iv") or 0) or None
+                            break
+                    except Exception:
+                        continue
+        except Exception:
+            iv = None
+        if not iv:
+            return True, None
+        today = datetime.now(IST).strftime("%Y-%m-%d")
+        try:
+            db_exec("INSERT OR REPLACE INTO iv_history (date, instrument, iv) "
+                    "VALUES (?,?,?)", (today, name, round(iv, 2)))
+        except Exception:
+            pass
+        rows = db_exec("SELECT iv FROM iv_history WHERE instrument=? "
+                       "ORDER BY date DESC LIMIT 120", (name,), fetch=True) or []
+        ivs = [float(dict(r)["iv"]) for r in rows]
+        min_obs = int(os.environ.get("IV_GATE_MIN_OBS", "20"))
+        if len(ivs) < min_obs:
+            return True, f"IV {iv:.1f} recorded ({len(ivs)}/{min_obs} obs — gate calibrating)"
+        pct = 100.0 * sum(1 for x in ivs if x <= iv) / len(ivs)
+        max_pct = float(os.environ.get("IV_GATE_MAX_PCTILE", "70"))
+        if pct > max_pct:
+            return False, (f"IV {iv:.1f} at {pct:.0f}th pctile of own history "
+                           f"(>{max_pct:.0f}) — event premium likely priced in")
+        return True, f"IV {iv:.1f} at {pct:.0f}th pctile of own history (OK)"
 
     def _resolve_token(self, name, info):
         """Return (equity_token, ltp_exchange, ltp_symbol) for candle + LTP calls."""
@@ -6549,6 +6837,12 @@ class SwingEngine:
                     else (favorable / entry * 100 / 0.03)   # spot proxy
                 if gain_pct < stag_gain:
                     exit_reason = "STAGNATION"
+        # Never hold a swing option INTO results — the overnight gap is
+        # unhedgeable and IV crush eats even correct directional calls.
+        if exit_reason is None:
+            _dtr = EarningsCalendar.days_to_results(pos.get("instrument"))
+            if _dtr is not None and 0 <= _dtr <= 1:
+                exit_reason = "EARNINGS_EXIT"
         if exit_reason is None and held >= max_hold:
             exit_reason = "MAX_HOLD"
         if exit_reason is None:
@@ -6617,6 +6911,7 @@ class SwingEngine:
             "STRENGTH_EXIT": "strength exit (mean-reversion target)",
             "STAGNATION": "stagnation stop (no progress, theta bleeding)",
             "PREMIUM_BACKSTOP": "premium backstop (-50% est)",
+            "EARNINGS_EXIT": "closed ahead of quarterly results (T-1 rule)",
         }.get(exit_reason, exit_reason)
         if note:
             story += f" — {note}"
@@ -8258,12 +8553,23 @@ def api_swing_results():
 
     wins = [r for r in closed if r.get("result") == "WIN"]
     pnls = [r.get("pnl_rupees") or 0 for r in closed]
+    # Per-exit-reason breakdown — the tuning dashboard the strategy doc
+    # calls for: STRENGTH_EXIT should dominate the wins; a fat STAGNATION
+    # or SL bucket is the signal to revisit parameters.
+    by_exit = {}
+    for r in closed:
+        er = r.get("exit_reason") or "?"
+        slot = by_exit.setdefault(er, {"n": 0, "wins": 0, "pnl": 0.0})
+        slot["n"] += 1
+        slot["wins"] += 1 if r.get("result") == "WIN" else 0
+        slot["pnl"] = round(slot["pnl"] + (r.get("pnl_rupees") or 0), 0)
     summary = {
         "total": len(closed), "wins": len(wins), "losses": len(closed) - len(wins),
         "win_rate": round(len(wins) / len(closed) * 100, 1) if closed else 0,
         "est_total_pnl": round(sum(pnls), 0),
         "open_count": len(open_rows),
         "window_days": days,
+        "by_exit": by_exit,
     }
     # Regime context so the app can SAY why there are no new entries
     # instead of leaving an unexplained empty tab. Cached ctx only — this
@@ -8275,6 +8581,7 @@ def api_swing_results():
             "long_ok": bool(_mctx.get("long_ok")),
             "note": _mctx.get("note") or "",
             "vix": _mctx.get("vix"),
+            "breadth": (getattr(swing_engine, "_breadth_last", None) or {}).get("pct"),
             "checked_at": datetime.fromtimestamp(
                 _mctx.get("_ts", 0), IST).strftime("%H:%M") if _mctx.get("_ts") else None,
         }

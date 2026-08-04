@@ -917,7 +917,7 @@ function PositionCard({p,idx}){
 
 /* ── Swing tab ─────────────────────────────────────────────────────── */
 const swName=(n)=>String(n||'').replace(/_SW$/,'');
-const exitLabel=(r)=>({SL_HIT:'SL hit',T1_HIT:'T1 hit',T2_HIT:'T2 hit',MAX_HOLD:'Max hold',STRENGTH_EXIT:'Strength exit',STAGNATION:'Stagnation',PREMIUM_BACKSTOP:'-50% premium'}[r]||r||'—');
+const exitLabel=(r)=>({SL_HIT:'SL hit',T1_HIT:'T1 hit',T2_HIT:'T2 hit',MAX_HOLD:'Max hold',STRENGTH_EXIT:'Strength exit',STAGNATION:'Stagnation',PREMIUM_BACKSTOP:'-50% premium',EARNINGS_EXIT:'Pre-earnings exit'}[r]||r||'—');
 const parseInd=(p)=>{try{return JSON.parse(p.indicators||'{}')||{};}catch(e){return{};}};
 
 function SwingHoldBar({held,maxHold,remaining}){
@@ -1062,7 +1062,7 @@ function SwingTab({swing}){
       return(<section className="panel g12" style={{padding:'13px 18px',borderLeft:'3px solid '+(ok?'var(--up)':'var(--warn)')}}>
         <div style={{display:'flex',alignItems:'center',gap:10,flexWrap:'wrap'}}>
           <span className={'mc '+(ok?'take':'watch')}>{ok?'REGIME OK':'REGIME BLOCKED'}</span>
-          <span style={{fontFamily:'var(--mono)',fontSize:11.5,color:'var(--ink2)'}}>{rg.note||''}</span>
+          <span style={{fontFamily:'var(--mono)',fontSize:11.5,color:'var(--ink2)'}}>{rg.note||''}{rg.breadth!=null?(' · breadth '+rg.breadth+'% of universe above 50DMA'):''}</span>
           {rg.checked_at&&<span className="lbl" style={{marginLeft:'auto'}}>checked {rg.checked_at}</span>}</div>
         {!ok&&<div style={{fontFamily:'var(--mono)',fontSize:10,color:'var(--ink3)',marginTop:6,lineHeight:1.5}}>
           No new swing entries while the market regime is unfavourable — sitting out downtrends is the strategy protecting capital, not a malfunction. Entries resume automatically when NIFTY reclaims its 200-day average with a rising 50-day.</div>}
@@ -1083,6 +1083,11 @@ function SwingTab({swing}){
           <option value="recent">Recent</option><option value="profit">Profit first</option><option value="loss">Loss first</option>
         </select>
         <span className="lbl">last {sum.window_days||30}d</span></span></div>
+      {sum.by_exit&&Object.keys(sum.by_exit).length>0&&<div style={{display:'flex',gap:7,flexWrap:'wrap',margin:'0 0 13px'}}>
+        {Object.entries(sum.by_exit).sort((a,b)=>b[1].n-a[1].n).map(([er,v])=>(
+          <span key={er} className="mc" style={{background:'var(--panel2)',border:'1px solid var(--line)',color:'var(--ink2)',padding:'5px 9px'}}>
+            {exitLabel(er)} · {v.n} ({v.wins}W) · <span style={{color:(+v.pnl>=0?'var(--up)':'var(--dn)'),fontWeight:800}}>{(+v.pnl>=0?'+':'−')+'₹'+fmt(v.pnl)}</span></span>))}
+      </div>}
       <div className="tbl"><div className="hr"><span>Exit</span><span>Instrument</span><span className="cs">Side</span><span className="cp">What happened</span><span className="r">P&amp;L</span></div>
         {closed.length===0&&<div className="empty">No closed swing trades yet · outcomes land here after SL / target / max-hold</div>}
         {sortedClosed.map((s,i)=>{const win=isWin(s.result);const pnl=+s.pnl_rupees||0;const pct=s.pnl_pct!=null?+s.pnl_pct:null;

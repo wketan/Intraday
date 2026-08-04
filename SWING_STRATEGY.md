@@ -76,10 +76,19 @@ EXITS (first to trigger wins)
 - Paper-track ≥ 30 closed trades before trusting it with money; ≥ 100
   before touching any parameter. The gate stats to watch: win rate by exit
   reason (STRENGTH_EXIT should dominate wins) and the stagnation rate.
-- Known estimate weaknesses: option P&L uses a delta-0.5 model (real fills
-  differ, labeled everywhere), earnings dates are NOT yet blocked per-stock
-  (macro events only — add result-calendar blocking before live money),
-  and IV percentile at entry is not measured.
+- Known estimate weaknesses: option P&L falls back to a delta-0.5 model
+  when a live quote is unavailable (real quotes are primary since v1.0.1).
+
+## v1.1 additions (2026-08-04)
+
+| Layer | Rule | Evidence |
+|---|---|---|
+| Regime | Breadth gate: no entries when < 30% of the universe holds its 50DMA (computed free from the scan's own fetches) | Market-internals confirmation. **MODERATE** |
+| Risk | Sector cap: max 2 open positions per sector (static NSE-sector map) | Turtle correlation caps — same-sector longs are one doubled bet. **STRONG** |
+| Risk | Loser re-entry cooldown: 5 sessions per name after a stopped-out loss | Churn control on broken charts. **MODERATE** |
+| Entry | IV-percentile gate: skip when the picked strike's IV sits above the 70th pctile of the stock's own recorded history (self-calibrating, activates at 20 observations) | Variance-risk-premium literature: buyers overpay most when IV is rich. **MODERATE** |
+| Entry+Exit | Earnings blackout: BSE Corpforthresults calendar (NSE's is geo-blocked from cloud IPs), refreshed daily — no entries within T-3 of results, open positions force-close at T-1 (EARNINGS_EXIT) | IV crush + unhedgeable gap risk around results. **STRONG** |
+| Telemetry | Per-exit-reason win/P&L breakdown in /api/swing/results and the app | The tuning dashboard this doc calls for. |
 
 ## Environment knobs
 
