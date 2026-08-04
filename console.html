@@ -1058,6 +1058,16 @@ function SwingTab({swing}){
     <section className="panel g-kpi kpi"><div className="k">Win rate</div><div className="v">{(sum.win_rate||0).toFixed(1)}%</div><div className="s">swing paper trades</div></section>
     <section className="panel g-kpi kpi"><div className="k">Est P&amp;L · {sum.window_days||30}d</div><div className={'v '+(pnlUp?'up':'dn')}>{pnlUp?'+':'−'}₹{fmt(sum.est_total_pnl)}</div><div className="s">delta-0.5 estimate</div></section>
 
+    {(swing&&swing.regime)&&(()=>{const rg=swing.regime;const ok=rg.long_ok;
+      return(<section className="panel g12" style={{padding:'13px 18px',borderLeft:'3px solid '+(ok?'var(--up)':'var(--warn)')}}>
+        <div style={{display:'flex',alignItems:'center',gap:10,flexWrap:'wrap'}}>
+          <span className={'mc '+(ok?'take':'watch')}>{ok?'REGIME OK':'REGIME BLOCKED'}</span>
+          <span style={{fontFamily:'var(--mono)',fontSize:11.5,color:'var(--ink2)'}}>{rg.note||''}</span>
+          {rg.checked_at&&<span className="lbl" style={{marginLeft:'auto'}}>checked {rg.checked_at}</span>}</div>
+        {!ok&&<div style={{fontFamily:'var(--mono)',fontSize:10,color:'var(--ink3)',marginTop:6,lineHeight:1.5}}>
+          No new swing entries while the market regime is unfavourable — sitting out downtrends is the strategy protecting capital, not a malfunction. Entries resume automatically when NIFTY reclaims its 200-day average with a rising 50-day.</div>}
+      </section>);})()}
+
     <section className="panel g12"><div className="head"><span className="t"><b>//</b> Open swing positions</span>
       <span className="r" style={{display:'flex',alignItems:'center',gap:8}}>
         <select className="sortsel" value={sortBy} onChange={e=>setSort(e.target.value)} aria-label="Sort positions">

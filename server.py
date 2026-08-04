@@ -1154,6 +1154,30 @@ def _normalise_totp_secret(raw):
 
 
 class AngelClient:
+    # ── Global throttle for Angel's historical-data API ────────────────
+    # Angel enforces ~3 req/sec on getCandleData PER ACCOUNT. Three threads
+    # share this account (intraday scan loop, swing scan loop, HTTP
+    # endpoints) and were bursting past the limit concurrently — retries
+    # alone still lost ~18% of the swing universe to "Access denied ...
+    # access rate". One shared gate spaces every getCandleData call at
+    # ANGEL_HIST_MIN_GAP_SEC (default 0.4s ≈ 2.5 req/s, safely under 3).
+    _hist_lock = threading.Lock()
+    _hist_last = [0.0]
+
+    @classmethod
+    def _hist_throttle(cls):
+        try:
+            min_gap = float(os.environ.get("ANGEL_HIST_MIN_GAP_SEC", "0.4") or 0.4)
+        except Exception:
+            min_gap = 0.4
+        if min_gap <= 0:
+            return
+        with cls._hist_lock:
+            wait = cls._hist_last[0] + min_gap - time.time()
+            if wait > 0:
+                time.sleep(min(wait, 5.0))
+            cls._hist_last[0] = time.time()
+
     def __init__(self):
         self.api = None; self.connected = False; self.last_login = None
         # Diagnostics for failed logins — surfaced via /api/login and /api/diag
@@ -1366,6 +1390,7 @@ class AngelClient:
             for _attempt in range(3):
                 _rl = False
                 try:
+                    self._hist_throttle()
                     with _cf2.ThreadPoolExecutor(max_workers=1) as _ex2:
                         resp = _ex2.submit(self.api.getCandleData, _params).result(timeout=12)
                 except Exception as _ce:
@@ -1442,6 +1467,7 @@ class AngelClient:
             for _attempt in range(3):
                 _rl = False
                 try:
+                    self._hist_throttle()
                     with _cf3.ThreadPoolExecutor(max_workers=1) as _ex3:
                         resp = _ex3.submit(self.api.getCandleData, params).result(timeout=15)
                 except Exception as _ce:
@@ -8239,7 +8265,21 @@ def api_swing_results():
         "open_count": len(open_rows),
         "window_days": days,
     }
+    # Regime context so the app can SAY why there are no new entries
+    # instead of leaving an unexplained empty tab. Cached ctx only — this
+    # endpoint never triggers the heavy NIFTY/VIX fetch itself.
+    regime = None
+    _mctx = getattr(swing_engine, "_mctx", None)
+    if _mctx:
+        regime = {
+            "long_ok": bool(_mctx.get("long_ok")),
+            "note": _mctx.get("note") or "",
+            "vix": _mctx.get("vix"),
+            "checked_at": datetime.fromtimestamp(
+                _mctx.get("_ts", 0), IST).strftime("%H:%M") if _mctx.get("_ts") else None,
+        }
     return jsonify({"open": open_rows, "closed": closed, "summary": summary,
+                    "regime": regime,
                     "time": datetime.now(IST).strftime("%H:%M:%S")})
 
 
