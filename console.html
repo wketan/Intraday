@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="light">
+<html lang="en" data-theme="dark">
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
@@ -16,7 +16,7 @@
 <link rel="icon" href="icon-192.png" type="image/png" sizes="192x192"/>
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
-<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700;800&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700;800&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet"/>
 <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
 <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
 <script src="https://unpkg.com/@babel/standalone@7.24.7/babel.min.js"></script>
@@ -321,7 +321,7 @@ button{font-family:inherit;cursor:pointer;}input{font-family:inherit;}
 .chain-tbl th.sub{font-size:8.5px;color:var(--ink3);font-weight:400;}
 .chain-tbl th.sub.r{text-align:right;}.chain-tbl th.sub.c{text-align:center;}.chain-tbl th.sub.l{text-align:left;}
 .chain-tbl td{padding:8px 8px;font-family:var(--mono);font-size:13px;font-weight:700;letter-spacing:-.02em;border-bottom:1px solid var(--line2);}
-.chain-tbl tr.atm-row{background:rgba(184,116,40,0.09);}
+.chain-tbl tr.atm-row{background:var(--lime-soft);}
 .chain-tbl tr.atm-row td.str-c{color:var(--lime);font-size:14px;}
 .chain-tbl td.ltp-ce{color:var(--up);text-align:right;}
 .chain-tbl td.ltp-pe{color:var(--dn);text-align:left;}
@@ -417,12 +417,12 @@ button{font-family:inherit;cursor:pointer;}input{font-family:inherit;}
   .blabel{display:block;font-family:var(--mono);font-size:8px;font-weight:700;
     letter-spacing:.06em;text-transform:uppercase;line-height:1;color:inherit;}
   /* Active: amber top bar + color, NO background fill */
-  .rbtn.on{color:#B87428;background:transparent;border:none;}
-  .rbtn.on .blabel{color:#B87428;}
+  .rbtn.on{color:var(--lime);background:transparent;border:none;}
+  .rbtn.on .blabel{color:var(--lime);}
   .rbtn.on::before{display:block;content:'';position:absolute;
     top:0;left:50%;transform:translateX(-50%);
     width:36px;height:2.5px;border-radius:0 0 3px 3px;
-    background:#B87428;box-shadow:none;}
+    background:var(--lime);box-shadow:0 0 10px var(--lime-gl);}
   /* Signal badge: sits top-right of the icon (centered in button) */
   .rbtn .sig-badge{top:4px;left:calc(50% + 4px);right:auto;}
   /* Live estat */
@@ -446,67 +446,138 @@ button{font-family:inherit;cursor:pointer;}input{font-family:inherit;}
   .tbl .hr .cs,.row .cside,.tbl .hr .cp,.row .cpx{display:none;}
 }
 
-/* ═══ WARM AMBER THEME: light mode ═══ */
-html[data-theme="light"]{
-  --bg:#F1EDE0; --bg2:#EAE6D8; --panel:#FFFFFF; --panel2:#F7F4ED; --raised:#FFFFFF;
-  --ink:#1C2E22; --ink2:#5E7A67; --ink3:#8FAE96; --ink4:#A8BDB0;
-  --line:rgba(28,46,34,0.12); --line2:rgba(28,46,34,0.07); --grid:rgba(28,46,34,0.028);
-  --hover:rgba(28,46,34,0.04);
-  --lime:#B87428; --lime2:#A06520; --lime-soft:rgba(184,116,40,0.12); --lime-gl:rgba(184,116,40,0.38);
-  --up:#3D6848; --up-soft:rgba(61,104,72,0.12);
-  --dn:#B03A2E; --dn-soft:rgba(176,58,46,0.10); --dn-gl:rgba(176,58,46,0.32);
-  --warn:#B87428; --warn-soft:rgba(184,116,40,0.13);
-  --sh:0 16px 36px -26px rgba(28,46,34,0.22);
-}
-/* ═══ WARM AMBER THEME: dark mode (dark forest) ═══ */
+/* ═══ NIGHT GLASS THEME — deep-navy glassmorphic ═══ */
 html[data-theme="dark"]{
-  --bg:#0F1D14; --bg2:#172B1E; --panel:#1C3020; --panel2:#1E3524; --raised:#243D2A;
-  --ink:#F1EDE0; --ink2:#C4B8A0; --ink3:#8FAE96; --ink4:#5E7A67;
-  --line:rgba(241,237,224,0.10); --line2:rgba(241,237,224,0.06); --grid:rgba(241,237,224,0.026);
-  --hover:rgba(241,237,224,0.05);
-  --lime:#B87428; --lime2:#C88030; --lime-soft:rgba(184,116,40,0.16); --lime-gl:rgba(184,116,40,0.50);
-  --up:#5A8A6A; --up-soft:rgba(90,138,106,0.18);
-  --dn:#CF4A3C; --dn-soft:rgba(207,74,60,0.15); --dn-gl:rgba(207,74,60,0.40);
-  --warn:#C88030; --warn-soft:rgba(200,128,48,0.18);
-  --sh:0 20px 50px -28px rgba(0,0,0,0.60);
+  --bg:#0A0E20; --bg2:#0E1330; --panel:rgba(255,255,255,0.040); --panel2:rgba(255,255,255,0.065); --raised:#181F42;
+  --ink:#E9EEF7; --ink2:#9AA8BF; --ink3:#69778F; --ink4:#3D4A61;
+  --line:rgba(255,255,255,0.09); --line2:rgba(255,255,255,0.05); --grid:transparent;
+  --hover:rgba(255,255,255,0.05);
+  --lime:#4D9FFF; --lime2:#7FB8FF; --lime-soft:rgba(77,159,255,0.14); --lime-gl:rgba(77,159,255,0.45);
+  --up:#34D399; --up-soft:rgba(52,211,153,0.13);
+  --dn:#F87171; --dn-soft:rgba(248,113,113,0.13); --dn-gl:rgba(248,113,113,0.4);
+  --warn:#FBBF24; --warn-soft:rgba(251,191,36,0.14);
+  --sh:0 24px 60px -30px rgba(0,0,0,0.8);
 }
-/* System font instead of Space Grotesk */
-html,body,button,input{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif!important;}
-/* Header always dark forest + amber underline (both modes) */
-.top{background:#172B1E!important;border-bottom:2px solid #B87428!important;backdrop-filter:none!important;-webkit-backdrop-filter:none!important;}
-.top .clock b,.top b{color:#F1EDE0!important;}
-.top .led{color:#8FAE96!important;border-color:rgba(241,237,224,0.12)!important;background:transparent!important;}
-.top .led.live{color:var(--up)!important;border-color:var(--up-soft)!important;background:var(--up-soft)!important;}
-/* Rail logo: brand mark image (logo.svg), no painted background */
-.rail .logo{background:transparent!important;box-shadow:none!important;overflow:hidden;}
-.rail .logo img,.scard .logo img{width:100%;height:100%;object-fit:contain;display:block;}
-@media(min-width:681px){
-  .rbtn.on{color:#B87428!important;background:rgba(184,116,40,0.12)!important;}
-  .rbtn.on::before{background:#B87428!important;box-shadow:none!important;}
+html[data-theme="light"]{
+  --bg:#E9EEF6; --bg2:#F2F5FA; --panel:#FFFFFF; --panel2:#F4F7FC; --raised:#FFFFFF;
+  --ink:#101828; --ink2:#4A5872; --ink3:#7C8AA5; --ink4:#B4BFD2;
+  --line:rgba(16,24,40,0.12); --line2:rgba(16,24,40,0.07); --grid:transparent;
+  --hover:rgba(16,24,40,0.04);
+  --lime:#2563EB; --lime2:#3B82F6; --lime-soft:rgba(37,99,235,0.10); --lime-gl:rgba(37,99,235,0.30);
+  --up:#0E9F6E; --up-soft:rgba(14,159,110,0.11);
+  --dn:#DC2626; --dn-soft:rgba(220,38,38,0.09); --dn-gl:rgba(220,38,38,0.3);
+  --warn:#B45309; --warn-soft:rgba(180,83,9,0.11);
+  --sh:0 16px 40px -28px rgba(16,24,40,0.25);
 }
-/* Cards: sharp corners */
-.panel,.kpi,.hud{border-radius:0!important;}
-/* Setup screen */
+html,body,button,input{font-family:'Inter',-apple-system,BlinkMacSystemFont,system-ui,sans-serif!important;}
+html[data-theme="dark"] body{
+  background:
+    radial-gradient(1000px 460px at 78% -10%, rgba(52,211,153,0.13), transparent 60%),
+    radial-gradient(1100px 520px at 45% -6%, rgba(59,130,246,0.12), transparent 62%),
+    radial-gradient(900px 520px at 0% 105%, rgba(147,51,234,0.14), transparent 60%),
+    radial-gradient(700px 380px at 100% 90%, rgba(236,72,153,0.07), transparent 55%),
+    var(--bg);}
+html[data-theme="light"] body{
+  background:
+    radial-gradient(1100px 480px at 50% -8%, rgba(59,130,246,0.08), transparent 62%),
+    var(--bg);}
+.top{background:color-mix(in srgb,var(--bg2) 92%,transparent)!important;border-bottom:1px solid var(--line)!important;backdrop-filter:none!important;-webkit-backdrop-filter:none!important;}
+.top .clock b,.top b{color:var(--ink)!important;}
+.top .led{border-radius:999px!important;}
+.panel,.kpi,.hud{border-radius:18px!important;}
+.panel{background:linear-gradient(180deg,rgba(255,255,255,0.02),transparent 42%),var(--panel);}
+.panel.hud::before,.panel.hud::after{display:none;}
+.poscard{border-radius:16px;}
+.cstat{border-radius:14px;}
+.optline,.ophead,.legbar{border-radius:12px;overflow:hidden;}
+.btn{border-radius:12px;}
+.btn.go{background:linear-gradient(135deg,#3B82F6,#22D3EE)!important;color:#04101F!important;border:none!important;box-shadow:0 0 26px -8px var(--lime-gl)!important;}
+.ib{border-radius:12px;}
+.sortsel{border-radius:10px;}
+.mc,.chip,.verdict,.pos-stat,.pos-live,.stalebadge{border-radius:999px!important;}
+.opttag{border-radius:999px;background:var(--lime);color:#04101F;}
+.dirbadge{border-radius:999px;}
+.mkt-bar,.pcrbar,.oirow .track,.chain-bar-wrap{border-radius:999px;overflow:hidden;background:rgba(127,146,176,0.16);}
+.mkt-bar{height:6px;}
+.mkt-bar-fill{border-radius:999px;}
+.tab{border-radius:10px 10px 0 0;}
+.tab.on{color:var(--ink);border-bottom-color:var(--lime);}
 .setup{background:var(--bg)!important;}
-.scard{background:var(--panel)!important;border:1px solid var(--line)!important;border-radius:0!important;}
-.scard .logo{background:transparent!important;border-radius:0!important;}
-.scard h1 em{color:#B87428!important;}
-.fld input{background:var(--panel2)!important;border-color:var(--line)!important;color:var(--ink)!important;border-radius:0!important;}
-.fld input:focus{border-color:#B87428!important;outline:none!important;}
-.fld label{color:var(--ink3)!important;}
-.btn.go{background:linear-gradient(135deg,#B87428,#3D6848)!important;color:#F1EDE0!important;border:none!important;border-radius:0!important;}
-.btn.go:disabled{opacity:.5!important;}
-/* Settings modal (reuse .setup/.scard classes) */
-.settings-disconnect{background:transparent!important;border:1px solid rgba(176,58,46,0.40)!important;color:#B03A2E!important;}
-/* Big numbers: Palatino — applies everywhere, !important beats inline styles */
-.pxbig,.kpi .v,.cstat .v,
-.confwrap .cv,.leg .v,.pp .v,.pos-pnl .v,
-.pos-name,
-.chain-tbl td.str-c,.chain-tbl td.ltp-ce,.chain-tbl td.ltp-pe{font-family:Palatino,'Book Antiqua',Georgia,serif!important;font-weight:normal!important;}
-/* Signals table chips */
-.chip.long{background:rgba(61,104,72,0.12)!important;color:var(--up)!important;border-radius:2px!important;}
-.chip.short{background:rgba(176,58,46,0.10)!important;color:var(--dn)!important;border-radius:2px!important;}
-/* Tape section: text colors adjust via --ink vars naturally */
+.scard{background:var(--raised)!important;border:1px solid var(--line)!important;border-radius:20px!important;padding:28px;}
+.scard .logo{background:transparent!important;border-radius:14px!important;}
+.scard h1 em{color:var(--lime)!important;}
+.fld input{background:var(--panel2)!important;border:1px solid var(--line)!important;color:var(--ink)!important;border-radius:12px!important;}
+.fld input:focus{border-color:var(--lime)!important;box-shadow:0 0 0 3px var(--lime-soft)!important;}
+.settings-disconnect{background:transparent!important;border:1px solid var(--dn-soft)!important;color:var(--dn)!important;}
+.rail{background:color-mix(in srgb,var(--bg2) 88%,transparent);}
+.rail .logo{background:transparent!important;box-shadow:none!important;border-radius:12px!important;}
+@media(min-width:681px){
+  .rbtn{border-radius:12px;}
+  .rbtn.on{color:var(--lime)!important;background:var(--lime-soft)!important;}
+  .rbtn.on::before{background:var(--lime)!important;box-shadow:0 0 10px var(--lime-gl)!important;}
+}
+.chip.long{background:var(--up-soft)!important;color:var(--up)!important;}
+.chip.short{background:var(--dn-soft)!important;color:var(--dn)!important;}
+/* ─── PREMIUM LAYER ──────────────────────────────────────────────── */
+/* Film-grain over the backdrop — makes the gradients feel physical */
+html[data-theme="dark"] body::after{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;opacity:.5;mix-blend-mode:overlay;
+  background-image:url("data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)' opacity='0.22'/%3E%3C/svg%3E");}
+.shell{position:relative;z-index:1;}
+/* Gradient ring borders on every card (replaces the flat 1px line) */
+.panel{border-color:transparent!important;}
+.panel::before{content:'';position:absolute;inset:0;border-radius:18px;padding:1px;pointer-events:none;
+  background:linear-gradient(140deg,rgba(255,255,255,0.16),rgba(255,255,255,0.03) 28%,rgba(77,159,255,0.14) 66%,rgba(34,211,238,0.10));
+  -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude;}
+html[data-theme="light"] .panel{border-color:var(--line)!important;}
+html[data-theme="light"] .panel::before{display:none;}
+/* Hover lift */
+.panel{transition:transform .25s var(--e),box-shadow .25s var(--e);}
+.panel:hover{transform:translateY(-2px);box-shadow:0 30px 70px -34px rgba(0,0,0,0.85),0 0 40px -22px var(--lime-gl);}
+@media(max-width:680px){.panel:hover{transform:none;}}
+/* Hero numerals glow */
+.cstrip .pxbig.up,.pos-pnl .v.up{text-shadow:0 0 26px rgba(52,211,153,0.35);}
+.cstrip .pxbig.dn,.pos-pnl .v.dn{text-shadow:0 0 26px rgba(248,113,113,0.30);}
+.kpi .v.up{text-shadow:0 0 22px rgba(52,211,153,0.28);}
+.kpi .v.dn{text-shadow:0 0 22px rgba(248,113,113,0.25);}
+.kpi .v.ac{text-shadow:0 0 22px var(--lime-gl);}
+/* Command-arc orbit animation */
+@keyframes orbitspin{from{transform:rotate(0deg);}to{transform:rotate(360deg);}}
+.orbit-spin{transform-origin:50% 50%;animation:orbitspin 80s linear infinite;}
+.orbit-spin.fast{animation-duration:34s;}
+@media(prefers-reduced-motion:reduce){.orbit-spin{animation:none;}}
+/* ─── VIVID LAYER — saturated gradient pills (UI-kit inspiration) ── */
+.btn.go{background:linear-gradient(135deg,#F59E0B,#F97316)!important;color:#1A1030!important;
+  box-shadow:0 8px 26px -10px rgba(249,115,22,0.55)!important;font-weight:800;}
+.btn.stop{background:linear-gradient(135deg,#F87171,#EC4899)!important;color:#2A0A18!important;border:none!important;
+  box-shadow:0 8px 24px -10px rgba(236,72,153,0.5)!important;font-weight:800;}
+.dirbadge.long{background:linear-gradient(135deg,#10B981,#22D3EE)!important;color:#03251C!important;}
+.dirbadge.short{background:linear-gradient(135deg,#F87171,#EC4899)!important;color:#2A0A18!important;}
+.opttag{background:linear-gradient(135deg,#F59E0B,#F97316)!important;color:#1A1030!important;font-weight:800;}
+.verdict.take{background:linear-gradient(135deg,rgba(16,185,129,0.25),rgba(34,211,238,0.20))!important;color:var(--up)!important;}
+.verdict.skip{background:linear-gradient(135deg,rgba(248,113,113,0.22),rgba(236,72,153,0.18))!important;color:var(--dn)!important;}
+.led.live{background:linear-gradient(135deg,rgba(16,185,129,0.20),rgba(34,211,238,0.14))!important;border-color:transparent!important;}
+/* KPI tiles: colorful marker chips like the icon tiles in the kit */
+.kpi .k{display:flex;align-items:center;gap:8px;}
+.kpi .k::before{content:'';width:9px;height:9px;border-radius:3.5px;flex-shrink:0;
+  background:linear-gradient(135deg,#3B82F6,#22D3EE);box-shadow:0 0 10px rgba(77,159,255,0.55);}
+.grid>.kpi:nth-of-type(2) .k::before{background:linear-gradient(135deg,#10B981,#22D3EE);box-shadow:0 0 10px rgba(52,211,153,0.55);}
+.grid>.kpi:nth-of-type(3) .k::before{background:linear-gradient(135deg,#F59E0B,#F97316);box-shadow:0 0 10px rgba(249,115,22,0.55);}
+.grid>.kpi:nth-of-type(4) .k::before{background:linear-gradient(135deg,#A855F7,#EC4899);box-shadow:0 0 10px rgba(168,85,247,0.55);}
+/* Aurora wash inside the chart + signal hero cards */
+.g-chart{overflow:hidden;}
+.g-chart::after{content:'';position:absolute;top:-40%;right:-25%;width:75%;height:120%;pointer-events:none;border-radius:50%;
+  background:radial-gradient(closest-side, rgba(147,51,234,0.13), rgba(59,130,246,0.06) 55%, transparent 75%);}
+.g-sig{overflow:visible;}
+/* Sort selects & small buttons rounder */
+.sortsel{border-radius:999px;padding:6px 26px 6px 12px;}
+/* Mobile bottom nav: floating dock */
+@media(max-width:680px){
+  .rail{border-radius:22px 22px 0 0;box-shadow:0 -10px 34px rgba(0,0,0,0.45);}
+}
+/* Gradient meter default */
+.mkt-bar-fill.grad{background:linear-gradient(90deg,#3B82F6,#22D3EE)!important;}
+
+
 </style>
 </head>
 <body>
@@ -564,7 +635,7 @@ const verdictClass=(v)=>{v=(v||'').toUpperCase();return v==='TAKE'?'take':(v==='
 function usePoll(path,ms,enabled){const [data,setData]=useState(null);
   useEffect(()=>{if(!enabled)return;let live=true;const go=async()=>{try{const d=await apiJSON(path);if(live)setData(d);}catch(e){}};
     go();const id=setInterval(go,ms);return()=>{live=false;clearInterval(id);};},[path,ms,enabled]);return data;}
-function useTheme(){const [t,setT]=useState(()=>localStorage.getItem('ie-theme')||'light');
+function useTheme(){const [t,setT]=useState(()=>localStorage.getItem('ie-theme')||'dark');
   useEffect(()=>{document.documentElement.setAttribute('data-theme',t);localStorage.setItem('ie-theme',t);},[t]);
   return [t,()=>setT(x=>x==='dark'?'light':'dark')];}
 function useCountUp(target,ms=650){const [v,setV]=useState(target||0);const ref=useRef(target||0);
@@ -620,16 +691,16 @@ function CandleChart({candles,ltp}){
 
   return(<div className="chartwrap"><svg viewBox={`0 0 ${W} ${H}`} style={{width:'100%',height:'auto',display:'block'}}>
     {/* Trade window background bands */}
-    <rect x={pL} y={pT} width={xOpen-pL} height={bandH} fill="rgba(176,58,46,0.07)"/>
-    <rect x={xOpen} y={pT} width={xClose-xOpen} height={bandH} fill="rgba(61,104,72,0.07)"/>
-    <rect x={xClose} y={pT} width={xEnd-xClose} height={bandH} fill="rgba(184,116,40,0.08)"/>
+    <rect x={pL} y={pT} width={xOpen-pL} height={bandH} fill="rgba(248,113,113,0.06)"/>
+    <rect x={xOpen} y={pT} width={xClose-xOpen} height={bandH} fill="rgba(52,211,153,0.06)"/>
+    <rect x={xClose} y={pT} width={xEnd-xClose} height={bandH} fill="rgba(251,191,36,0.06)"/>
     {/* Window boundary lines */}
-    <line x1={xOpen} x2={xOpen} y1={pT} y2={H-pB} stroke="rgba(61,104,72,0.35)" strokeWidth="1.5" strokeDasharray="4 4"/>
-    <line x1={xClose} x2={xClose} y1={pT} y2={H-pB} stroke="rgba(184,116,40,0.35)" strokeWidth="1.5" strokeDasharray="4 4"/>
+    <line x1={xOpen} x2={xOpen} y1={pT} y2={H-pB} stroke="rgba(52,211,153,0.35)" strokeWidth="1.5" strokeDasharray="4 4"/>
+    <line x1={xClose} x2={xClose} y1={pT} y2={H-pB} stroke="rgba(251,191,36,0.35)" strokeWidth="1.5" strokeDasharray="4 4"/>
     {/* Window labels at top */}
-    <text x={pL+3} y={pT-8} fill="rgba(176,58,46,0.75)" fontSize="13" fontFamily={F} fontWeight="700" letterSpacing="0.06em">PRE</text>
-    <text x={xOpen+6} y={pT-8} fill="rgba(61,104,72,0.8)" fontSize="13" fontFamily={F} fontWeight="700" letterSpacing="0.06em">TRADE WINDOW</text>
-    <text x={xClose+6} y={pT-8} fill="rgba(184,116,40,0.85)" fontSize="13" fontFamily={F} fontWeight="700" letterSpacing="0.06em">CLOSED</text>
+    <text x={pL+3} y={pT-8} fill="rgba(248,113,113,0.75)" fontSize="13" fontFamily={F} fontWeight="700" letterSpacing="0.06em">PRE</text>
+    <text x={xOpen+6} y={pT-8} fill="rgba(52,211,153,0.8)" fontSize="13" fontFamily={F} fontWeight="700" letterSpacing="0.06em">TRADE WINDOW</text>
+    <text x={xClose+6} y={pT-8} fill="rgba(251,191,36,0.85)" fontSize="13" fontFamily={F} fontWeight="700" letterSpacing="0.06em">CLOSED</text>
     {/* Price grid */}
     {grid.map((g,i)=>(<g key={i}><line x1={pL} x2={xEnd} y1={Y(g)} y2={Y(g)} stroke="var(--line2)" strokeWidth="1"/>
       <text x={xEnd+6} y={Y(g)+5} fill="var(--ink2)" fontSize="16" fontFamily={F} fontWeight="700">{Math.round(g)}</text></g>))}
@@ -642,7 +713,7 @@ function CandleChart({candles,ltp}){
     })}
     <line x1={pL} x2={xEnd} y1={Y(lastClose)} y2={Y(lastClose)} stroke={lpUp?'var(--up)':'var(--dn)'} strokeWidth="1" strokeDasharray="3 4" opacity="0.7"/>
     <rect x={xEnd} y={Y(lastClose)-12} width={pR-3} height="24" fill={lpUp?'var(--up)':'var(--dn)'}/>
-    <text x={xEnd+(pR-3)/2} y={Y(lastClose)+5} textAnchor="middle" fill="#0F1D14" fontSize="15" fontWeight="800" fontFamily={F}>{Math.round(lastClose)}</text>
+    <text x={xEnd+(pR-3)/2} y={Y(lastClose)+5} textAnchor="middle" fill="#04101F" fontSize="15" fontWeight="800" fontFamily={F}>{Math.round(lastClose)}</text>
     {lastSlot>=0&&lastSlot<SLOTS&&<circle cx={X(lastSlot)} cy={Y(lastC.c)} r="4.5" fill={lpUp?'var(--up)':'var(--dn)'}><animate attributeName="opacity" values="1;0.3;1" dur="1.6s" repeatCount="indefinite"/></circle>}
     {/* Time labels */}
     <text x={xOpen} y={H-10} textAnchor="middle" fill="var(--ink2)" fontSize="15" fontWeight="700" fontFamily={F}>09:45</text>
@@ -666,6 +737,87 @@ function Setup({onDone}){
     <button className="btn go" style={{width:'100%',padding:'14px'}} onClick={go} disabled={busy||!tok.trim()}>{busy?<><span className="spin"/>Connecting…</>:'Connect'}</button>
   </div></div>);}
 
+let _GAUGE_UID=0;
+function ArcGauge({value,display,label,size=120,color,track,gradient,ticks}){
+  // 240-degree gauge sweeping over the top (150deg -> 390deg, y-down coords)
+  const uid=React.useMemo(()=>('gg'+(++_GAUGE_UID)),[]);
+  const v=Math.max(0,Math.min(100,+value||0));
+  const r=size/2-9, cx=size/2, cy=size/2;
+  const A=(deg,rad)=>{const t=deg*Math.PI/180;const rr=rad!=null?rad:r;return [cx+rr*Math.cos(t),cy+rr*Math.sin(t)];};
+  const seg=(f,t,col,w,extra)=>{const [x1,y1]=A(f),[x2,y2]=A(t);
+    return <path d={'M'+x1.toFixed(1)+' '+y1.toFixed(1)+' A'+r+' '+r+' 0 '+((t-f)>180?1:0)+' 1 '+x2.toFixed(1)+' '+y2.toFixed(1)} fill="none" stroke={col} strokeWidth={w} strokeLinecap="round" {...(extra||{})}/>;};
+  const S=150,E=390,cur=S+(E-S)*v/100;
+  const stroke=gradient?('url(#'+uid+')'):(color||'var(--lime)');
+  const tickEls=[];
+  if(ticks){for(let i=0;i<=24;i++){const d=S+(E-S)*i/24;const [ax,ay]=A(d,r+7),[bx,by]=A(d,r+(i%6===0?12:10));
+    tickEls.push(<line key={i} x1={ax} y1={ay} x2={bx} y2={by} stroke={'rgba(127,146,176,'+(i%6===0?0.5:0.22)+')'} strokeWidth={i%6===0?1.6:1}/>);}}
+  return(<svg viewBox={'0 0 '+size+' '+(size*0.9)} style={{width:'100%',maxWidth:size,display:'block',overflow:'visible'}}>
+    {gradient&&<defs><linearGradient id={uid} x1="0" y1="1" x2="1" y2="0">
+      <stop offset="0%" stopColor="#3B82F6"/><stop offset="60%" stopColor="#4D9FFF"/><stop offset="100%" stopColor="#22D3EE"/></linearGradient></defs>}
+    {tickEls}
+    {seg(S,E,track||'rgba(127,146,176,0.16)',7)}
+    {v>0.5&&seg(S,Math.max(S+2,cur),stroke,13,{opacity:0.28,style:{filter:'blur(5px)'}})}
+    {v>0.5&&seg(S,Math.max(S+2,cur),stroke,7)}
+    <text x={cx} y={cy+3} textAnchor="middle" fill="var(--ink)" fontSize={size*0.235} fontWeight="700" fontFamily="var(--mono)">{display!=null?display:Math.round(v)}</text>
+    {label&&<text x={cx} y={cy+size*0.17} textAnchor="middle" fill="var(--ink3)" fontSize={size*0.078} fontFamily="var(--mono)" letterSpacing="1.4">{label}</text>}
+  </svg>);}
+
+function CommandArc({conf,votes,scanning,verdict}){
+  // ClyHealth-style hero: gradient arc + tick ring + two orbit rings with
+  // the five conductor dimensions as satellites. In scanning mode the
+  // rings pulse and a lone satellite sweeps the orbit.
+  const size=320,cx=size/2,cy=size/2,r=96;
+  const uid=React.useMemo(()=>('ca'+(++_GAUGE_UID)),[]);
+  const v=Math.max(0,Math.min(100,+conf||0));
+  const A=(deg,rad)=>{const t=deg*Math.PI/180;return [cx+rad*Math.cos(t),cy+rad*Math.sin(t)];};
+  const seg=(f,t,col,w,extra)=>{const [x1,y1]=A(f,r),[x2,y2]=A(t,r);
+    return <path d={'M'+x1.toFixed(1)+' '+y1.toFixed(1)+' A'+r+' '+r+' 0 '+((t-f)>180?1:0)+' 1 '+x2.toFixed(1)+' '+y2.toFixed(1)} fill="none" stroke={col} strokeWidth={w} strokeLinecap="round" {...(extra||{})}/>;};
+  const S=150,E=390,cur=S+(E-S)*v/100;
+  const ticks=[];for(let i=0;i<=30;i++){const d=S+(E-S)*i/30;const [ax,ay]=A(d,r+9),[bx,by]=A(d,r+(i%5===0?16:13));
+    ticks.push(<line key={'t'+i} x1={ax} y1={ay} x2={bx} y2={by} stroke={'rgba(127,146,176,'+(i%5===0?0.45:0.18)+')'} strokeWidth={i%5===0?1.6:1}/>);}
+  const lenses=[['trend','TREND'],['momentum','MOMENTUM'],['structure','STRUCTURE'],['flow','FLOW'],['pattern','PATTERN']];
+  const angles=[198,241,270,299,342];   // spread across the top arc
+  const sats=lenses.map(([k,lbl],i)=>{
+    const hit=!scanning&&votes&&!!votes[k];
+    const [sx,sy]=A(angles[i],r+42);
+    const [lx,ly]=A(angles[i],r+58);
+    const above=ly<cy;
+    return(<g key={k} opacity={scanning?0.35:1}>
+      <line x1={A(angles[i],r+20)[0]} y1={A(angles[i],r+20)[1]} x2={sx} y2={sy} stroke="rgba(127,146,176,0.25)" strokeWidth="1"/>
+      <circle cx={sx} cy={sy} r={hit?5:3.5} fill={hit?'var(--up)':'var(--ink4)'} style={hit?{filter:'drop-shadow(0 0 6px rgba(52,211,153,0.9))'}:null}/>
+      <text x={lx} y={ly+(above?-2:8)} textAnchor="middle" fill={hit?'var(--ink2)':'var(--ink4)'} fontSize="9" fontFamily="var(--mono)" letterSpacing="1.1">{lbl}</text>
+    </g>);});
+  return(<div style={{position:'relative',maxWidth:size,margin:'0 auto'}}>
+    <svg viewBox={'0 0 '+size+' '+(size*0.82)} style={{width:'100%',display:'block',overflow:'visible'}}>
+      <defs>
+        <linearGradient id={uid} x1="0" y1="1" x2="1" y2="0">
+          <stop offset="0%" stopColor="#6366F1"/><stop offset="45%" stopColor="#3B82F6"/><stop offset="100%" stopColor="#22D3EE"/></linearGradient>
+        <radialGradient id={uid+'h'} cx="50%" cy="42%" r="50%">
+          <stop offset="0%" stopColor="rgba(77,159,255,0.14)"/><stop offset="100%" stopColor="rgba(77,159,255,0)"/></radialGradient>
+      </defs>
+      <circle cx={cx} cy={cy} r={r+42} fill={'url(#'+uid+'h)'}/>
+      <g className={'orbit-spin'+(scanning?' fast':'')}>
+        <circle cx={cx} cy={cy} r={r+42} fill="none" stroke="rgba(127,146,176,0.16)" strokeWidth="1" strokeDasharray="1 7"/>
+        {scanning&&<circle cx={A(300,r+42)[0]} cy={A(300,r+42)[1]} r="4" fill="var(--lime)" style={{filter:'drop-shadow(0 0 7px rgba(77,159,255,0.95))'}}/>}
+      </g>
+      <circle cx={cx} cy={cy} r={r+24} fill="none" stroke="rgba(127,146,176,0.10)" strokeWidth="1"/>
+      {ticks}
+      {seg(S,E,'rgba(127,146,176,0.15)',8)}
+      {!scanning&&v>0.5&&seg(S,Math.max(S+2,cur),'url(#'+uid+')',16,{opacity:0.3,style:{filter:'blur(6px)'}})}
+      {!scanning&&v>0.5&&seg(S,Math.max(S+2,cur),'url(#'+uid+')',8)}
+      {!scanning&&<>
+        <text x={cx} y={cy-6} textAnchor="middle" fill="var(--ink)" fontSize="58" fontWeight="700" fontFamily="var(--mono)">{Math.round(v)}</text>
+        <text x={cx} y={cy+18} textAnchor="middle" fill="var(--ink3)" fontSize="10.5" fontFamily="var(--mono)" letterSpacing="2.4">CONFIDENCE</text>
+        {verdict&&<text x={cx} y={cy+38} textAnchor="middle" fill={verdict==='TAKE'?'var(--up)':verdict==='SKIP'?'var(--dn)':'var(--warn)'} fontSize="12" fontWeight="700" fontFamily="var(--mono)" letterSpacing="1.6">{verdict}</text>}
+      </>}
+      {scanning&&<>
+        <text x={cx} y={cy-2} textAnchor="middle" fill="var(--ink)" fontSize="17" fontWeight="600">Scanning…</text>
+        <text x={cx} y={cy+20} textAnchor="middle" fill="var(--ink3)" fontSize="10" fontFamily="var(--mono)" letterSpacing="1.6">EVERY 30 SECONDS</text>
+      </>}
+      {sats}
+    </svg>
+  </div>);}
+
 function SignalCard({sig,marketOpen,market}){
   const closed=market&&market.open===false;
   const closedLabel=!market?'market closed'
@@ -675,9 +827,10 @@ function SignalCard({sig,marketOpen,market}){
     :'market closed';
   if(!sig||!sig.signal){
     return(<section className="panel hud g-sig"><div className="head"><span className="t"><b>//</b> Live signal</span></div>
-      <div className="sig-empty"><div className="radar"><span className="dot"/><span className="ring"/><span className="ring r2"/></div>
-        <div><div className="t">{closed?(market.reason==='holiday'?'Market holiday':'Market closed'):'Scanning for setups'}</div>
-        <div className="d">conductor · BANKNIFTY · {closed?closedLabel:'live · every 30s'}</div></div></div></section>);}
+      <CommandArc scanning={true}/>
+      <div style={{textAlign:'center',marginTop:2}}>
+        <div style={{fontSize:15,fontWeight:600}}>{closed?(market.reason==='holiday'?'Market holiday':'Market closed'):'Watching for setups'}</div>
+        <div className="mono" style={{fontSize:10.5,color:'var(--ink3)',marginTop:5}}>conductor · BANKNIFTY · {closed?closedLabel:'live scan'}</div></div></section>);}
   const stale=!!sig.stale;const dstr=fmtDay(sig.signal_date);
   const s=sig.signal,o=sig.option||{},ai=sig.ai||{};
   const long=(s.direction||'').toUpperCase()==='LONG';const conf=s.confidence_ai_adj||s.confidence||0;
@@ -689,17 +842,12 @@ function SignalCard({sig,marketOpen,market}){
   return(<section className={'panel hud g-sig'+(stale?' is-stale':'')}><div className="head"><span className="t"><b>//</b> Live signal</span><span className="r mono" style={{fontSize:'10px',color:'var(--ink3)'}}>{stale&&<span className="stalebadge">STALE</span>}{showDate?(fmtDay(tsDate)+' · '):''}{tsTime} IST</span></div>
     {stale&&<div className="stalebar">⚠ Prior-day signal ({dstr||fmtDay(tsDate)||'prior day'}) — not today's. {closed?closedLabel:'No live setup yet today.'}</div>}
     <div className="sig-head">
-      <div className="sig-row-top">
-        <div className="sig-inst">{sig.instrument||'BANKNIFTY'}</div>
-        <div className="confwrap"><div className="cv">{conf}</div><div className="cl">Conf</div></div>
-      </div>
-      <div className="sig-row-bot">
+      <div style={{display:'flex',alignItems:'center',justifyContent:'center',gap:10,flexWrap:'wrap',marginBottom:4}}>
+        <span className="sig-inst">{sig.instrument||'BANKNIFTY'}</span>
         <span className={'dirbadge '+(long?'long':'short')}><Ico d={long?I.up:I.down}/>{s.direction}</span>
-        <div className="sig-sub-wrap">
-          {verdict&&<span className={'verdict '+verdictClass(verdict)}>{verdict}</span>}
-          <div className="sig-sub">{(s.strategy||'conductor').toUpperCase()} · score {s.v2_score||0}/5 · R:R {(s.risk_reward||o.rr||0).toFixed(1)}</div>
-        </div>
       </div>
+      <div className="sig-sub" style={{textAlign:'center',marginBottom:6}}>{(s.strategy||'conductor').toUpperCase()} · score {s.v2_score||0}/5 · R:R {(s.risk_reward||o.rr||0).toFixed(1)}</div>
+      <CommandArc conf={conf} votes={v} verdict={verdict}/>
     </div>
     {o.symbol&&<div className="ophead">
       <span className="opttag">{o.action||('BUY '+(o.type||''))}</span><span className="opname">{humanizeOpt(o.symbol)}</span>
@@ -709,7 +857,7 @@ function SignalCard({sig,marketOpen,market}){
       <div className="leg"><div className="k">Stop</div><div className="v dn">{o.sl?('₹'+(+o.sl).toFixed(1)):'—'}{o.max_loss!=null&&<span className="lp dn">−₹{fmt(o.max_loss)}</span>}</div></div>
       <div className="leg"><div className="k">Tgt 1</div><div className="v up">{o.target1?('₹'+(+o.target1).toFixed(1)):'—'}{o.t1_profit!=null&&<span className="lp up">+₹{fmt(o.t1_profit)}</span>}</div></div>
       <div className="leg"><div className="k">Tgt 2</div><div className="v up">{o.target2?('₹'+(+o.target2).toFixed(1)):'—'}{o.t2_profit!=null&&<span className="lp up">+₹{fmt(o.t2_profit)}</span>}</div></div></div>
-    {Object.keys(v).length>0&&<div className="votes">{lenses.map(([k,lbl])=>(<span key={k} className={'vote '+(v[k]?'hit':'')}><span className="vd"/>{lbl}</span>))}</div>}
+
     {Array.isArray(s.reasons)&&s.reasons.length>0&&<ul className="reasons">{s.reasons.slice(0,5).map((r,i)=>(<li key={i}>{r}</li>))}</ul>}
   </section>);}
 
@@ -832,8 +980,8 @@ function LiveChainView({enabled}){
         <div className="lbl" style={{marginBottom:10}}>Option to watch</div>
         {recDir!=='NEUTRAL'&&recOpt
           ?<div style={{display:'flex',alignItems:'center',gap:14,flexWrap:'wrap',marginBottom:8}}>
-              <span style={{fontFamily:"Palatino,'Book Antiqua',Georgia,serif",fontSize:22,fontWeight:'normal',letterSpacing:'-.04em',lineHeight:.9,color:recDir==='LONG'?'var(--up)':'var(--dn)'}}>{fmt(recStrike)} {recType}</span>
-              <span style={{fontFamily:"Palatino,'Book Antiqua',Georgia,serif",fontSize:18,fontWeight:'normal',letterSpacing:'-.04em',lineHeight:.9,color:'var(--ink)'}}>₹{(+recOpt.ltp||0).toFixed(1)}</span>
+              <span style={{fontFamily:'var(--mono)',fontSize:22,fontWeight:'normal',letterSpacing:'-.04em',lineHeight:.9,color:recDir==='LONG'?'var(--up)':'var(--dn)'}}>{fmt(recStrike)} {recType}</span>
+              <span style={{fontFamily:'var(--mono)',fontSize:18,fontWeight:'normal',letterSpacing:'-.04em',lineHeight:.9,color:'var(--ink)'}}>₹{(+recOpt.ltp||0).toFixed(1)}</span>
               {(+recOpt.iv||+recOpt.iv_raw)>0&&<span style={{fontFamily:'var(--mono)',fontSize:11,letterSpacing:'.08em',textTransform:'uppercase',color:'var(--lime)',background:'var(--lime-soft)',borderRadius:4,padding:'2px 8px'}}>IV {(+(recOpt.iv||recOpt.iv_raw)||0).toFixed(1)}</span>}
             </div>
           :<div style={{fontFamily:'var(--mono)',fontSize:13,color:'var(--ink2)',marginBottom:8}}>No clear bias · watch for PCR move</div>}
@@ -847,7 +995,7 @@ function LiveChainView({enabled}){
           <div key={i} style={{display:'flex',alignItems:'flex-start',gap:10,padding:'9px 0',borderBottom:'1px solid var(--line2)'}}>
             <span style={{fontFamily:'var(--mono)',fontSize:9,fontWeight:700,letterSpacing:'.06em',textTransform:'uppercase',whiteSpace:'nowrap',borderRadius:4,padding:'3px 7px',background:cls==='up'?'var(--up-soft)':'var(--dn-soft)',color:cls==='up'?'var(--up)':'var(--dn)',flexShrink:0}}>{tag}</span>
             <div>
-              <div style={{fontFamily:"Palatino,'Book Antiqua',Georgia,serif",fontSize:14,fontWeight:'normal',letterSpacing:'-.04em',lineHeight:.9,color:'var(--ink)'}}>{fmt(a.strike)} {a.type} &nbsp;<span style={{color:a.delta>0?'var(--up)':'var(--dn)'}}>{a.delta>0?'+':''}{fmtK(a.delta)}</span></div>
+              <div style={{fontFamily:'var(--mono)',fontSize:14,fontWeight:'normal',letterSpacing:'-.04em',lineHeight:.9,color:'var(--ink)'}}>{fmt(a.strike)} {a.type} &nbsp;<span style={{color:a.delta>0?'var(--up)':'var(--dn)'}}>{a.delta>0?'+':''}{fmtK(a.delta)}</span></div>
               <div style={{fontFamily:'var(--mono)',fontSize:10,color:'var(--ink3)',marginTop:3}}>{desc}</div>
             </div>
           </div>);})}
@@ -891,7 +1039,7 @@ function PositionCard({p,idx}){
   const pct=entry?(((cur-entry)/entry)*100):0;
   const long=(p.direction||'').toUpperCase()==='LONG';
   const dc=up?'var(--up)':'var(--dn)';
-  const grad=`linear-gradient(90deg,var(--dn) 0%,var(--dn) ${(enP*0.5).toFixed(0)}%,#d98b2e ${enP.toFixed(0)}%,var(--up) ${t1P.toFixed(0)}%,#4f8cff 100%)`;
+  const grad=`linear-gradient(90deg,var(--dn) 0%,var(--dn) ${(enP*0.5).toFixed(0)}%,#F59E0B ${enP.toFixed(0)}%,var(--up) ${t1P.toFixed(0)}%,#4f8cff 100%)`;
   return(<div className="poscard">
     <div className="pos-top"><span className="pos-idx">{String(idx+1).padStart(2,'0')}</span><span className="pos-lbl">Active position</span>
       <span className="pos-live"><span className="d"/>LIVE&nbsp;·&nbsp;<b>{elapsedFrom(p.t_in)}</b></span></div>
@@ -926,7 +1074,7 @@ function SwingHoldBar({held,maxHold,remaining}){
     <div style={{display:'flex',justifyContent:'space-between',marginBottom:6}}>
       <span className="lbl">Hold · {held}d of {maxHold}d</span>
       <span className="lbl" style={{color:remaining<=1?'var(--warn)':'var(--ink3)'}}>{remaining}d left</span></div>
-    <div className="mkt-bar"><div className="mkt-bar-fill" style={{width:pct+'%',background:'var(--lime)'}}/></div>
+    <div className="mkt-bar"><div className="mkt-bar-fill grad" style={{width:pct+'%'}}/></div>
   </div>);}
 
 function SwingOpenCard({p,idx}){
@@ -946,7 +1094,7 @@ function SwingOpenCard({p,idx}){
   const pnlPct=p.live_pnl_pct!=null?+p.live_pnl_pct:(entry?m*(cur-entry)/entry*100:0);
   const estRs=p.live_est_pnl_rs!=null?+p.live_est_pnl_rs:null;
   const up=(pnlPct||0)>=0,dc=up?'var(--up)':'var(--dn)';
-  const grad=`linear-gradient(90deg,var(--dn) 0%,var(--dn) ${(enP*0.5).toFixed(0)}%,#d98b2e ${enP.toFixed(0)}%,var(--up) ${t1P.toFixed(0)}%,#4f8cff 100%)`;
+  const grad=`linear-gradient(90deg,var(--dn) 0%,var(--dn) ${(enP*0.5).toFixed(0)}%,#F59E0B ${enP.toFixed(0)}%,var(--up) ${t1P.toFixed(0)}%,#4f8cff 100%)`;
   return(<div className="poscard">
     <div className="pos-top"><span className="pos-idx">{String(idx+1).padStart(2,'0')}</span><span className="pos-lbl">Swing · paper</span>
       <span className="pos-live"><span className="d"/>{hasLive?<>LIVE&nbsp;·&nbsp;<b>{p.live_ts||''}</b></>:'AWAITING QUOTE'}</span></div>
@@ -1232,7 +1380,10 @@ function App(){
 
   const kpis=(<>
     <section className="panel g-kpi kpi"><div className="k">Net P&amp;L</div><div className={'v '+(net>=0?'up':'dn')}>{net>=0?'+':'−'}₹{fmt(netCU)}</div><div className="s">{closed.length} closed · {open.length} open</div><div className="spark"><Area pts={equity} color={net>=0?'var(--up)':'var(--dn)'} h={42}/></div></section>
-    <section className="panel g-kpi kpi"><div className="k">Win rate</div><div className="v">{wrCU.toFixed(1)}%</div><div className="s">{wins}W · {losses}L</div></section>
+    <section className="panel g-kpi kpi"><div className="k">Win rate</div>
+      <div style={{display:'flex',alignItems:'center',gap:12}}>
+        <div style={{width:78,flexShrink:0}}><ArcGauge value={wr} display={wrCU.toFixed(0)+'%'} size={78} gradient={true} ticks={true}/></div>
+        <div className="s" style={{marginTop:0}}>{wins}W · {losses}L</div></div></section>
     <section className="panel g-kpi kpi"><div className="k">Expectancy</div><div className={'v '+(exp>=0?'up':'dn')}>{exp>=0?'+':'−'}₹{fmt(exp)}</div><div className="s">per trade</div></section>
     <section className="panel g-kpi kpi"><div className="k">Capital</div><div className="v ac">₹{fmt(cap)}</div><div className="s">{net>=0?'+':'−'}{(Math.abs(net)/cap*100).toFixed(2)}% today</div></section></>);
 
@@ -1324,32 +1475,32 @@ function App(){
           position:'relative'}}>
         <div style={{
             width:52,height:52,
-            background:'linear-gradient(135deg,#B87428,#3D6848)',
+            background:'linear-gradient(135deg,#3B82F6,#22D3EE)',
             display:'grid',placeItems:'center',
             fontSize:20,fontWeight:700,color:'#F1EDE0',
             margin:'0 auto 18px'}}>{(settingsName||'K')[0].toUpperCase()}</div>
         <div style={{
-            fontFamily:"Palatino,'Book Antiqua',Georgia,serif",
+            fontFamily:'var(--mono)',
             fontSize:22,fontWeight:'normal',color:'var(--ink)',
             textAlign:'center',marginBottom:32,letterSpacing:'-0.01em'}}>Settings</div>
         <div style={{marginBottom:22}}>
-          <div style={{fontSize:10,fontFamily:"'Courier New',monospace",letterSpacing:'0.13em',color:'var(--ink3)',marginBottom:8,textTransform:'uppercase'}}>Name</div>
+          <div style={{fontSize:10,fontFamily:'var(--mono)',letterSpacing:'0.13em',color:'var(--ink3)',marginBottom:8,textTransform:'uppercase'}}>Name</div>
           <input value={settingsName} onChange={e=>setSettingsName(e.target.value)} placeholder="Ketan" style={{
               width:'100%',padding:'9px 0',
               background:'transparent',border:'none',borderBottom:'1px solid var(--line)',
               color:'var(--ink)',fontSize:16,outline:'none',fontFamily:'inherit',boxSizing:'border-box'}}/>
         </div>
         <div style={{marginBottom:32}}>
-          <div style={{fontSize:10,fontFamily:"'Courier New',monospace",letterSpacing:'0.13em',color:'var(--ink3)',marginBottom:8,textTransform:'uppercase'}}>Capital</div>
+          <div style={{fontSize:10,fontFamily:'var(--mono)',letterSpacing:'0.13em',color:'var(--ink3)',marginBottom:8,textTransform:'uppercase'}}>Capital</div>
           <div style={{display:'flex',alignItems:'baseline',gap:6,borderBottom:'1px solid var(--line)'}}>
-            <span style={{color:'var(--ink3)',fontSize:15,fontFamily:"'Courier New',monospace",paddingBottom:9}}>₹</span>
+            <span style={{color:'var(--ink3)',fontSize:15,fontFamily:'var(--mono)',paddingBottom:9}}>₹</span>
             <input type="number" value={settingsCap} onChange={e=>setSettingsCap(+e.target.value||20000)} placeholder="20000" style={{
                 flex:1,padding:'9px 0',
                 background:'transparent',border:'none',
                 color:'var(--ink)',fontSize:16,outline:'none',
-                fontFamily:"'Courier New',monospace",boxSizing:'border-box'}}/>
+                fontFamily:'var(--mono)',boxSizing:'border-box'}}/>
           </div>
-          <div style={{fontSize:11,marginTop:6,color:'var(--ink4)',fontFamily:"'Courier New',monospace"}}>% return shown on Capital tile</div>
+          <div style={{fontSize:11,marginTop:6,color:'var(--ink4)',fontFamily:'var(--mono)'}}>% return shown on Capital tile</div>
         </div>
         <button onClick={()=>{
             if(settingsName.trim())localStorage.setItem('ie-user',settingsName.trim());
@@ -1358,21 +1509,21 @@ function App(){
             setShowSettings(false);
           }} style={{
             width:'100%',padding:'13px',marginBottom:10,
-            background:'linear-gradient(135deg,#B87428,#3D6848)',
+            background:'linear-gradient(135deg,#3B82F6,#22D3EE)',
             border:'none',color:'#F1EDE0',
             fontSize:11,letterSpacing:'0.14em',textTransform:'uppercase',
-            fontFamily:"'Courier New',monospace",cursor:'pointer'}}>Save</button>
+            fontFamily:'var(--mono)',cursor:'pointer'}}>Save</button>
         <button onClick={()=>setShowSettings(false)} style={{
             width:'100%',padding:'11px',marginBottom:18,
             background:'transparent',border:'1px solid var(--line)',
             color:'var(--ink3)',fontSize:11,letterSpacing:'0.12em',textTransform:'uppercase',
-            fontFamily:"'Courier New',monospace",cursor:'pointer'}}>Cancel</button>
+            fontFamily:'var(--mono)',cursor:'pointer'}}>Cancel</button>
         <div style={{borderTop:'1px solid var(--line)',paddingTop:14,textAlign:'center'}}>
-          <div style={{fontSize:10,fontFamily:"'Courier New',monospace",color:'var(--ink4)',marginBottom:10,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{getServer()}</div>
+          <div style={{fontSize:10,fontFamily:'var(--mono)',color:'var(--ink4)',marginBottom:10,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{getServer()}</div>
           <button onClick={()=>{localStorage.clear();location.reload();}} style={{
               background:'transparent',border:'none',
               color:'rgba(176,58,46,0.75)',fontSize:10,letterSpacing:'0.12em',
-              textTransform:'uppercase',fontFamily:"'Courier New',monospace",cursor:'pointer'}}>Disconnect</button>
+              textTransform:'uppercase',fontFamily:'var(--mono)',cursor:'pointer'}}>Disconnect</button>
         </div>
       </div>
     </div>}
