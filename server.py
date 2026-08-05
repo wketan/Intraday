@@ -5766,6 +5766,19 @@ def restore_swing_backfill():
     n = closed_n = skipped = 0
     for r in rows:
         try:
+            # reasons/indicators round-tripped through the API are already
+            # JSON-encoded strings; swing_pos_save() below does its own
+            # json.dumps() and expects native list/dict, so decode here first.
+            # Skipping this doubled-encodes them on every deploy (each wipe
+            # re-runs this restore), until the frontend's JSON.parse can no
+            # longer reach a real array/object.
+            for fld in ("reasons", "indicators"):
+                v = r.get(fld)
+                if isinstance(v, str):
+                    try:
+                        r[fld] = json.loads(v)
+                    except Exception:
+                        pass
             is_closed = (r.get("status") or "OPEN") == "CLOSED"
             # The age guard protects against restoring STALE rows as OPEN
             # (the tracker would book bogus MAX_HOLD outcomes). CLOSED rows

@@ -1076,7 +1076,12 @@ function PositionCard({p,idx}){
 /* ── Swing tab ─────────────────────────────────────────────────────── */
 const swName=(n)=>String(n||'').replace(/_SW$/,'');
 const exitLabel=(r)=>({SL_HIT:'SL hit',T1_HIT:'T1 hit',T2_HIT:'T2 hit',MAX_HOLD:'Max hold',STRENGTH_EXIT:'Strength exit',STAGNATION:'Stagnation',PREMIUM_BACKSTOP:'-50% premium',EARNINGS_EXIT:'Pre-earnings exit'}[r]||r||'—');
-const parseInd=(p)=>{try{return JSON.parse(p.indicators||'{}')||{};}catch(e){return{};}};
+// Backend fields (reasons/indicators) are JSON-encoded text and have, in the
+// past, ended up encoded one level too many after a restore/redeploy cycle.
+// Unwrap defensively (a bad shape here must never crash the whole app).
+const safeJson=(v,isArr,fallback)=>{let x=v;try{for(let i=0;i<4&&typeof x==='string';i++)x=JSON.parse(x);}catch(e){return fallback;}
+  return (isArr?Array.isArray(x):(x&&typeof x==='object'&&!Array.isArray(x)))?x:fallback;};
+const parseInd=(p)=>safeJson(p.indicators,false,{});
 
 function SwingHoldBar({held,maxHold,remaining}){
   const pct=Math.max(0,Math.min(100,maxHold>0?(held/maxHold)*100:0));
@@ -1180,8 +1185,8 @@ function SwingExitTrack({s,win}){
 }
 function SwingOutcomeDetail({s}){
   const long=(s.direction||'').toUpperCase()==='LONG';
-  let reasons=[];try{reasons=JSON.parse(s.reasons||'[]')||[];}catch(e){}
-  let ind={};try{ind=JSON.parse(s.indicators||'{}')||{};}catch(e){}
+  const reasons=safeJson(s.reasons,true,[]);
+  const ind=safeJson(s.indicators,false,{});
   const win=isWin(s.result);
   const cap=+s.capital||((+s.option_entry||0)*(+s.lot_size||0)*(+s.lots||1))||null;
   const pnl=+s.pnl_rupees||0;
