@@ -446,136 +446,127 @@ button{font-family:inherit;cursor:pointer;}input{font-family:inherit;}
   .tbl .hr .cs,.row .cside,.tbl .hr .cp,.row .cpx{display:none;}
 }
 
-/* ═══ NIGHT GLASS THEME — deep-navy glassmorphic ═══ */
+/* ═══ REFINED THEME — clean dark (Aaru-dashboard) + soft glass light (Liquid Glass) ═══ */
 html[data-theme="dark"]{
-  --bg:#0A0E20; --bg2:#0E1330; --panel:rgba(255,255,255,0.040); --panel2:rgba(255,255,255,0.065); --raised:#181F42;
-  --ink:#E9EEF7; --ink2:#9AA8BF; --ink3:#69778F; --ink4:#3D4A61;
-  --line:rgba(255,255,255,0.09); --line2:rgba(255,255,255,0.05); --grid:transparent;
-  --hover:rgba(255,255,255,0.05);
-  --lime:#4D9FFF; --lime2:#7FB8FF; --lime-soft:rgba(77,159,255,0.14); --lime-gl:rgba(77,159,255,0.45);
-  --up:#34D399; --up-soft:rgba(52,211,153,0.13);
-  --dn:#F87171; --dn-soft:rgba(248,113,113,0.13); --dn-gl:rgba(248,113,113,0.4);
-  --warn:#FBBF24; --warn-soft:rgba(251,191,36,0.14);
-  --sh:0 24px 60px -30px rgba(0,0,0,0.8);
+  --bg:#0A0C14; --bg2:#10131E; --panel:#12151F; --panel2:#181C29; --raised:#1B1F2E;
+  --ink:#F1F3F8; --ink2:#9199AC; --ink3:#666E82; --ink4:#3A4053;
+  --line:rgba(255,255,255,0.08); --line2:rgba(255,255,255,0.045); --grid:transparent;
+  --hover:rgba(255,255,255,0.045);
+  --lime:#4A8DFF; --lime2:#7AAEFF; --lime-soft:rgba(74,141,255,0.13); --lime-gl:rgba(74,141,255,0.4);
+  --up:#3DD68C; --up-soft:rgba(61,214,140,0.12);
+  --dn:#F0625F; --dn-soft:rgba(240,98,95,0.12); --dn-gl:rgba(240,98,95,0.35);
+  --warn:#F5A623; --warn-soft:rgba(245,166,35,0.13);
+  --sh:0 20px 48px -26px rgba(0,0,0,0.6);
 }
 html[data-theme="light"]{
-  --bg:#E9EEF6; --bg2:#F2F5FA; --panel:#FFFFFF; --panel2:#F4F7FC; --raised:#FFFFFF;
-  --ink:#101828; --ink2:#4A5872; --ink3:#7C8AA5; --ink4:#B4BFD2;
-  --line:rgba(16,24,40,0.12); --line2:rgba(16,24,40,0.07); --grid:transparent;
-  --hover:rgba(16,24,40,0.04);
-  --lime:#2563EB; --lime2:#3B82F6; --lime-soft:rgba(37,99,235,0.10); --lime-gl:rgba(37,99,235,0.30);
+  --bg:#EFEAE3; --bg2:#F6F2EC; --panel:rgba(255,255,255,0.58); --panel2:rgba(255,255,255,0.42); --raised:#FFFFFF;
+  --ink:#1C1B22; --ink2:#57565F; --ink3:#84828C; --ink4:#B7B4BD;
+  --line:rgba(28,27,34,0.10); --line2:rgba(28,27,34,0.06); --grid:transparent;
+  --hover:rgba(28,27,34,0.035);
+  --lime:#6C5CE7; --lime2:#8A7CF0; --lime-soft:rgba(108,92,231,0.12); --lime-gl:rgba(108,92,231,0.30);
   --up:#0E9F6E; --up-soft:rgba(14,159,110,0.11);
-  --dn:#DC2626; --dn-soft:rgba(220,38,38,0.09); --dn-gl:rgba(220,38,38,0.3);
+  --dn:#DC4444; --dn-soft:rgba(220,68,68,0.10); --dn-gl:rgba(220,68,68,0.25);
   --warn:#B45309; --warn-soft:rgba(180,83,9,0.11);
-  --sh:0 16px 40px -28px rgba(16,24,40,0.25);
+  --sh:0 20px 46px -28px rgba(60,50,40,0.28);
 }
 html,body,button,input{font-family:'Inter',-apple-system,BlinkMacSystemFont,system-ui,sans-serif!important;}
+
+/* Dark: two quiet corner glows (warm + cool), no rainbow, no grain */
 html[data-theme="dark"] body{
   background:
-    radial-gradient(1000px 460px at 78% -10%, rgba(52,211,153,0.13), transparent 60%),
-    radial-gradient(1100px 520px at 45% -6%, rgba(59,130,246,0.12), transparent 62%),
-    radial-gradient(900px 520px at 0% 105%, rgba(147,51,234,0.14), transparent 60%),
-    radial-gradient(700px 380px at 100% 90%, rgba(236,72,153,0.07), transparent 55%),
+    radial-gradient(900px 500px at 88% -6%, rgba(74,141,255,0.10), transparent 58%),
+    radial-gradient(700px 420px at 6% 96%, rgba(245,166,35,0.055), transparent 55%),
     var(--bg);}
+/* Light: soft warm-cream blur wash, glass sits on top */
 html[data-theme="light"] body{
   background:
-    radial-gradient(1100px 480px at 50% -8%, rgba(59,130,246,0.08), transparent 62%),
+    radial-gradient(1000px 560px at 20% -10%, rgba(255,214,170,0.35), transparent 60%),
+    radial-gradient(900px 520px at 92% 10%, rgba(150,190,255,0.28), transparent 58%),
+    radial-gradient(800px 480px at 50% 100%, rgba(220,190,255,0.22), transparent 55%),
     var(--bg);}
+
 .top{background:color-mix(in srgb,var(--bg2) 92%,transparent)!important;border-bottom:1px solid var(--line)!important;backdrop-filter:none!important;-webkit-backdrop-filter:none!important;}
 .top .clock b,.top b{color:var(--ink)!important;}
 .top .led{border-radius:999px!important;}
-.panel,.kpi,.hud{border-radius:18px!important;}
-.panel{background:linear-gradient(180deg,rgba(255,255,255,0.02),transparent 42%),var(--panel);}
+
+/* Cards: flat, subtly bordered, generous radius — no gradient rings, no hover lift */
+.panel,.kpi,.hud{border-radius:20px!important;}
+.panel{background:var(--panel);}
 .panel.hud::before,.panel.hud::after{display:none;}
-.poscard{border-radius:16px;}
-.cstat{border-radius:14px;}
-.optline,.ophead,.legbar{border-radius:12px;overflow:hidden;}
-.btn{border-radius:12px;}
-.btn.go{background:linear-gradient(135deg,#3B82F6,#22D3EE)!important;color:#04101F!important;border:none!important;box-shadow:0 0 26px -8px var(--lime-gl)!important;}
+html[data-theme="light"] .panel{backdrop-filter:blur(22px);-webkit-backdrop-filter:blur(22px);border:1px solid rgba(255,255,255,0.55)!important;box-shadow:0 1px 0 rgba(255,255,255,0.6) inset,var(--sh);}
+html[data-theme="dark"] .panel{border:1px solid var(--line)!important;}
+
+.poscard{border-radius:18px;}
+.cstat{border-radius:16px;}
+.optline,.ophead,.legbar{border-radius:14px;overflow:hidden;}
+.btn{border-radius:999px;}
+.btn.go{background:linear-gradient(135deg,var(--lime),var(--lime2))!important;color:#fff!important;border:none!important;font-weight:700;}
+html[data-theme="dark"] .btn.go{color:#08101F!important;}
+.btn.stop{background:var(--dn-soft)!important;color:var(--dn)!important;border:1px solid transparent!important;font-weight:700;}
 .ib{border-radius:12px;}
-.sortsel{border-radius:10px;}
+.sortsel{border-radius:999px;padding:6px 26px 6px 12px;}
 .mc,.chip,.verdict,.pos-stat,.pos-live,.stalebadge{border-radius:999px!important;}
-.opttag{border-radius:999px;background:var(--lime);color:#04101F;}
+.opttag{border-radius:999px;background:var(--lime);color:#fff;}
+html[data-theme="dark"] .opttag{color:#08101F;}
 .dirbadge{border-radius:999px;}
+.dirbadge.long{background:var(--up-soft)!important;color:var(--up)!important;}
+.dirbadge.short{background:var(--dn-soft)!important;color:var(--dn)!important;}
 .mkt-bar,.pcrbar,.oirow .track,.chain-bar-wrap{border-radius:999px;overflow:hidden;background:rgba(127,146,176,0.16);}
-.mkt-bar{height:6px;}
+.mkt-bar{height:5px;}
 .mkt-bar-fill{border-radius:999px;}
+.mkt-bar-fill.grad{background:linear-gradient(90deg,var(--lime),var(--lime2))!important;}
 .tab{border-radius:10px 10px 0 0;}
 .tab.on{color:var(--ink);border-bottom-color:var(--lime);}
+.verdict.take{background:var(--up-soft)!important;color:var(--up)!important;}
+.verdict.skip{background:var(--dn-soft)!important;color:var(--dn)!important;}
+.led.live{background:var(--up-soft)!important;border-color:transparent!important;}
+
 .setup{background:var(--bg)!important;}
-.scard{background:var(--raised)!important;border:1px solid var(--line)!important;border-radius:20px!important;padding:28px;}
+.scard{background:var(--raised)!important;border:1px solid var(--line)!important;border-radius:22px!important;padding:30px;}
+html[data-theme="light"] .scard{background:rgba(255,255,255,0.7)!important;backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);}
 .scard .logo{background:transparent!important;border-radius:14px!important;}
 .scard h1 em{color:var(--lime)!important;}
-.fld input{background:var(--panel2)!important;border:1px solid var(--line)!important;color:var(--ink)!important;border-radius:12px!important;}
+.fld input{background:var(--panel2)!important;border:1px solid var(--line)!important;color:var(--ink)!important;border-radius:14px!important;}
 .fld input:focus{border-color:var(--lime)!important;box-shadow:0 0 0 3px var(--lime-soft)!important;}
 .settings-disconnect{background:transparent!important;border:1px solid var(--dn-soft)!important;color:var(--dn)!important;}
+
 .rail{background:color-mix(in srgb,var(--bg2) 88%,transparent);}
 .rail .logo{background:transparent!important;box-shadow:none!important;border-radius:12px!important;}
 @media(min-width:681px){
   .rbtn{border-radius:12px;}
   .rbtn.on{color:var(--lime)!important;background:var(--lime-soft)!important;}
-  .rbtn.on::before{background:var(--lime)!important;box-shadow:0 0 10px var(--lime-gl)!important;}
+  .rbtn.on::before{background:var(--lime)!important;}
 }
 .chip.long{background:var(--up-soft)!important;color:var(--up)!important;}
 .chip.short{background:var(--dn-soft)!important;color:var(--dn)!important;}
-/* ─── PREMIUM LAYER ──────────────────────────────────────────────── */
-/* Film-grain over the backdrop — makes the gradients feel physical */
-html[data-theme="dark"] body::after{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;opacity:.5;mix-blend-mode:overlay;
-  background-image:url("data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)' opacity='0.22'/%3E%3C/svg%3E");}
-.shell{position:relative;z-index:1;}
-/* Gradient ring borders on every card (replaces the flat 1px line) */
-.panel{border-color:transparent!important;}
-.panel::before{content:'';position:absolute;inset:0;border-radius:18px;padding:1px;pointer-events:none;
-  background:linear-gradient(140deg,rgba(255,255,255,0.16),rgba(255,255,255,0.03) 28%,rgba(77,159,255,0.14) 66%,rgba(34,211,238,0.10));
-  -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude;}
-html[data-theme="light"] .panel{border-color:var(--line)!important;}
-html[data-theme="light"] .panel::before{display:none;}
-/* Hover lift */
-.panel{transition:transform .25s var(--e),box-shadow .25s var(--e);}
-.panel:hover{transform:translateY(-2px);box-shadow:0 30px 70px -34px rgba(0,0,0,0.85),0 0 40px -22px var(--lime-gl);}
-@media(max-width:680px){.panel:hover{transform:none;}}
-/* Hero numerals glow */
-.cstrip .pxbig.up,.pos-pnl .v.up{text-shadow:0 0 26px rgba(52,211,153,0.35);}
-.cstrip .pxbig.dn,.pos-pnl .v.dn{text-shadow:0 0 26px rgba(248,113,113,0.30);}
-.kpi .v.up{text-shadow:0 0 22px rgba(52,211,153,0.28);}
-.kpi .v.dn{text-shadow:0 0 22px rgba(248,113,113,0.25);}
-.kpi .v.ac{text-shadow:0 0 22px var(--lime-gl);}
-/* Command-arc orbit animation */
-@keyframes orbitspin{from{transform:rotate(0deg);}to{transform:rotate(360deg);}}
-.orbit-spin{transform-origin:50% 50%;animation:orbitspin 80s linear infinite;}
-.orbit-spin.fast{animation-duration:34s;}
-@media(prefers-reduced-motion:reduce){.orbit-spin{animation:none;}}
-/* ─── VIVID LAYER — saturated gradient pills (UI-kit inspiration) ── */
-.btn.go{background:linear-gradient(135deg,#F59E0B,#F97316)!important;color:#1A1030!important;
-  box-shadow:0 8px 26px -10px rgba(249,115,22,0.55)!important;font-weight:800;}
-.btn.stop{background:linear-gradient(135deg,#F87171,#EC4899)!important;color:#2A0A18!important;border:none!important;
-  box-shadow:0 8px 24px -10px rgba(236,72,153,0.5)!important;font-weight:800;}
-.dirbadge.long{background:linear-gradient(135deg,#10B981,#22D3EE)!important;color:#03251C!important;}
-.dirbadge.short{background:linear-gradient(135deg,#F87171,#EC4899)!important;color:#2A0A18!important;}
-.opttag{background:linear-gradient(135deg,#F59E0B,#F97316)!important;color:#1A1030!important;font-weight:800;}
-.verdict.take{background:linear-gradient(135deg,rgba(16,185,129,0.25),rgba(34,211,238,0.20))!important;color:var(--up)!important;}
-.verdict.skip{background:linear-gradient(135deg,rgba(248,113,113,0.22),rgba(236,72,153,0.18))!important;color:var(--dn)!important;}
-.led.live{background:linear-gradient(135deg,rgba(16,185,129,0.20),rgba(34,211,238,0.14))!important;border-color:transparent!important;}
-/* KPI tiles: colorful marker chips like the icon tiles in the kit */
-.kpi .k{display:flex;align-items:center;gap:8px;}
-.kpi .k::before{content:'';width:9px;height:9px;border-radius:3.5px;flex-shrink:0;
-  background:linear-gradient(135deg,#3B82F6,#22D3EE);box-shadow:0 0 10px rgba(77,159,255,0.55);}
-.grid>.kpi:nth-of-type(2) .k::before{background:linear-gradient(135deg,#10B981,#22D3EE);box-shadow:0 0 10px rgba(52,211,153,0.55);}
-.grid>.kpi:nth-of-type(3) .k::before{background:linear-gradient(135deg,#F59E0B,#F97316);box-shadow:0 0 10px rgba(249,115,22,0.55);}
-.grid>.kpi:nth-of-type(4) .k::before{background:linear-gradient(135deg,#A855F7,#EC4899);box-shadow:0 0 10px rgba(168,85,247,0.55);}
-/* Aurora wash inside the chart + signal hero cards */
-.g-chart{overflow:hidden;}
-.g-chart::after{content:'';position:absolute;top:-40%;right:-25%;width:75%;height:120%;pointer-events:none;border-radius:50%;
-  background:radial-gradient(closest-side, rgba(147,51,234,0.13), rgba(59,130,246,0.06) 55%, transparent 75%);}
-.g-sig{overflow:visible;}
-/* Sort selects & small buttons rounder */
-.sortsel{border-radius:999px;padding:6px 26px 6px 12px;}
-/* Mobile bottom nav: floating dock */
+
+/* KPI tiles: one small dot marker per tile, no glow-on-text (reference has
+   NO text-shadow anywhere — numerals stay flat, crisp, high-contrast) */
+.kpi .k{display:flex;align-items:center;gap:7px;}
+.kpi .k::before{content:'';width:7px;height:7px;border-radius:50%;flex-shrink:0;background:var(--lime);}
+.grid>.kpi:nth-of-type(2) .k::before{background:var(--up);}
+.grid>.kpi:nth-of-type(3) .k::before{background:var(--warn);}
+.grid>.kpi:nth-of-type(4) .k::before{background:#B084F5;}
+
+/* ─── BUG FIX: mobile bottom nav — the engine-status pill was squeezed
+   into the same row as the 4 tab buttons and visually collided with the
+   last tab's label. It now lives ONLY in the top toolbar (already shows
+   an explicit ENGINE ON/OFF pill there) so the bottom dock is just 4
+   evenly-spaced tabs with room to breathe. ─────────────────────────── */
 @media(max-width:680px){
-  .rail{border-radius:22px 22px 0 0;box-shadow:0 -10px 34px rgba(0,0,0,0.45);}
+  .rail .estat{display:none;}
+  .rail{border-radius:20px 20px 0 0;box-shadow:0 -8px 28px rgba(0,0,0,0.35);}
 }
-/* Gradient meter default */
-.mkt-bar-fill.grad{background:linear-gradient(90deg,#3B82F6,#22D3EE)!important;}
+
+/* ─── BUG FIX: "Open swing positions" header + sort dropdown were forced
+   onto one row and collided on narrow screens. Let the row wrap and give
+   the sort control its own space instead of fighting the title. ────── */
+.head{flex-wrap:wrap;row-gap:8px;}
+.head .r{min-width:0;}
+@media(max-width:480px){
+  .head{align-items:flex-start;}
+  .head .r{flex-basis:100%;justify-content:space-between;}
+}
 
 
 </style>
@@ -627,7 +618,7 @@ const fmtCountdown=(()=>{
 const fmtDay=(iso)=>{if(!iso)return'';const m=String(iso).match(/(\d{4})-(\d{2})-(\d{2})/);if(!m)return String(iso);const mo=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][(+m[2])-1]||m[2];return (+m[3])+' '+mo;};
 const fmt=(n)=>Math.abs(Math.round(n||0)).toLocaleString('en-IN');
 const fmtK=(n)=>{n=Math.abs(+n||0);return n>=1e7?(n/1e7).toFixed(2)+'Cr':n>=1e5?(n/1e5).toFixed(2)+'L':n>=1e3?(n/1e3).toFixed(1)+'k':String(Math.round(n));};
-function humanizeOpt(sym){if(!sym)return'';const m=String(sym).toUpperCase().match(/^([A-Z]+?)(\d{2})([A-Z]{3})(\d{2})(\d+)(CE|PE)$/);return m?`${m[5]} ${m[6]} · ${m[2]} ${m[3]}`:String(sym);}
+function humanizeOpt(sym){if(!sym)return'';const m=String(sym).toUpperCase().match(/^([A-Z&]+?)(\d{2})([A-Z]{3})(\d{2})(\d+)(CE|PE)$/);return m?`${m[5]} ${m[6]} · ${m[2]} ${m[3]}`:String(sym);}
 const sgn=(s)=>{const raw=(s.pnl_rupees_net!=null?+s.pnl_rupees_net:+s.pnl_rupees)||0;if(s.result==='LOSS')return -Math.abs(raw);if(['WIN','T1','T2','TRAIL'].includes(s.result))return Math.abs(raw);return raw;};
 const isWin=(r)=>['WIN','T1','T2','TRAIL'].includes(r);
 const verdictClass=(v)=>{v=(v||'').toUpperCase();return v==='TAKE'?'take':(v==='SKIP'||v==='PASS')?'skip':'watch';};
@@ -738,84 +729,61 @@ function Setup({onDone}){
   </div></div>);}
 
 let _GAUGE_UID=0;
-function ArcGauge({value,display,label,size=120,color,track,gradient,ticks}){
-  // 240-degree gauge sweeping over the top (150deg -> 390deg, y-down coords)
+function ArcGauge({value,display,label,size=120,dual}){
+  // Clean single-stroke ring, ~270deg sweep, thin (reference: Focus Timer /
+  // System Status rings) — dark track, one gradient, centered number,
+  // ONE label line below. No ticks, no double-stroke glow, no orbiting.
   const uid=React.useMemo(()=>('gg'+(++_GAUGE_UID)),[]);
   const v=Math.max(0,Math.min(100,+value||0));
-  const r=size/2-9, cx=size/2, cy=size/2;
-  const A=(deg,rad)=>{const t=deg*Math.PI/180;const rr=rad!=null?rad:r;return [cx+rr*Math.cos(t),cy+rr*Math.sin(t)];};
-  const seg=(f,t,col,w,extra)=>{const [x1,y1]=A(f),[x2,y2]=A(t);
-    return <path d={'M'+x1.toFixed(1)+' '+y1.toFixed(1)+' A'+r+' '+r+' 0 '+((t-f)>180?1:0)+' 1 '+x2.toFixed(1)+' '+y2.toFixed(1)} fill="none" stroke={col} strokeWidth={w} strokeLinecap="round" {...(extra||{})}/>;};
-  const S=150,E=390,cur=S+(E-S)*v/100;
-  const stroke=gradient?('url(#'+uid+')'):(color||'var(--lime)');
-  const tickEls=[];
-  if(ticks){for(let i=0;i<=24;i++){const d=S+(E-S)*i/24;const [ax,ay]=A(d,r+7),[bx,by]=A(d,r+(i%6===0?12:10));
-    tickEls.push(<line key={i} x1={ax} y1={ay} x2={bx} y2={by} stroke={'rgba(127,146,176,'+(i%6===0?0.5:0.22)+')'} strokeWidth={i%6===0?1.6:1}/>);}}
-  return(<svg viewBox={'0 0 '+size+' '+(size*0.9)} style={{width:'100%',maxWidth:size,display:'block',overflow:'visible'}}>
-    {gradient&&<defs><linearGradient id={uid} x1="0" y1="1" x2="1" y2="0">
-      <stop offset="0%" stopColor="#3B82F6"/><stop offset="60%" stopColor="#4D9FFF"/><stop offset="100%" stopColor="#22D3EE"/></linearGradient></defs>}
-    {tickEls}
-    {seg(S,E,track||'rgba(127,146,176,0.16)',7)}
-    {v>0.5&&seg(S,Math.max(S+2,cur),stroke,13,{opacity:0.28,style:{filter:'blur(5px)'}})}
-    {v>0.5&&seg(S,Math.max(S+2,cur),stroke,7)}
-    <text x={cx} y={cy+3} textAnchor="middle" fill="var(--ink)" fontSize={size*0.235} fontWeight="700" fontFamily="var(--mono)">{display!=null?display:Math.round(v)}</text>
-    {label&&<text x={cx} y={cy+size*0.17} textAnchor="middle" fill="var(--ink3)" fontSize={size*0.078} fontFamily="var(--mono)" letterSpacing="1.4">{label}</text>}
+  const r=size/2-8, cx=size/2, cy=size/2, sw=Math.max(5,size*0.07);
+  const A=(deg)=>{const t=deg*Math.PI/180;return [cx+r*Math.cos(t),cy+r*Math.sin(t)];};
+  const seg=(f,t,col,w)=>{const [x1,y1]=A(f),[x2,y2]=A(t);
+    return <path d={'M'+x1.toFixed(1)+' '+y1.toFixed(1)+' A'+r+' '+r+' 0 '+((t-f)>180?1:0)+' 1 '+x2.toFixed(1)+' '+y2.toFixed(1)} fill="none" stroke={col} strokeWidth={w} strokeLinecap="round"/>;};
+  const S=145,E=415,cur=S+(E-S)*v/100;
+  const c1=dual?'#F5A623':'var(--lime)', c2=dual?'#F0625F':'var(--lime2)';
+  return(<svg viewBox={'0 0 '+size+' '+size} style={{width:'100%',maxWidth:size,display:'block'}}>
+    <defs><linearGradient id={uid} x1="0" y1="1" x2="1" y2="0"><stop offset="0%" stopColor={c1}/><stop offset="100%" stopColor={c2}/></linearGradient></defs>
+    {seg(S,E,'var(--line)',sw)}
+    {v>0.5&&seg(S,Math.max(S+2,cur),'url(#'+uid+')',sw)}
+    <text x={cx} y={cy+size*0.03} textAnchor="middle" fill="var(--ink)" fontSize={size*0.24} fontWeight="700">{display!=null?display:Math.round(v)}</text>
+    {label&&<text x={cx} y={cy+size*0.20} textAnchor="middle" fill="var(--ink3)" fontSize={size*0.082} fontWeight="600" letterSpacing=".02em">{label}</text>}
   </svg>);}
 
 function CommandArc({conf,votes,scanning,verdict}){
-  // ClyHealth-style hero: gradient arc + tick ring + two orbit rings with
-  // the five conductor dimensions as satellites. In scanning mode the
-  // rings pulse and a lone satellite sweeps the orbit.
-  const size=320,cx=size/2,cy=size/2,r=96;
+  // Hero confidence ring — same clean language as ArcGauge, larger, with
+  // the five Conductor dimensions shown as a plain labeled-dot LEGEND row
+  // beneath (matches the reference's restrained dot+label pattern —
+  // e.g. calendar event dots, storage/battery rows — instead of a busy
+  // orbiting-satellite diagram).
+  const size=196,cx=size/2,cy=size/2,r=78,sw=14;
   const uid=React.useMemo(()=>('ca'+(++_GAUGE_UID)),[]);
   const v=Math.max(0,Math.min(100,+conf||0));
-  const A=(deg,rad)=>{const t=deg*Math.PI/180;return [cx+rad*Math.cos(t),cy+rad*Math.sin(t)];};
-  const seg=(f,t,col,w,extra)=>{const [x1,y1]=A(f,r),[x2,y2]=A(t,r);
-    return <path d={'M'+x1.toFixed(1)+' '+y1.toFixed(1)+' A'+r+' '+r+' 0 '+((t-f)>180?1:0)+' 1 '+x2.toFixed(1)+' '+y2.toFixed(1)} fill="none" stroke={col} strokeWidth={w} strokeLinecap="round" {...(extra||{})}/>;};
-  const S=150,E=390,cur=S+(E-S)*v/100;
-  const ticks=[];for(let i=0;i<=30;i++){const d=S+(E-S)*i/30;const [ax,ay]=A(d,r+9),[bx,by]=A(d,r+(i%5===0?16:13));
-    ticks.push(<line key={'t'+i} x1={ax} y1={ay} x2={bx} y2={by} stroke={'rgba(127,146,176,'+(i%5===0?0.45:0.18)+')'} strokeWidth={i%5===0?1.6:1}/>);}
-  const lenses=[['trend','TREND'],['momentum','MOMENTUM'],['structure','STRUCTURE'],['flow','FLOW'],['pattern','PATTERN']];
-  const angles=[198,241,270,299,342];   // spread across the top arc
-  const sats=lenses.map(([k,lbl],i)=>{
-    const hit=!scanning&&votes&&!!votes[k];
-    const [sx,sy]=A(angles[i],r+42);
-    const [lx,ly]=A(angles[i],r+58);
-    const above=ly<cy;
-    return(<g key={k} opacity={scanning?0.35:1}>
-      <line x1={A(angles[i],r+20)[0]} y1={A(angles[i],r+20)[1]} x2={sx} y2={sy} stroke="rgba(127,146,176,0.25)" strokeWidth="1"/>
-      <circle cx={sx} cy={sy} r={hit?5:3.5} fill={hit?'var(--up)':'var(--ink4)'} style={hit?{filter:'drop-shadow(0 0 6px rgba(52,211,153,0.9))'}:null}/>
-      <text x={lx} y={ly+(above?-2:8)} textAnchor="middle" fill={hit?'var(--ink2)':'var(--ink4)'} fontSize="9" fontFamily="var(--mono)" letterSpacing="1.1">{lbl}</text>
-    </g>);});
-  return(<div style={{position:'relative',maxWidth:size,margin:'0 auto'}}>
-    <svg viewBox={'0 0 '+size+' '+(size*0.82)} style={{width:'100%',display:'block',overflow:'visible'}}>
-      <defs>
-        <linearGradient id={uid} x1="0" y1="1" x2="1" y2="0">
-          <stop offset="0%" stopColor="#6366F1"/><stop offset="45%" stopColor="#3B82F6"/><stop offset="100%" stopColor="#22D3EE"/></linearGradient>
-        <radialGradient id={uid+'h'} cx="50%" cy="42%" r="50%">
-          <stop offset="0%" stopColor="rgba(77,159,255,0.14)"/><stop offset="100%" stopColor="rgba(77,159,255,0)"/></radialGradient>
-      </defs>
-      <circle cx={cx} cy={cy} r={r+42} fill={'url(#'+uid+'h)'}/>
-      <g className={'orbit-spin'+(scanning?' fast':'')}>
-        <circle cx={cx} cy={cy} r={r+42} fill="none" stroke="rgba(127,146,176,0.16)" strokeWidth="1" strokeDasharray="1 7"/>
-        {scanning&&<circle cx={A(300,r+42)[0]} cy={A(300,r+42)[1]} r="4" fill="var(--lime)" style={{filter:'drop-shadow(0 0 7px rgba(77,159,255,0.95))'}}/>}
-      </g>
-      <circle cx={cx} cy={cy} r={r+24} fill="none" stroke="rgba(127,146,176,0.10)" strokeWidth="1"/>
-      {ticks}
-      {seg(S,E,'rgba(127,146,176,0.15)',8)}
-      {!scanning&&v>0.5&&seg(S,Math.max(S+2,cur),'url(#'+uid+')',16,{opacity:0.3,style:{filter:'blur(6px)'}})}
-      {!scanning&&v>0.5&&seg(S,Math.max(S+2,cur),'url(#'+uid+')',8)}
+  const A=(deg)=>{const t=deg*Math.PI/180;return [cx+r*Math.cos(t),cy+r*Math.sin(t)];};
+  const seg=(f,t,col,w)=>{const [x1,y1]=A(f),[x2,y2]=A(t);
+    return <path d={'M'+x1.toFixed(1)+' '+y1.toFixed(1)+' A'+r+' '+r+' 0 '+((t-f)>180?1:0)+' 1 '+x2.toFixed(1)+' '+y2.toFixed(1)} fill="none" stroke={col} strokeWidth={w} strokeLinecap="round"/>;};
+  const S=145,E=415,cur=S+(E-S)*v/100;
+  const lenses=[['trend','Trend'],['momentum','Momentum'],['structure','Structure'],['flow','Flow'],['pattern','Pattern']];
+  return(<div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:16}}>
+    <svg viewBox={'0 0 '+size+' '+size} style={{width:'100%',maxWidth:size,display:'block'}}>
+      <defs><linearGradient id={uid} x1="0" y1="1" x2="1" y2="0"><stop offset="0%" stopColor="var(--lime)"/><stop offset="100%" stopColor="var(--lime2)"/></linearGradient></defs>
+      {seg(S,E,'var(--line)',sw)}
+      {!scanning&&v>0.5&&seg(S,Math.max(S+2,cur),'url(#'+uid+')',sw)}
       {!scanning&&<>
-        <text x={cx} y={cy-6} textAnchor="middle" fill="var(--ink)" fontSize="58" fontWeight="700" fontFamily="var(--mono)">{Math.round(v)}</text>
-        <text x={cx} y={cy+18} textAnchor="middle" fill="var(--ink3)" fontSize="10.5" fontFamily="var(--mono)" letterSpacing="2.4">CONFIDENCE</text>
-        {verdict&&<text x={cx} y={cy+38} textAnchor="middle" fill={verdict==='TAKE'?'var(--up)':verdict==='SKIP'?'var(--dn)':'var(--warn)'} fontSize="12" fontWeight="700" fontFamily="var(--mono)" letterSpacing="1.6">{verdict}</text>}
+        <text x={cx} y={cy-2} textAnchor="middle" fill="var(--ink)" fontSize="42" fontWeight="700">{Math.round(v)}</text>
+        <text x={cx} y={cy+21} textAnchor="middle" fill="var(--ink3)" fontSize="11" fontWeight="600" letterSpacing=".03em">Confidence</text>
       </>}
       {scanning&&<>
-        <text x={cx} y={cy-2} textAnchor="middle" fill="var(--ink)" fontSize="17" fontWeight="600">Scanning…</text>
-        <text x={cx} y={cy+20} textAnchor="middle" fill="var(--ink3)" fontSize="10" fontFamily="var(--mono)" letterSpacing="1.6">EVERY 30 SECONDS</text>
+        <circle cx={cx} cy={cy} r={r} fill="none" stroke="var(--line)" strokeWidth={sw}/>
+        <text x={cx} y={cy-4} textAnchor="middle" fill="var(--ink)" fontSize="16" fontWeight="600">Scanning</text>
+        <text x={cx} y={cy+16} textAnchor="middle" fill="var(--ink3)" fontSize="10" fontWeight="600">every 30s</text>
       </>}
-      {sats}
     </svg>
+    {!scanning&&verdict&&<span className={'verdict '+verdictClass(verdict)}>{verdict}</span>}
+    {!scanning&&votes&&<div style={{display:'flex',flexWrap:'wrap',gap:'6px 14px',justifyContent:'center',maxWidth:260}}>
+      {lenses.map(([k,lbl])=>{const hit=!!votes[k];
+        return(<span key={k} style={{display:'inline-flex',alignItems:'center',gap:6,fontSize:11.5,fontWeight:600,color:hit?'var(--ink2)':'var(--ink4)'}}>
+          <span style={{width:6,height:6,borderRadius:'50%',background:hit?'var(--up)':'var(--ink4)',flexShrink:0}}/>{lbl}</span>);})}
+    </div>}
   </div>);}
 
 function SignalCard({sig,marketOpen,market}){
@@ -1382,7 +1350,7 @@ function App(){
     <section className="panel g-kpi kpi"><div className="k">Net P&amp;L</div><div className={'v '+(net>=0?'up':'dn')}>{net>=0?'+':'−'}₹{fmt(netCU)}</div><div className="s">{closed.length} closed · {open.length} open</div><div className="spark"><Area pts={equity} color={net>=0?'var(--up)':'var(--dn)'} h={42}/></div></section>
     <section className="panel g-kpi kpi"><div className="k">Win rate</div>
       <div style={{display:'flex',alignItems:'center',gap:12}}>
-        <div style={{width:78,flexShrink:0}}><ArcGauge value={wr} display={wrCU.toFixed(0)+'%'} size={78} gradient={true} ticks={true}/></div>
+        <div style={{width:78,flexShrink:0}}><ArcGauge value={wr} display={wrCU.toFixed(0)+'%'} size={78}/></div>
         <div className="s" style={{marginTop:0}}>{wins}W · {losses}L</div></div></section>
     <section className="panel g-kpi kpi"><div className="k">Expectancy</div><div className={'v '+(exp>=0?'up':'dn')}>{exp>=0?'+':'−'}₹{fmt(exp)}</div><div className="s">per trade</div></section>
     <section className="panel g-kpi kpi"><div className="k">Capital</div><div className="v ac">₹{fmt(cap)}</div><div className="s">{net>=0?'+':'−'}{(Math.abs(net)/cap*100).toFixed(2)}% today</div></section></>);
