@@ -454,6 +454,11 @@ button{font-family:inherit;cursor:pointer;}input{font-family:inherit;}
   .kpi .spark{height:30px;width:40%;}
   .tbl .hr,.row{grid-template-columns:46px 1fr auto;}
   .tbl .hr .cs,.row .cside,.tbl .hr .cp,.row .cpx{display:none;}
+  .swing-detail{padding:14px;}
+  .legbar{grid-template-columns:repeat(2,1fr);}
+  .leg{padding:9px 10px;}
+  .leg .v{font-size:13px;white-space:normal;overflow-wrap:break-word;}
+  .optline{padding:11px 12px;}
 }
 
 /* ═══ FINAL THEME — Linear-style dark glass + soft frosted light glass ═══
@@ -516,6 +521,19 @@ html[data-theme="dark"] .panel{box-shadow:0 1px 0 rgba(255,255,255,0.04) inset,v
 .poscard{border-radius:16px;background:var(--panel2);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);}
 .cstat{border-radius:14px;}
 .optline,.ophead,.legbar{border-radius:12px;overflow:hidden;}
+.swing-detail{border-radius:16px;background:var(--panel2);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border:1px solid var(--line);box-shadow:var(--sh);padding:16px 18px;margin:6px 0 14px;animation:rise .3s var(--e) both;}
+.leg{background:color-mix(in srgb,var(--panel) 60%,transparent)!important;}
+/* Exit-journey track: where the trade actually landed vs its risk/reward
+   range, in place of a generic win/loss color-block border. */
+.otrack{position:relative;height:30px;margin:0 0 14px;padding:0 2px;}
+.otrack .ob-lab{position:absolute;top:0;font-family:var(--mono);font-size:8px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink4);}
+.otrack .ob-lab.l{left:0;}.otrack .ob-lab.r{right:0;}
+.otrack .ob-bar{position:absolute;top:14px;left:0;right:0;height:3px;border-radius:2px;opacity:.55;}
+.otrack .ob-entry{position:absolute;top:10px;width:2px;height:11px;border-radius:1px;background:var(--ink3);transform:translateX(-50%);}
+.otrack .ob-exit{position:absolute;top:15.5px;width:9px;height:9px;border-radius:50%;background:var(--dc);transform:translate(-50%,-50%);box-shadow:0 0 10px -1px var(--dc);}
+.otrack .ob-exit i{position:absolute;inset:-9px;border-radius:50%;border:1.5px solid var(--dc);animation:otping 2.4s cubic-bezier(.2,.6,.4,1) infinite;}
+@keyframes otping{0%{transform:scale(.45);opacity:.75;}75%,100%{transform:scale(1.7);opacity:0;}}
+@media(prefers-reduced-motion:reduce){.otrack .ob-exit i{animation:none;opacity:0;}}
 .btn{border-radius:999px;transition:transform .15s cubic-bezier(.16,1,.3,1),opacity .15s;}
 .btn:active{transform:scale(0.97);}
 .btn.go{background:linear-gradient(135deg,var(--lime),var(--lime2))!important;color:#fff!important;border:none!important;
@@ -1141,6 +1159,25 @@ function sortSwings(open,sortBy){
     return 0;});
 }
 
+function SwingExitTrack({s,win}){
+  const long=(s.direction||'').toUpperCase()==='LONG';
+  const entry=+s.spot_entry||0,sl=+s.spot_sl||0;
+  let t1=+s.spot_target1||0,t2=+s.spot_target2||0;
+  if(!t2&&t1&&entry)t2=t1+(t1-entry);
+  const exitP=s.exit_price!=null?+s.exit_price:entry;
+  if(!entry)return null;
+  const m=long?1:-1,f=x=>m*x;
+  const a=Math.min(f(sl||entry),f(entry),f(exitP)),b=Math.max(f(t2||t1||entry),f(exitP)),span=(b-a)||1;
+  const P=x=>Math.max(1,Math.min(99,((f(x)-a)/span)*100));
+  const enP=P(entry),exP=P(exitP);
+  const dc=win?'var(--up)':'var(--dn)';
+  return(<div className="otrack" title={'Exited ₹'+exitP.toFixed(1)}>
+    <span className="ob-lab l">Risk</span><span className="ob-lab r">Reward</span>
+    <div className="ob-bar" style={{background:'linear-gradient(90deg,var(--dn) 0%,var(--ink4) '+enP.toFixed(0)+'%,var(--up) 100%)'}}/>
+    <div className="ob-entry" style={{left:enP+'%'}}/>
+    <div className="ob-exit" style={{left:exP+'%','--dc':dc}}><i/></div>
+  </div>);
+}
 function SwingOutcomeDetail({s}){
   const long=(s.direction||'').toUpperCase()==='LONG';
   let reasons=[];try{reasons=JSON.parse(s.reasons||'[]')||[];}catch(e){}
@@ -1148,7 +1185,7 @@ function SwingOutcomeDetail({s}){
   const win=isWin(s.result);
   const cap=+s.capital||((+s.option_entry||0)*(+s.lot_size||0)*(+s.lots||1))||null;
   const pnl=+s.pnl_rupees||0;
-  return(<div style={{background:'var(--panel2)',border:'1px solid var(--line)',borderLeft:'3px solid '+(win?'var(--up)':'var(--dn)'),padding:'14px 16px',margin:'2px 0 12px'}}>
+  return(<div className="swing-detail">
     <div style={{display:'flex',alignItems:'center',gap:10,flexWrap:'wrap',marginBottom:11}}>
       <span className="pos-name" style={{fontSize:17}}>{swName(s.instrument)}</span>
       <span className={'chip '+(long?'long':'short')}>{s.direction}</span>
@@ -1159,6 +1196,7 @@ function SwingOutcomeDetail({s}){
       Signal given {fmtDay(s.entry_date)}{s.entry_time?(' · '+s.entry_time+' IST'):''} → exited {fmtDay(s.exit_date)} · held {s.hold_days!=null?s.hold_days:'—'} day{s.hold_days===1?'':'s'}
       {ind.confidence?(' · conf '+ind.confidence+'%'):''}{ind.score!=null?(' · rank score '+ind.score):''}
     </div>
+    <SwingExitTrack s={s} win={win}/>
     <div className="legbar" style={{marginBottom:12}}>
       <div className="leg"><div className="k">Entry</div><div className="v">₹{(+s.spot_entry||0).toFixed(1)}</div></div>
       <div className="leg"><div className="k">Stop</div><div className="v dn">{s.spot_sl?('₹'+(+s.spot_sl).toFixed(1)):'—'}</div></div>
