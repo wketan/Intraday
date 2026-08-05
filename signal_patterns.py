@@ -60,7 +60,7 @@ PAT_PIVOT_K      = _env_int  ("PATTERN_PIVOT_K", 3)       # bars each side for a
 PAT_LEVEL_TOL    = _env_float("PATTERN_LEVEL_TOL_PCT", 0.25)  # "same level" tolerance, % of price
 PAT_MIN_HEIGHT   = _env_float("PATTERN_MIN_HEIGHT_PCT", 0.15)  # min pattern height, % of price
 
-_LOTS = {"NIFTY": 75, "BANKNIFTY": 30, "FINNIFTY": 65}
+_LOTS = {"NIFTY": 65, "BANKNIFTY": 30, "FINNIFTY": 60}
 
 
 def _isnan(x):

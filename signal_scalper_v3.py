@@ -288,7 +288,7 @@ class ScalperV3:
             return None
 
         # ₹ profit estimate at ATM delta 0.5
-        lot_size = {"NIFTY": 75, "BANKNIFTY": 30, "FINNIFTY": 65}.get(symbol.upper(), 75)
+        lot_size = {"NIFTY": 65, "BANKNIFTY": 30, "FINNIFTY": 60}.get(symbol.upper(), 65)
         est_t1_profit = SCALP_T1_PTS * 0.5 * lot_size
         if est_t1_profit < SCALP_TARGET_PROFIT_RS:
             ScalperV3._set_decision({

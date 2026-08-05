@@ -422,7 +422,7 @@ class Conductor:
         # spot move × 0.5. For NIFTY lot=75:
         #   est_t1_premium_move = (t1_distance × 0.5) per share
         #   est_t1_profit       = t1_distance × 0.5 × lot_size
-        lot_size = {"NIFTY": 75, "BANKNIFTY": 30, "FINNIFTY": 65}.get(symbol.upper(), 75)
+        lot_size = {"NIFTY": 65, "BANKNIFTY": 30, "FINNIFTY": 60}.get(symbol.upper(), 65)
         t1_distance = abs(t1 - entry)
         est_t1_profit_per_lot = t1_distance * 0.5 * lot_size
         # 1 lot is the minimum sizing — engine scales up based on conviction

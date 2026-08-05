@@ -309,7 +309,7 @@ class Reverter:
             return None
 
         # ₹ profit estimate (delta ≈ 0.5 ATM, lot=75 NIFTY)
-        lot_size = {"NIFTY": 75, "BANKNIFTY": 30, "FINNIFTY": 65}.get(symbol.upper(), 75)
+        lot_size = {"NIFTY": 65, "BANKNIFTY": 30, "FINNIFTY": 60}.get(symbol.upper(), 65)
         est_t1_profit = abs(t1 - entry) * 0.5 * lot_size
         if est_t1_profit < REV_TARGET_PROFIT_RS:
             Reverter._set_decision({

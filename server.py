@@ -60,7 +60,11 @@ def market_status(now=None):
     if d in hols:
         return {"open": False, "reason": "holiday", "label": hols[d], "date": d}
     hm = now.hour * 60 + now.minute
-    is_session = (9 * 60 + 15) <= hm <= (15 * 60 + 30)
+    # F&O close moved 15:30 -> 15:40 IST from 3 Aug 2026 (SEBI circular
+    # HO/47/11/11(3)2025-MRD-POD2/I/2765/2026, 16 Jan 2026 — Closing Auction
+    # Session in cash equity extended the equity derivatives segment's
+    # session end by 10 minutes on all trading days).
+    is_session = (9 * 60 + 15) <= hm <= (15 * 60 + 40)
     return {"open": is_session,
             "reason": "session" if is_session else "after_hours",
             "label": None, "date": d}
@@ -110,8 +114,11 @@ CONFIG = {
 
     # ── Cost model (subtracted from displayed P&L for realism) ──
     # Round-trip brokerage estimate per lot (Zerodha/Angel: ~₹40 entry + ~₹40 exit + STT + GST).
+    # Bumped ₹100->₹115: Budget 2026-27 raised STT on options premium
+    # 0.10%->0.15% (and futures 0.02%->0.05%), effective 1 Apr 2026 — this
+    # is still a flat estimate, not a precise per-trade STT line item.
     # Adjust if your broker's structure differs.
-    "brokerage_per_lot_roundtrip": float(os.environ.get("BROKERAGE_PER_LOT", "100")),
+    "brokerage_per_lot_roundtrip": float(os.environ.get("BROKERAGE_PER_LOT", "115")),
     # Slippage in basis points (1bp = 0.01%) of premium, applied each side. 50bp = 0.5%
     # per side ≈ realistic for ATM weekly options with spreads in the 0.5-1.5% range.
     "slippage_bps_per_side": float(os.environ.get("SLIPPAGE_BPS_PER_SIDE", "50")),
@@ -220,10 +227,11 @@ PORT = int(os.environ.get("PORT", "5050"))
 # ═══════════════════════════════════════════════════════════════════
 INSTRUMENTS = {
     "NIFTY": {
-        # Lot 75 per NSE's Nov-2024 revision (matches conductor.py and
-        # SWING_STOCKS). Was 65, which skewed qty sizing and the Rs-profit gate.
+        # Lot 65 per NSE's Jan-2026 revision (was 75 under Nov-2024's rule;
+        # cut again to keep contract notional near the Rs 15-20L band as the
+        # index rose — live from the Jan 27, 2026 expiry cycle).
         "symbol": "NIFTY", "token": "99926000", "exchange": "NSE",
-        "option_exchange": "NFO", "lot_size": 75, "strike_gap": 50,
+        "option_exchange": "NFO", "lot_size": 65, "strike_gap": 50,
         "expiry_prefix": "NIFTY", "expiry_day": 1, "expiry_type": "weekly",  # Tuesday weekly
     },
     "BANKNIFTY": {
@@ -232,9 +240,9 @@ INSTRUMENTS = {
         "expiry_prefix": "BANKNIFTY", "expiry_day": 1, "expiry_type": "monthly",  # Last Tuesday monthly
     },
     "FINNIFTY": {
-        # Lot 65 per NSE's Nov-2024 revision (matches conductor.py). Was 60.
+        # Lot 60 per NSE's Jan-2026 revision (was 65 under Nov-2024's rule).
         "symbol": "NIFTY FIN SERVICE", "token": "99926037", "exchange": "NSE",
-        "option_exchange": "NFO", "lot_size": 65, "strike_gap": 50,
+        "option_exchange": "NFO", "lot_size": 60, "strike_gap": 50,
         "expiry_prefix": "FINNIFTY", "expiry_day": 1, "expiry_type": "monthly",  # Last Tuesday monthly
     },
 }
@@ -246,9 +254,9 @@ INSTRUMENTS = {
 # ═══════════════════════════════════════════════════════════════════
 SWING_STOCKS = {
     # ── Indices — swing uses monthly expiry ─────────────────────────
-    "NIFTY_SW":     {"nse_sym":"Nifty 50",           "nse_fo":"NIFTY",      "exchange":"NSE","type":"INDEX","fo_eligible":True,"lot_size":75,  "strike_gap":50,  "token":"99926000"},  # NSE revised Jan-2026: 75 (weekly) – monthly still 75; kept as-is
+    "NIFTY_SW":     {"nse_sym":"Nifty 50",           "nse_fo":"NIFTY",      "exchange":"NSE","type":"INDEX","fo_eligible":True,"lot_size":65,  "strike_gap":50,  "token":"99926000"},  # NSE Jan-2026 revision: 75->65
     "BANKNIFTY_SW": {"nse_sym":"Nifty Bank",          "nse_fo":"BANKNIFTY",  "exchange":"NSE","type":"INDEX","fo_eligible":True,"lot_size":30,  "strike_gap":100, "token":"99926009"},
-    "FINNIFTY_SW":  {"nse_sym":"Nifty Fin Services",  "nse_fo":"FINNIFTY",   "exchange":"NSE","type":"INDEX","fo_eligible":True,"lot_size":65,  "strike_gap":50,  "token":"99926037"},
+    "FINNIFTY_SW":  {"nse_sym":"Nifty Fin Services",  "nse_fo":"FINNIFTY",   "exchange":"NSE","type":"INDEX","fo_eligible":True,"lot_size":60,  "strike_gap":50,  "token":"99926037"},  # NSE Jan-2026 revision: 65->60
     # ── Nifty 50 stocks ─────────────────────────────────────────────
     # lot_size values verified against NSE F&O lot size circular (Jan 2026) via Dhan
     "RELIANCE":    {"nse_sym":"RELIANCE",   "nse_fo":"RELIANCE",   "exchange":"NSE","type":"STOCK","fo_eligible":True,"lot_size":500, "strike_gap":20},
@@ -8366,7 +8374,7 @@ def api_replay_premium():
                 sl = max(round(entry * (1.0 - sl_pct)), 5)
                 t1 = round(entry * (1.0 + t1_pct))
                 t2 = round(entry * (1.0 + t2_pct))
-                LOT_SIZES = {"NIFTY": 75, "BANKNIFTY": 30, "FINNIFTY": 65}
+                LOT_SIZES = {"NIFTY": 65, "BANKNIFTY": 30, "FINNIFTY": 60}
                 lot_size = LOT_SIZES.get(symbol, 75)
                 budget = 20000
                 est_lots = max(1, min(3, int((budget * 0.5) // max(entry * lot_size, 1))))
@@ -8815,20 +8823,26 @@ def _scheduler():
                     except Exception as e:
                         log.warning(f"⏰ catch-up start failed: {e}")
 
-            # ── Auto-OFF: weekdays at 15:30 IST ───────────────────────────
-            if day <= 4 and hh == 15 and mm == 30:
+            # ── Auto-OFF: weekdays at 15:40 IST ───────────────────────────
+            # Was 15:30 — F&O segment close moved to 15:40 from 3 Aug 2026
+            # (Closing Auction Session circular). Positions still square off
+            # at the earlier AUTO_CLOSE_HOUR/MINUTE (default 15:15) safety
+            # buffer regardless; this only stops the idle scan loop in step
+            # with the exchange's real close so the dashboard doesn't label
+            # the last 10 minutes "market closed" while it's still open.
+            if day <= 4 and hh == 15 and mm == 40:
                 key = f"{day_key}-off"
                 if not last_fired.get(key):
                     last_fired[key] = True
                     if engine.running:
-                        log.info("⏰ Scheduler: auto-OFF at 15:30 IST")
+                        log.info("⏰ Scheduler: auto-OFF at 15:40 IST")
                         try:
                             engine.stop()
-                            SlackAlert.send("⏰ *Engine auto-stopped* — 15:30 IST · session closed")
+                            SlackAlert.send("⏰ *Engine auto-stopped* — 15:40 IST · session closed")
                         except Exception as e:
                             log.warning(f"⏰ auto-OFF failed: {e}")
                     else:
-                        log.info("⏰ Scheduler: 15:30 IST hit, engine already stopped")
+                        log.info("⏰ Scheduler: 15:40 IST hit, engine already stopped")
 
             # Garbage-collect old keys (yesterday and earlier) to keep dict bounded
             cutoff = (now - timedelta(days=2)).strftime("%Y-%m-%d")

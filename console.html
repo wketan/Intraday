@@ -16,15 +16,15 @@
 <link rel="icon" href="icon-192.png" type="image/png" sizes="192x192"/>
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
-<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700;800&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet"/>
 <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
 <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
 <script src="https://unpkg.com/@babel/standalone@7.24.7/babel.min.js"></script>
 <style>
 /* ═══════════════ INTRADAY CONSOLE — tactical trading terminal ═══════════════ */
 :root{
-  --ui:'Space Grotesk',system-ui,-apple-system,sans-serif;
-  --mono:'JetBrains Mono',ui-monospace,'SF Mono',Consolas,monospace;
+  --ui:'Inter',system-ui,-apple-system,sans-serif;
+  --mono:'Inter',system-ui,-apple-system,sans-serif;
   --e:cubic-bezier(.2,.8,.2,1);
 }
 html[data-theme="dark"]{
@@ -132,15 +132,19 @@ button{font-family:inherit;cursor:pointer;}input{font-family:inherit;}
 .tkm .sep{color:var(--ink4);padding:0 12px;}
 .top-r{margin-left:auto;display:flex;align-items:center;gap:12px;}
 .clock{font-family:var(--mono);font-size:13px;color:var(--ink2);letter-spacing:.04em;}.clock b{color:var(--ink);}
-.led{display:inline-flex;align-items:center;gap:8px;font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;padding:8px 12px;border-radius:8px;border:1px solid var(--line);color:var(--ink2);}
+/* Toolbar controls (engine pill, Start/Stop, icon buttons) share ONE
+   height so they read as a uniform row instead of three different sizes —
+   this is the fix for the "pills don't look uniform on mobile" bug. */
+:root{--ctrl-h:40px;}
+.led{display:inline-flex;align-items:center;gap:8px;font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;height:var(--ctrl-h);padding:0 12px;border-radius:8px;border:1px solid var(--line);color:var(--ink2);box-sizing:border-box;}
 .led .d{width:7px;height:7px;border-radius:2px;background:var(--ink4);}
 .led.live{color:var(--up);border-color:var(--up-soft);background:var(--up-soft);}.led.live .d{background:var(--up);box-shadow:0 0 8px var(--up);animation:bp 2.2s infinite;}
 .led.off{color:var(--dn);border-color:var(--dn-soft);background:var(--dn-soft);}.led.off .d{background:var(--dn);}
-.btn{appearance:none;border:1px solid var(--line);border-radius:8px;padding:9px 16px;font-family:var(--mono);font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;background:var(--panel2);color:var(--ink);transition:all .18s var(--e);}
+.btn{appearance:none;border:1px solid var(--line);border-radius:8px;height:var(--ctrl-h);padding:0 16px;font-family:var(--mono);font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;background:var(--panel2);color:var(--ink);transition:all .18s var(--e);box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center;}
 .btn:hover{border-color:var(--ink3);}.btn:disabled{opacity:.5;cursor:not-allowed;}
 .btn.go{background:var(--lime);color:#0a0b0e;border-color:var(--lime);box-shadow:0 0 22px -8px var(--lime-gl);}
 .btn.stop{background:var(--dn-soft);color:var(--dn);border-color:var(--dn-soft);}
-.ib{width:40px;height:40px;border-radius:8px;border:1px solid var(--line);background:var(--panel2);color:var(--ink2);display:grid;place-items:center;transition:all .18s var(--e);}
+.ib{width:var(--ctrl-h);height:var(--ctrl-h);flex-shrink:0;border-radius:8px;border:1px solid var(--line);background:var(--panel2);color:var(--ink2);display:grid;place-items:center;transition:all .18s var(--e);box-sizing:border-box;}
 .ib:hover{color:var(--ink);}.ib svg{width:17px;height:17px;}
 .ib.on{color:var(--lime);border-color:var(--lime-soft);background:var(--lime-soft);}
 
@@ -178,7 +182,7 @@ button{font-family:inherit;cursor:pointer;}input{font-family:inherit;}
 .panel.hud::before{top:-1px;left:-1px;border-top:2px solid var(--lime);border-left:2px solid var(--lime);border-top-left-radius:10px;}
 .panel.hud::after{bottom:-1px;right:-1px;border-bottom:2px solid var(--lime);border-right:2px solid var(--lime);border-bottom-right-radius:10px;}
 .grid{display:grid;grid-template-columns:repeat(12,1fr);gap:14px;}
-.g-chart{grid-column:span 8;align-self:start;}.g-sig{grid-column:span 4;}
+.g-chart{grid-column:span 8;display:flex;flex-direction:column;}.g-sig{grid-column:span 4;display:flex;flex-direction:column;}
 .g-kpi{grid-column:span 3;}
 .g-sigs{grid-column:span 7;}.g-open{grid-column:span 5;}
 .g-gates{grid-column:span 5;}.g-feed{grid-column:span 7;}
@@ -433,8 +437,14 @@ button{font-family:inherit;cursor:pointer;}input{font-family:inherit;}
   .main{padding:0 15px 70px;}
   .top{margin:0 -15px;}
   .tapebar{padding:0 15px;height:38px;}
-  .toolbar{padding:0 15px;height:52px;gap:8px;justify-content:center;}
-  .top-r{gap:8px;margin-left:0;}
+  .toolbar{padding:0 15px;height:52px;gap:6px;justify-content:center;}
+  .top-r{gap:6px;margin-left:0;}
+  /* Slightly smaller shared control height + tighter pill padding on
+     narrow screens so 2 pills + several icon buttons fit one row without
+     wrapping, while staying perfectly uniform with each other. */
+  :root{--ctrl-h:36px;}
+  .led{padding:0 9px;font-size:9px;gap:6px;}
+  .btn{padding:0 12px;font-size:10px;}
   .clock{display:none;}
   .g-kpi{grid-column:span 6;}
   .kpi{padding:13px 14px;min-width:0;overflow:hidden;}
@@ -446,68 +456,75 @@ button{font-family:inherit;cursor:pointer;}input{font-family:inherit;}
   .tbl .hr .cs,.row .cside,.tbl .hr .cp,.row .cpx{display:none;}
 }
 
-/* ═══ REFINED THEME — clean dark (Aaru-dashboard) + soft glass light (Liquid Glass) ═══ */
+/* ═══ FINAL THEME — Linear-style dark glass + soft frosted light glass ═══
+   Recipe validated via ui-ux-pro-max skill (glassmorphism + "Modern Dark
+   Cinema" style entries): dark bg avoids pure black (OLED smear), indigo
+   accent #5E6AD2, hairline borders, backdrop-blur glass in BOTH themes,
+   Inter throughout, restrained accent count (avoid rainbow/AI-purple-pink
+   per the skill's own fintech "avoid" list). */
 html[data-theme="dark"]{
-  --bg:#0A0C14; --bg2:#10131E; --panel:#12151F; --panel2:#181C29; --raised:#1B1F2E;
-  --ink:#F1F3F8; --ink2:#9199AC; --ink3:#666E82; --ink4:#3A4053;
-  --line:rgba(255,255,255,0.08); --line2:rgba(255,255,255,0.045); --grid:transparent;
-  --hover:rgba(255,255,255,0.045);
-  --lime:#4A8DFF; --lime2:#7AAEFF; --lime-soft:rgba(74,141,255,0.13); --lime-gl:rgba(74,141,255,0.4);
+  --bg:#050506; --bg2:#0A0A0D; --panel:rgba(255,255,255,0.045); --panel2:rgba(255,255,255,0.07); --raised:#16161C;
+  --ink:#EDEDEF; --ink2:#9296A8; --ink3:#6A6E7D; --ink4:#3D404C;
+  --line:rgba(255,255,255,0.09); --line2:rgba(255,255,255,0.05); --grid:transparent;
+  --hover:rgba(255,255,255,0.05);
+  --lime:#6672E5; --lime2:#8B94EE; --lime-soft:rgba(94,106,210,0.15); --lime-gl:rgba(94,106,210,0.4);
   --up:#3DD68C; --up-soft:rgba(61,214,140,0.12);
   --dn:#F0625F; --dn-soft:rgba(240,98,95,0.12); --dn-gl:rgba(240,98,95,0.35);
   --warn:#F5A623; --warn-soft:rgba(245,166,35,0.13);
-  --sh:0 20px 48px -26px rgba(0,0,0,0.6);
+  --sh:0 20px 50px -24px rgba(0,0,0,0.55);
 }
 html[data-theme="light"]{
-  --bg:#EFEAE3; --bg2:#F6F2EC; --panel:rgba(255,255,255,0.58); --panel2:rgba(255,255,255,0.42); --raised:#FFFFFF;
+  --bg:#EFEAE3; --bg2:#F6F2EC; --panel:rgba(255,255,255,0.55); --panel2:rgba(255,255,255,0.4); --raised:#FFFFFF;
   --ink:#1C1B22; --ink2:#57565F; --ink3:#84828C; --ink4:#B7B4BD;
   --line:rgba(28,27,34,0.10); --line2:rgba(28,27,34,0.06); --grid:transparent;
   --hover:rgba(28,27,34,0.035);
-  --lime:#6C5CE7; --lime2:#8A7CF0; --lime-soft:rgba(108,92,231,0.12); --lime-gl:rgba(108,92,231,0.30);
+  --lime:#5E6AD2; --lime2:#7B85DE; --lime-soft:rgba(94,106,210,0.12); --lime-gl:rgba(94,106,210,0.28);
   --up:#0E9F6E; --up-soft:rgba(14,159,110,0.11);
   --dn:#DC4444; --dn-soft:rgba(220,68,68,0.10); --dn-gl:rgba(220,68,68,0.25);
   --warn:#B45309; --warn-soft:rgba(180,83,9,0.11);
-  --sh:0 20px 46px -28px rgba(60,50,40,0.28);
+  --sh:0 20px 46px -28px rgba(60,50,40,0.24);
 }
 html,body,button,input{font-family:'Inter',-apple-system,BlinkMacSystemFont,system-ui,sans-serif!important;}
+body{font-variant-numeric:tabular-nums;}
 
-/* Dark: two quiet corner glows (warm + cool), no rainbow, no grain */
+/* Dark: near-black base + 2 quiet ambient blobs (opacity 0.08-0.10 per spec) */
 html[data-theme="dark"] body{
   background:
-    radial-gradient(900px 500px at 88% -6%, rgba(74,141,255,0.10), transparent 58%),
-    radial-gradient(700px 420px at 6% 96%, rgba(245,166,35,0.055), transparent 55%),
+    radial-gradient(820px 460px at 85% -8%, rgba(94,106,210,0.10), transparent 58%),
+    radial-gradient(680px 400px at 4% 98%, rgba(245,166,35,0.05), transparent 55%),
     var(--bg);}
-/* Light: soft warm-cream blur wash, glass sits on top */
+/* Light: warm cream/blush wash — the glass sits translucent on top */
 html[data-theme="light"] body{
   background:
-    radial-gradient(1000px 560px at 20% -10%, rgba(255,214,170,0.35), transparent 60%),
-    radial-gradient(900px 520px at 92% 10%, rgba(150,190,255,0.28), transparent 58%),
-    radial-gradient(800px 480px at 50% 100%, rgba(220,190,255,0.22), transparent 55%),
+    radial-gradient(1000px 560px at 18% -10%, rgba(255,214,170,0.32), transparent 60%),
+    radial-gradient(900px 520px at 94% 8%, rgba(150,170,255,0.26), transparent 58%),
+    radial-gradient(800px 480px at 50% 100%, rgba(210,190,255,0.20), transparent 55%),
     var(--bg);}
 
-.top{background:color-mix(in srgb,var(--bg2) 92%,transparent)!important;border-bottom:1px solid var(--line)!important;backdrop-filter:none!important;-webkit-backdrop-filter:none!important;}
+.top{background:color-mix(in srgb,var(--bg2) 88%,transparent)!important;border-bottom:1px solid var(--line)!important;
+  backdrop-filter:blur(20px)!important;-webkit-backdrop-filter:blur(20px)!important;}
 .top .clock b,.top b{color:var(--ink)!important;}
 .top .led{border-radius:999px!important;}
 
-/* Cards: flat, subtly bordered, generous radius — no gradient rings, no hover lift */
-.panel,.kpi,.hud{border-radius:20px!important;}
-.panel{background:var(--panel);}
+/* Cards: TRUE glass in both themes — translucent + blurred + hairline border */
+.panel,.kpi,.hud{border-radius:18px!important;}
+.panel{background:var(--panel);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);border:1px solid var(--line)!important;}
 .panel.hud::before,.panel.hud::after{display:none;}
-html[data-theme="light"] .panel{backdrop-filter:blur(22px);-webkit-backdrop-filter:blur(22px);border:1px solid rgba(255,255,255,0.55)!important;box-shadow:0 1px 0 rgba(255,255,255,0.6) inset,var(--sh);}
-html[data-theme="dark"] .panel{border:1px solid var(--line)!important;}
+html[data-theme="light"] .panel{box-shadow:0 1px 0 rgba(255,255,255,0.7) inset,var(--sh);border:1px solid rgba(255,255,255,0.6)!important;}
+html[data-theme="dark"] .panel{box-shadow:0 1px 0 rgba(255,255,255,0.04) inset,var(--sh);}
 
-.poscard{border-radius:18px;}
-.cstat{border-radius:16px;}
-.optline,.ophead,.legbar{border-radius:14px;overflow:hidden;}
-.btn{border-radius:999px;}
-.btn.go{background:linear-gradient(135deg,var(--lime),var(--lime2))!important;color:#fff!important;border:none!important;font-weight:700;}
-html[data-theme="dark"] .btn.go{color:#08101F!important;}
+.poscard{border-radius:16px;background:var(--panel2);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);}
+.cstat{border-radius:14px;}
+.optline,.ophead,.legbar{border-radius:12px;overflow:hidden;}
+.btn{border-radius:999px;transition:transform .15s cubic-bezier(.16,1,.3,1),opacity .15s;}
+.btn:active{transform:scale(0.97);}
+.btn.go{background:linear-gradient(135deg,var(--lime),var(--lime2))!important;color:#fff!important;border:none!important;
+  font-weight:700;box-shadow:0 8px 22px -10px var(--lime-gl);}
 .btn.stop{background:var(--dn-soft)!important;color:var(--dn)!important;border:1px solid transparent!important;font-weight:700;}
 .ib{border-radius:12px;}
 .sortsel{border-radius:999px;padding:6px 26px 6px 12px;}
 .mc,.chip,.verdict,.pos-stat,.pos-live,.stalebadge{border-radius:999px!important;}
-.opttag{border-radius:999px;background:var(--lime);color:#fff;}
-html[data-theme="dark"] .opttag{color:#08101F;}
+.opttag{border-radius:999px;background:linear-gradient(135deg,var(--lime),var(--lime2));color:#fff;font-weight:700;}
 .dirbadge{border-radius:999px;}
 .dirbadge.long{background:var(--up-soft)!important;color:var(--up)!important;}
 .dirbadge.short{background:var(--dn-soft)!important;color:var(--dn)!important;}
@@ -523,14 +540,15 @@ html[data-theme="dark"] .opttag{color:#08101F;}
 
 .setup{background:var(--bg)!important;}
 .scard{background:var(--raised)!important;border:1px solid var(--line)!important;border-radius:22px!important;padding:30px;}
-html[data-theme="light"] .scard{background:rgba(255,255,255,0.7)!important;backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);}
+html[data-theme="light"] .scard{background:rgba(255,255,255,0.68)!important;backdrop-filter:blur(26px);-webkit-backdrop-filter:blur(26px);box-shadow:var(--sh);}
+html[data-theme="dark"] .scard{backdrop-filter:blur(22px);-webkit-backdrop-filter:blur(22px);}
 .scard .logo{background:transparent!important;border-radius:14px!important;}
 .scard h1 em{color:var(--lime)!important;}
 .fld input{background:var(--panel2)!important;border:1px solid var(--line)!important;color:var(--ink)!important;border-radius:14px!important;}
 .fld input:focus{border-color:var(--lime)!important;box-shadow:0 0 0 3px var(--lime-soft)!important;}
 .settings-disconnect{background:transparent!important;border:1px solid var(--dn-soft)!important;color:var(--dn)!important;}
 
-.rail{background:color-mix(in srgb,var(--bg2) 88%,transparent);}
+.rail{background:color-mix(in srgb,var(--bg2) 82%,transparent);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);}
 .rail .logo{background:transparent!important;box-shadow:none!important;border-radius:12px!important;}
 @media(min-width:681px){
   .rbtn{border-radius:12px;}
@@ -540,22 +558,28 @@ html[data-theme="light"] .scard{background:rgba(255,255,255,0.7)!important;backd
 .chip.long{background:var(--up-soft)!important;color:var(--up)!important;}
 .chip.short{background:var(--dn-soft)!important;color:var(--dn)!important;}
 
-/* KPI tiles: one small dot marker per tile, no glow-on-text (reference has
-   NO text-shadow anywhere — numerals stay flat, crisp, high-contrast) */
+/* KPI tiles: one small solid dot marker, no glow-on-text, no rainbow set */
 .kpi .k{display:flex;align-items:center;gap:7px;}
 .kpi .k::before{content:'';width:7px;height:7px;border-radius:50%;flex-shrink:0;background:var(--lime);}
 .grid>.kpi:nth-of-type(2) .k::before{background:var(--up);}
 .grid>.kpi:nth-of-type(3) .k::before{background:var(--warn);}
-.grid>.kpi:nth-of-type(4) .k::before{background:#B084F5;}
+.grid>.kpi:nth-of-type(4) .k::before{background:var(--lime2);}
 
 /* ─── BUG FIX: mobile bottom nav — the engine-status pill was squeezed
    into the same row as the 4 tab buttons and visually collided with the
-   last tab's label. It now lives ONLY in the top toolbar (already shows
-   an explicit ENGINE ON/OFF pill there) so the bottom dock is just 4
-   evenly-spaced tabs with room to breathe. ─────────────────────────── */
+   last tab's label. It now lives ONLY in the top toolbar. ──────────── */
 @media(max-width:680px){
   .rail .estat{display:none;}
   .rail{border-radius:20px 20px 0 0;box-shadow:0 -8px 28px rgba(0,0,0,0.35);}
+}
+
+/* ─── BUG FIX: "Open swing positions" header + sort dropdown were forced
+   onto one row and collided on narrow screens. ──────────────────────── */
+.head{flex-wrap:wrap;row-gap:8px;}
+.head .r{min-width:0;}
+@media(max-width:480px){
+  .head{align-items:flex-start;}
+  .head .r{flex-basis:100%;justify-content:space-between;}
 }
 
 /* ─── BUG FIX: "Open swing positions" header + sort dropdown were forced
@@ -739,12 +763,12 @@ function ArcGauge({value,display,label,size=120,dual}){
   const A=(deg)=>{const t=deg*Math.PI/180;return [cx+r*Math.cos(t),cy+r*Math.sin(t)];};
   const seg=(f,t,col,w)=>{const [x1,y1]=A(f),[x2,y2]=A(t);
     return <path d={'M'+x1.toFixed(1)+' '+y1.toFixed(1)+' A'+r+' '+r+' 0 '+((t-f)>180?1:0)+' 1 '+x2.toFixed(1)+' '+y2.toFixed(1)} fill="none" stroke={col} strokeWidth={w} strokeLinecap="round"/>;};
-  const S=145,E=415,cur=S+(E-S)*v/100;
+  const S=135,E=405,vv=Math.max(2,v),cur=S+(E-S)*vv/100;   // gap centered at 90deg (straight down) so both arc ends land on the same horizontal line
   const c1=dual?'#F5A623':'var(--lime)', c2=dual?'#F0625F':'var(--lime2)';
   return(<svg viewBox={'0 0 '+size+' '+size} style={{width:'100%',maxWidth:size,display:'block'}}>
     <defs><linearGradient id={uid} x1="0" y1="1" x2="1" y2="0"><stop offset="0%" stopColor={c1}/><stop offset="100%" stopColor={c2}/></linearGradient></defs>
     {seg(S,E,'var(--line)',sw)}
-    {v>0.5&&seg(S,Math.max(S+2,cur),'url(#'+uid+')',sw)}
+    {seg(S,Math.max(S+2,cur),'url(#'+uid+')',sw)}
     <text x={cx} y={cy+size*0.03} textAnchor="middle" fill="var(--ink)" fontSize={size*0.24} fontWeight="700">{display!=null?display:Math.round(v)}</text>
     {label&&<text x={cx} y={cy+size*0.20} textAnchor="middle" fill="var(--ink3)" fontSize={size*0.082} fontWeight="600" letterSpacing=".02em">{label}</text>}
   </svg>);}
@@ -761,13 +785,13 @@ function CommandArc({conf,votes,scanning,verdict}){
   const A=(deg)=>{const t=deg*Math.PI/180;return [cx+r*Math.cos(t),cy+r*Math.sin(t)];};
   const seg=(f,t,col,w)=>{const [x1,y1]=A(f),[x2,y2]=A(t);
     return <path d={'M'+x1.toFixed(1)+' '+y1.toFixed(1)+' A'+r+' '+r+' 0 '+((t-f)>180?1:0)+' 1 '+x2.toFixed(1)+' '+y2.toFixed(1)} fill="none" stroke={col} strokeWidth={w} strokeLinecap="round"/>;};
-  const S=145,E=415,cur=S+(E-S)*v/100;
+  const S=135,E=405,vv=Math.max(2,v),cur=S+(E-S)*vv/100;   // gap centered at 90deg (straight down) so both arc ends land on the same horizontal line
   const lenses=[['trend','Trend'],['momentum','Momentum'],['structure','Structure'],['flow','Flow'],['pattern','Pattern']];
   return(<div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:16}}>
     <svg viewBox={'0 0 '+size+' '+size} style={{width:'100%',maxWidth:size,display:'block'}}>
       <defs><linearGradient id={uid} x1="0" y1="1" x2="1" y2="0"><stop offset="0%" stopColor="var(--lime)"/><stop offset="100%" stopColor="var(--lime2)"/></linearGradient></defs>
       {seg(S,E,'var(--line)',sw)}
-      {!scanning&&v>0.5&&seg(S,Math.max(S+2,cur),'url(#'+uid+')',sw)}
+      {!scanning&&seg(S,Math.max(S+2,cur),'url(#'+uid+')',sw)}
       {!scanning&&<>
         <text x={cx} y={cy-2} textAnchor="middle" fill="var(--ink)" fontSize="42" fontWeight="700">{Math.round(v)}</text>
         <text x={cx} y={cy+21} textAnchor="middle" fill="var(--ink3)" fontSize="11" fontWeight="600" letterSpacing=".03em">Confidence</text>
