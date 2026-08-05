@@ -219,8 +219,8 @@ button{font-family:inherit;cursor:pointer;}input{font-family:inherit;}
 .sig-row-bot{display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
 .sig-sub-wrap{display:flex;flex-direction:column;gap:5px;min-width:0;}
 .dirbadge{display:inline-flex;align-items:center;gap:6px;font-family:var(--mono);font-weight:800;font-size:13px;letter-spacing:.05em;padding:5px 10px;border-radius:6px;flex-shrink:0;}
-.dirbadge.long{background:var(--up-soft);color:var(--up);}
-.dirbadge.short{background:var(--dn-soft);color:var(--dn);}
+.dirbadge.long{background:var(--pas-mint-bg);color:var(--pas-mint);}
+.dirbadge.short{background:var(--pas-rose-bg);color:var(--pas-rose);}
 .dirbadge svg{width:14px;height:14px;}
 .sig-inst{font-size:20px;font-weight:700;letter-spacing:-.01em;}
 .sig-sub{font-family:var(--mono);font-size:10px;color:var(--ink3);letter-spacing:.03em;}
@@ -228,7 +228,7 @@ button{font-family:inherit;cursor:pointer;}input{font-family:inherit;}
 .confwrap .cv{font-size:36px;line-height:1;color:var(--lime);}
 .confwrap .cl{font-family:var(--mono);font-size:8.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink3);margin-top:3px;}
 .verdict{display:inline-block;font-family:var(--mono);font-size:9.5px;font-weight:700;letter-spacing:.06em;padding:4px 8px;border-radius:5px;margin-left:9px;}
-.verdict.take{background:var(--up-soft);color:var(--up);}.verdict.skip{background:var(--dn-soft);color:var(--dn);}.verdict.watch{background:var(--warn-soft);color:var(--warn);}
+.verdict.take{background:var(--pas-mint-bg);color:var(--pas-mint);}.verdict.skip{background:var(--pas-rose-bg);color:var(--pas-rose);}.verdict.watch{background:var(--pas-sand-bg);color:var(--pas-sand);}
 .stalebadge{display:inline-block;font-family:var(--mono);font-size:9px;font-weight:800;letter-spacing:.08em;color:#1a1206;background:var(--dn);padding:2px 6px;border-radius:5px;margin-right:7px;vertical-align:middle;}
 .stalebar{display:flex;align-items:center;gap:7px;font-size:11.5px;font-weight:600;color:var(--dn);background:color-mix(in srgb,var(--dn) 12%,transparent);border:1px solid color-mix(in srgb,var(--dn) 35%,transparent);border-radius:9px;padding:9px 12px;margin-bottom:13px;line-height:1.35;}
 .panel.is-stale{border-color:color-mix(in srgb,var(--dn) 45%,var(--line));}
@@ -272,7 +272,7 @@ button{font-family:inherit;cursor:pointer;}input{font-family:inherit;}
 .row .ins .s{font-weight:700;font-size:13px;}
 .row .ins .c{font-family:var(--mono);font-size:10px;color:var(--ink3);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .chip{display:inline-block;font-family:var(--mono);font-size:9px;font-weight:700;letter-spacing:.04em;padding:2px 7px;border-radius:4px;}
-.chip.long{background:var(--up-soft);color:var(--up);}.chip.short{background:var(--dn-soft);color:var(--dn);}
+.chip.long{background:var(--pas-mint-bg);color:var(--pas-mint);}.chip.short{background:var(--pas-rose-bg);color:var(--pas-rose);}
 .row .px{font-family:var(--mono);font-size:11px;color:var(--ink2);white-space:nowrap;}.row .px b{color:var(--ink);}
 .row .pnl{font-family:var(--mono);font-size:14px;font-weight:800;text-align:right;white-space:nowrap;}
 .row .pnl.up{color:var(--up);}.row .pnl.dn{color:var(--dn);}.row .pnl.open{color:var(--lime);}.row .pnl.flat{color:var(--ink3);}
@@ -295,8 +295,8 @@ button{font-family:inherit;cursor:pointer;}input{font-family:inherit;}
 .feed-inst{font-size:12.5px;font-weight:700;}
 .feed-l2{font-family:var(--mono);font-size:10px;color:var(--ink3);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .mc{font-family:var(--mono);font-size:8.5px;font-weight:700;letter-spacing:.03em;padding:1px 6px;border-radius:4px;}
-.mc.long{background:var(--up-soft);color:var(--up);}.mc.short{background:var(--dn-soft);color:var(--dn);}
-.mc.take{background:var(--up-soft);color:var(--up);}.mc.skip{background:var(--dn-soft);color:var(--dn);}.mc.watch{background:var(--warn-soft);color:var(--warn);}
+.mc.long{background:var(--pas-mint-bg);color:var(--pas-mint);}.mc.short{background:var(--pas-rose-bg);color:var(--pas-rose);}
+.mc.take{background:var(--pas-mint-bg);color:var(--pas-mint);}.mc.skip{background:var(--pas-rose-bg);color:var(--pas-rose);}.mc.watch{background:var(--pas-sand-bg);color:var(--pas-sand);}
 .scrolly{max-height:300px;overflow-y:auto;scrollbar-width:thin;scrollbar-color:var(--ink4) transparent;}
 .scrolly::-webkit-scrollbar{width:5px;}.scrolly::-webkit-scrollbar-thumb{background:var(--ink4);border-radius:5px;}
 
@@ -477,6 +477,10 @@ html[data-theme="dark"]{
   --dn:#F0625F; --dn-soft:rgba(240,98,95,0.12); --dn-gl:rgba(240,98,95,0.35);
   --warn:#F5A623; --warn-soft:rgba(245,166,35,0.13);
   --sh:0 20px 50px -24px rgba(0,0,0,0.55);
+  --pas-sand:#E0B471; --pas-sand-bg:rgba(224,180,113,0.13);
+  --pas-rose:#E693A6; --pas-rose-bg:rgba(230,147,166,0.13);
+  --pas-mint:#8FDCB3; --pas-mint-bg:rgba(143,220,179,0.13);
+  --pas-blue:#9BC0EF; --pas-blue-bg:rgba(155,192,239,0.13);
 }
 html[data-theme="light"]{
   --bg:#EFEAE3; --bg2:#F6F2EC; --panel:rgba(255,255,255,0.55); --panel2:rgba(255,255,255,0.4); --raised:#FFFFFF;
@@ -487,6 +491,10 @@ html[data-theme="light"]{
   --up:#0E9F6E; --up-soft:rgba(14,159,110,0.11);
   --dn:#DC4444; --dn-soft:rgba(220,68,68,0.10); --dn-gl:rgba(220,68,68,0.25);
   --warn:#B45309; --warn-soft:rgba(180,83,9,0.11);
+  --pas-sand:#B5842E; --pas-sand-bg:#FBF0DC;
+  --pas-rose:#C24F6C; --pas-rose-bg:#FCE4EA;
+  --pas-mint:#3F9166; --pas-mint-bg:#E1F3E9;
+  --pas-blue:#3E6FBF; --pas-blue-bg:#E5EDFB;
   --sh:0 20px 46px -28px rgba(60,50,40,0.24);
 }
 html,body,button,input{font-family:'Inter',-apple-system,BlinkMacSystemFont,system-ui,sans-serif!important;}
@@ -523,12 +531,22 @@ html[data-theme="dark"] .panel{box-shadow:0 1px 0 rgba(255,255,255,0.04) inset,v
 .optline,.ophead,.legbar{border-radius:12px;overflow:hidden;}
 .swing-detail{border-radius:16px;background:var(--panel2);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border:1px solid var(--line);box-shadow:var(--sh);padding:16px 18px;margin:6px 0 14px;animation:rise .3s var(--e) both;}
 .leg{background:color-mix(in srgb,var(--panel) 60%,transparent)!important;}
+/* Matte pastel identity per field, in reading order (Entry/neutral · Stop/
+   risk · Target/reward · Exited/info) — was flat gray-on-gray, hard to read. */
+.legbar .leg:nth-child(1){background:var(--pas-sand-bg)!important;}
+.legbar .leg:nth-child(1) .k{color:var(--pas-sand)!important;opacity:.9;}
+.legbar .leg:nth-child(2){background:var(--pas-rose-bg)!important;}
+.legbar .leg:nth-child(2) .k{color:var(--pas-rose)!important;opacity:.9;}
+.legbar .leg:nth-child(3){background:var(--pas-mint-bg)!important;}
+.legbar .leg:nth-child(3) .k{color:var(--pas-mint)!important;opacity:.9;}
+.legbar .leg:nth-child(4){background:var(--pas-blue-bg)!important;}
+.legbar .leg:nth-child(4) .k{color:var(--pas-blue)!important;opacity:.9;}
 /* Exit-journey track: where the trade actually landed vs its risk/reward
    range, in place of a generic win/loss color-block border. */
 .otrack{position:relative;height:30px;margin:0 0 14px;padding:0 2px;}
 .otrack .ob-lab{position:absolute;top:0;font-family:var(--mono);font-size:8px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink4);}
 .otrack .ob-lab.l{left:0;}.otrack .ob-lab.r{right:0;}
-.otrack .ob-bar{position:absolute;top:14px;left:0;right:0;height:3px;border-radius:2px;opacity:.55;}
+.otrack .ob-bar{position:absolute;top:14px;left:0;right:0;height:3px;border-radius:2px;}
 .otrack .ob-entry{position:absolute;top:10px;width:2px;height:11px;border-radius:1px;background:var(--ink3);transform:translateX(-50%);}
 .otrack .ob-exit{position:absolute;top:15.5px;width:9px;height:9px;border-radius:50%;background:var(--dc);transform:translate(-50%,-50%);box-shadow:0 0 10px -1px var(--dc);}
 .otrack .ob-exit i{position:absolute;inset:-9px;border-radius:50%;border:1.5px solid var(--dc);animation:otping 2.4s cubic-bezier(.2,.6,.4,1) infinite;}
@@ -544,16 +562,16 @@ html[data-theme="dark"] .panel{box-shadow:0 1px 0 rgba(255,255,255,0.04) inset,v
 .mc,.chip,.verdict,.pos-stat,.pos-live,.stalebadge{border-radius:999px!important;}
 .opttag{border-radius:999px;background:linear-gradient(135deg,var(--lime),var(--lime2));color:#fff;font-weight:700;}
 .dirbadge{border-radius:999px;}
-.dirbadge.long{background:var(--up-soft)!important;color:var(--up)!important;}
-.dirbadge.short{background:var(--dn-soft)!important;color:var(--dn)!important;}
+.dirbadge.long{background:var(--pas-mint-bg)!important;color:var(--pas-mint)!important;}
+.dirbadge.short{background:var(--pas-rose-bg)!important;color:var(--pas-rose)!important;}
 .mkt-bar,.pcrbar,.oirow .track,.chain-bar-wrap{border-radius:999px;overflow:hidden;background:rgba(127,146,176,0.16);}
 .mkt-bar{height:5px;}
 .mkt-bar-fill{border-radius:999px;}
 .mkt-bar-fill.grad{background:linear-gradient(90deg,var(--lime),var(--lime2))!important;}
 .tab{border-radius:10px 10px 0 0;}
 .tab.on{color:var(--ink);border-bottom-color:var(--lime);}
-.verdict.take{background:var(--up-soft)!important;color:var(--up)!important;}
-.verdict.skip{background:var(--dn-soft)!important;color:var(--dn)!important;}
+.verdict.take{background:var(--pas-mint-bg)!important;color:var(--pas-mint)!important;}
+.verdict.skip{background:var(--pas-rose-bg)!important;color:var(--pas-rose)!important;}
 .led.live{background:var(--up-soft)!important;border-color:transparent!important;}
 
 .setup{background:var(--bg)!important;}
@@ -573,8 +591,8 @@ html[data-theme="dark"] .scard{backdrop-filter:blur(22px);-webkit-backdrop-filte
   .rbtn.on{color:var(--lime)!important;background:var(--lime-soft)!important;}
   .rbtn.on::before{background:var(--lime)!important;}
 }
-.chip.long{background:var(--up-soft)!important;color:var(--up)!important;}
-.chip.short{background:var(--dn-soft)!important;color:var(--dn)!important;}
+.chip.long{background:var(--pas-mint-bg)!important;color:var(--pas-mint)!important;}
+.chip.short{background:var(--pas-rose-bg)!important;color:var(--pas-rose)!important;}
 
 /* KPI tiles: one small solid dot marker, no glow-on-text, no rainbow set */
 .kpi .k{display:flex;align-items:center;gap:7px;}
@@ -837,10 +855,12 @@ function SignalCard({sig,marketOpen,market}){
     :'market closed';
   if(!sig||!sig.signal){
     return(<section className="panel hud g-sig"><div className="head"><span className="t"><b>//</b> Live signal</span></div>
-      <CommandArc scanning={true}/>
-      <div style={{textAlign:'center',marginTop:2}}>
-        <div style={{fontSize:15,fontWeight:600}}>{closed?(market.reason==='holiday'?'Market holiday':'Market closed'):'Watching for setups'}</div>
-        <div className="mono" style={{fontSize:10.5,color:'var(--ink3)',marginTop:5}}>conductor · BANKNIFTY · {closed?closedLabel:'live scan'}</div></div></section>);}
+      <div style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:14}}>
+        <CommandArc scanning={true}/>
+        <div style={{textAlign:'center'}}>
+          <div style={{fontSize:15,fontWeight:600}}>{closed?(market.reason==='holiday'?'Market holiday':'Market closed'):'Watching for setups'}</div>
+          <div className="mono" style={{fontSize:10.5,color:'var(--ink3)',marginTop:5}}>conductor · BANKNIFTY · {closed?closedLabel:'live scan'}</div></div>
+      </div></section>);}
   const stale=!!sig.stale;const dstr=fmtDay(sig.signal_date);
   const s=sig.signal,o=sig.option||{},ai=sig.ai||{};
   const long=(s.direction||'').toUpperCase()==='LONG';const conf=s.confidence_ai_adj||s.confidence||0;
@@ -1178,7 +1198,7 @@ function SwingExitTrack({s,win}){
   const dc=win?'var(--up)':'var(--dn)';
   return(<div className="otrack" title={'Exited ₹'+exitP.toFixed(1)}>
     <span className="ob-lab l">Risk</span><span className="ob-lab r">Reward</span>
-    <div className="ob-bar" style={{background:'linear-gradient(90deg,var(--dn) 0%,var(--ink4) '+enP.toFixed(0)+'%,var(--up) 100%)'}}/>
+    <div className="ob-bar" style={{background:'linear-gradient(90deg,var(--pas-rose) 0%,var(--pas-sand) '+enP.toFixed(0)+'%,var(--pas-mint) 100%)'}}/>
     <div className="ob-entry" style={{left:enP+'%'}}/>
     <div className="ob-exit" style={{left:exP+'%','--dc':dc}}><i/></div>
   </div>);
