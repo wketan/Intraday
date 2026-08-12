@@ -1268,7 +1268,9 @@ function SwingTab({swing}){
           <span style={{fontFamily:'var(--mono)',fontSize:11.5,color:'var(--ink2)'}}>{rg.note||''}{rg.breadth!=null?(' · breadth '+rg.breadth+'% of universe above 50DMA'):''}</span>
           {rg.checked_at&&<span className="lbl" style={{marginLeft:'auto'}}>checked {rg.checked_at}</span>}</div>
         {!ok&&<div style={{fontFamily:'var(--mono)',fontSize:10,color:'var(--ink3)',marginTop:6,lineHeight:1.5}}>
-          No new swing entries while the market regime is unfavourable — sitting out downtrends is the strategy protecting capital, not a malfunction. Entries resume automatically when NIFTY reclaims its 200-day average with a rising 50-day.</div>}
+          No new swing entries while the market regime is unfavourable — sitting out downtrends is the strategy protecting capital, not a malfunction. Entries resume automatically when NIFTY reclaims its 200-day average with a rising 50-day.
+          {rg.nifty_gap_pts!=null&&rg.nifty_gap_pts>0&&<span style={{display:'block',marginTop:4,color:'var(--ink2)',fontWeight:600}}>
+            NIFTY {fmt(rg.nifty_close)} needs +{fmt(rg.nifty_gap_pts)} pts ({(rg.nifty_gap_pts/rg.nifty_close*100).toFixed(1)}%) to reclaim its 200-day average at {fmt(rg.nifty_sma200)}.</span>}</div>}
       </section>);})()}
 
     <section className="panel g12"><div className="head"><span className="t"><b>//</b> Open swing positions</span>

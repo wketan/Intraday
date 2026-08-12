@@ -6341,6 +6341,11 @@ class SwingEngine:
                 slope_up = float(sma50s.iloc[-1]) > float(sma50s.iloc[-21])
                 ctx["nifty_ret126"] = c / float(closes.iloc[-127]) - 1.0
                 above200 = c > sma200
+                # Expose the actual gap so the app can say HOW FAR NIFTY is
+                # from re-opening the gate, not just that it's closed.
+                ctx["nifty_close"] = round(c, 1)
+                ctx["nifty_sma200"] = round(sma200, 1)
+                ctx["nifty_gap_pts"] = round(sma200 - c, 1)   # +ve = points below the 200SMA
                 notes.append(f"NIFTY {'>' if above200 else '<'}200SMA, 50SMA {'rising' if slope_up else 'falling'}")
                 trend_ok = above200 and slope_up
             else:
@@ -8636,6 +8641,9 @@ def api_swing_results():
             "note": _mctx.get("note") or "",
             "vix": _mctx.get("vix"),
             "breadth": (getattr(swing_engine, "_breadth_last", None) or {}).get("pct"),
+            "nifty_close": _mctx.get("nifty_close"),
+            "nifty_sma200": _mctx.get("nifty_sma200"),
+            "nifty_gap_pts": _mctx.get("nifty_gap_pts"),
             "checked_at": datetime.fromtimestamp(
                 _mctx.get("_ts", 0), IST).strftime("%H:%M") if _mctx.get("_ts") else None,
         }
