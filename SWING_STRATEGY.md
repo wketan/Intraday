@@ -96,3 +96,28 @@ EXITS (first to trigger wins)
 · `PULLBACK_MAX_PREMIUM_FRAC` · `PULLBACK_MIN_52W_PROX` · `PULLBACK_RSI2_MAX`
 · `PULLBACK_VIX_FULL` · `PULLBACK_VIX_MAX` · `PULLBACK_MAX_HOLD_DAYS`
 · `PULLBACK_STAG_DAYS` · `PULLBACK_STAG_MIN_GAIN_PCT`
+
+## v1.2 changes (2026-08-12) — backtest-verified against 3y of real NSE bars
+
+A deep-research pass (Alvarez stop/exit/entry studies, Quantitativo cumulative
+RSI2, Chui et al. 2023 Pacific-Basin on Indian momentum-vs-reversal) produced
+candidate changes; each was tested on a 746-trading-day walk-forward over the
+same 76-symbol universe before adoption. Baseline (v1.1 rules, spot logic):
+285 trades, 60.7% win, payoff 0.62, SUM -14.7%.
+
+| Change | Rule | Own-backtest evidence |
+|---|---|---|
+| Entry | Trigger = 2-day cumulative RSI(2) < 10; the OR-triggers (7-day low, 3 lower closes) dropped | Alone: 96 trades, 66.7% win, payoff 0.88, SUM +62.1%. **The single biggest fix.** |
+| Entry | Limit entry at signal close - 0.5x ATR(10), valid through the next session, unfilled = no trade (PENDING/CANCELLED rows) | Combo evidence below; Alvarez published avg P/L per trade doubling. |
+| Exit | Spot SL disabled for pullback rows (premium backstop, strength, stagnation, time, earnings exits all stay) | Baseline SL bucket was -171%; combo without it: 46 trades, 73.9% win, payoff 0.99, SUM +57.2%. |
+| Regime | 3-consecutive-close confirmation on the 200SMA; rising-50SMA condition dropped | 352 regime-ON days vs 259 (+36% tradeable days); combo still 71% win, SUM +48.4%. |
+| A/B control | 20-day-high breakout entry (momentum continuation) tested against the improved pullback | +19.1% over 150 trades — positive but far weaker; the pullback frame stays. |
+
+New knobs: `PULLBACK_ENTRY_MODE` (cumrsi|legacy) · `PULLBACK_CUMRSI2_MAX` (10)
+· `PULLBACK_LIMIT_ENTRY` (on|off) · `PULLBACK_SPOT_SL` (off|on)
+· `SWING_REGIME_MODE` (confirm3|legacy)
+
+Known gap the backtest cannot see (research finding, not yet acted on): NSE
+single-stock option spreads + theta on a 5-day hold may consume much of a
++1.66%-avg-win edge; recommendation on live capital is options only for
+indices (delta >= 0.75) and cash equity for stock signals.

@@ -6177,15 +6177,30 @@ class SwingPullback:
             if prox < min_prox:
                 return None   # too far below the 52-week high
 
-            # ── Pullback trigger (any one) ────────────────────────────
-            rsi2 = float(TA.rsi(closes, 2).iloc[-1])
-            seven_low = c <= float(closes.iloc[-8:-1].min())
-            three_down = all(closes.iloc[-i] < closes.iloc[-i - 1] for i in (1, 2, 3))
-            rsi2_max = float(os.environ.get("PULLBACK_RSI2_MAX", "10"))
+            # ── Pullback trigger ──────────────────────────────────────
+            # v1.2 (2026-08-12): default trigger is the 2-day CUMULATIVE
+            # RSI(2) < 10 (Quantitativo 2024: payoff 0.50→0.84 vs vanilla
+            # RSI2). The old any-of-three OR (RSI2<10 / 7-day low / 3 lower
+            # closes) diluted entry quality — on our own 3y/76-symbol
+            # backtest it produced 285 trades at -14.7% total vs 96 trades
+            # at +62.1% for cumulative RSI2. Legacy mode kept behind
+            # PULLBACK_ENTRY_MODE=legacy.
+            rsi2_series = TA.rsi(closes, 2)
+            rsi2 = float(rsi2_series.iloc[-1])
+            rsi2_prev = float(rsi2_series.iloc[-2])
             triggers = []
-            if rsi2 < rsi2_max: triggers.append(f"RSI(2) {rsi2:.0f} < {rsi2_max:.0f}")
-            if seven_low:       triggers.append("7-day closing low")
-            if three_down:      triggers.append("3 consecutive lower closes")
+            if os.environ.get("PULLBACK_ENTRY_MODE", "cumrsi").lower() == "legacy":
+                seven_low = c <= float(closes.iloc[-8:-1].min())
+                three_down = all(closes.iloc[-i] < closes.iloc[-i - 1] for i in (1, 2, 3))
+                rsi2_max = float(os.environ.get("PULLBACK_RSI2_MAX", "10"))
+                if rsi2 < rsi2_max: triggers.append(f"RSI(2) {rsi2:.0f} < {rsi2_max:.0f}")
+                if seven_low:       triggers.append("7-day closing low")
+                if three_down:      triggers.append("3 consecutive lower closes")
+            else:
+                cum_max = float(os.environ.get("PULLBACK_CUMRSI2_MAX", "10"))
+                cum = rsi2 + rsi2_prev
+                if cum < cum_max:
+                    triggers.append(f"Cumulative RSI(2) {cum:.0f} < {cum_max:.0f} (2-day washout)")
             if not triggers:
                 return None
 
@@ -6196,10 +6211,15 @@ class SwingPullback:
             tr = pd.concat([highs - lows, (highs - closes.shift()).abs(),
                              (lows - closes.shift()).abs()], axis=1).max(axis=1)
             atr = float(tr.rolling(14).mean().iloc[-1])
+            atr10 = float(tr.rolling(10).mean().iloc[-1])
             rsi14 = float(TA.rsi(closes, 14).iloc[-1])
             sl = round(c - 2.0 * atr, 2)
             t1 = round(c + 3.0 * atr, 2)
             t2 = round(c + 5.0 * atr, 2)
+            # v1.2 limit entry (Alvarez: intraday-pullback limit doubled avg
+            # P/L per trade vs buying immediately): wait for price to dip
+            # another 0.5x ATR(10) below the signal close before entering.
+            limit_px = round(c - 0.5 * atr10, 2)
 
             # Rank score: how much it beats NIFTY + how close to highs.
             score = round(rs_excess * 100 + (prox - min_prox) * 40, 2)
@@ -6210,7 +6230,9 @@ class SwingPullback:
                 "price": round(c, 2), "entry": round(c, 2),
                 "sl": sl, "target1": t1, "target2": t2,
                 "risk_reward": round((t1 - c) / max(c - sl, 0.01), 2),
-                "atr": round(atr, 2), "rsi": round(rsi14, 1),
+                "atr": round(atr, 2), "atr10": round(atr10, 2),
+                "limit_entry": limit_px,
+                "rsi": round(rsi14, 1),
                 "rsi2": round(rsi2, 1),
                 "score": score,
                 "reasons": [
@@ -6336,9 +6358,8 @@ class SwingEngine:
             if len(candles) >= 220:
                 closes = pd.Series([c["close"] for c in candles], dtype=float)
                 c = float(closes.iloc[-1])
-                sma200 = float(closes.rolling(200).mean().iloc[-1])
-                sma50s = closes.rolling(50).mean()
-                slope_up = float(sma50s.iloc[-1]) > float(sma50s.iloc[-21])
+                sma200_s = closes.rolling(200).mean()
+                sma200 = float(sma200_s.iloc[-1])
                 ctx["nifty_ret126"] = c / float(closes.iloc[-127]) - 1.0
                 above200 = c > sma200
                 # Expose the actual gap so the app can say HOW FAR NIFTY is
@@ -6346,8 +6367,31 @@ class SwingEngine:
                 ctx["nifty_close"] = round(c, 1)
                 ctx["nifty_sma200"] = round(sma200, 1)
                 ctx["nifty_gap_pts"] = round(sma200 - c, 1)   # +ve = points below the 200SMA
-                notes.append(f"NIFTY {'>' if above200 else '<'}200SMA, 50SMA {'rising' if slope_up else 'falling'}")
-                trend_ok = above200 and slope_up
+                if os.environ.get("SWING_REGIME_MODE", "confirm3").lower() == "legacy":
+                    sma50s = closes.rolling(50).mean()
+                    slope_up = float(sma50s.iloc[-1]) > float(sma50s.iloc[-21])
+                    notes.append(f"NIFTY {'>' if above200 else '<'}200SMA, 50SMA {'rising' if slope_up else 'falling'}")
+                    trend_ok = above200 and slope_up
+                else:
+                    # v1.2 (Alvarez whipsaw study): flip the gate only on 3
+                    # consecutive closes across the 200SMA; the rising-50SMA
+                    # condition is dropped (it delayed re-entry ~2 months
+                    # after every V-bottom). Between confirmed flips, hold
+                    # the previous state.
+                    above_series = (closes > sma200_s).iloc[-10:].tolist()
+                    run_above = run_below = 0
+                    for a in above_series:
+                        run_above = run_above + 1 if a else 0
+                        run_below = run_below + 1 if not a else 0
+                    if run_above >= 3:
+                        trend_ok = True
+                    elif run_below >= 3:
+                        trend_ok = False
+                    else:
+                        trend_ok = bool((cached or {}).get("long_ok", False))
+                    notes.append(f"NIFTY {'>' if above200 else '<'}200SMA "
+                                 f"({run_above if above200 else run_below}d run, 3d confirm "
+                                 f"{'ON' if trend_ok else 'OFF'})")
             else:
                 trend_ok = False
                 notes.append("NIFTY history short — trend gate failed closed")
@@ -6469,7 +6513,7 @@ class SwingEngine:
         max_open = int(os.environ.get("SWING_MAX_OPEN", "4"))
         max_sector = int(os.environ.get("SWING_MAX_PER_SECTOR", "2"))
         account = float(os.environ.get("SWING_ACCOUNT_CAPITAL", "150000"))
-        open_rows = [p for p in swing_pos_list(status="OPEN")
+        open_rows = [p for p in (swing_pos_list(status="OPEN") + swing_pos_list(status="PENDING"))
                      if (p.get("source") or "") == "AUTO_PAPER"]
         open_names = {(p["instrument"], p.get("direction")) for p in open_rows}
         sector_count = {}
@@ -6548,6 +6592,8 @@ class SwingEngine:
                     log.warning(f"[Swing] IV gate error {name} (failing open): {e}")
             self.signals.setdefault(name, {})["option"] = opt
             half = ctx.get("vix_band") == "half"
+            _limit_on = (os.environ.get("PULLBACK_LIMIT_ENTRY", "on").lower() != "off"
+                         and sig.get("limit_entry"))
             if os.environ.get("SWING_SLACK_ENABLED", "true").lower() == "true":
                 _key = f"{name}:LONG:{datetime.now(IST).strftime('%Y-%m-%d')}"
                 if not hasattr(self, "_slack_sent"): self._slack_sent = set()
@@ -6555,12 +6601,19 @@ class SwingEngine:
                     self._slack_sent.add(_key)
                     msg = self._format_slack(name, sig, opt)
                     msg = f"🎯 *Pullback v1 · rank #{admitted+1} · score {sig.get('score')}*\n" + msg
+                    if _limit_on:
+                        msg += (f"\n⏳ Limit entry: enters only if price dips to "
+                                f"₹{float(sig['limit_entry']):,.1f} by end of next session "
+                                f"(signal close ₹{sig.get('price')})")
                     if half:
                         msg += "\n⚠️ VIX 20-25: elevated-vol regime — half-size territory"
                     SlackAlert.send(msg)
             try:
                 sig_for_open = dict(sig)
-                self._open_paper_position(name, info, sig_for_open, opt)
+                if _limit_on:
+                    self._place_pending_entry(name, info, sig_for_open, opt)
+                else:
+                    self._open_paper_position(name, info, sig_for_open, opt)
             except Exception as e:
                 log.warning(f"[Swing] paper-open failed {name}: {e}")
             sector_count[sec] = sector_count.get(sec, 0) + 1
@@ -6736,9 +6789,125 @@ class SwingEngine:
                  f"max hold {SwingEngine._paper_max_hold_days()}d)")
         return row_id
 
+    def _place_pending_entry(self, name, info, sig, opt):
+        """v1.2 limit entry (Alvarez): instead of opening at the signal
+        price, park a PENDING row at signal close - 0.5x ATR(10). The
+        tracker fills it if price dips to the limit before the end of the
+        NEXT trading session, else cancels it. Unfilled = no trade — the
+        cheap fill is half the published edge."""
+        existing = db_exec(
+            "SELECT id FROM swing_positions WHERE status IN ('OPEN','PENDING') "
+            "AND instrument=? AND direction=? AND source='AUTO_PAPER' LIMIT 1",
+            (name, sig["direction"]), fetchone=True)
+        if existing:
+            return None
+        limit_px = float(sig.get("limit_entry") or 0)
+        if limit_px <= 0:
+            return self._open_paper_position(name, info, sig, opt)
+        sig2 = dict(sig)
+        row_id = None
+        try:
+            pos = {
+                "instrument": name, "instrument_type": info.get("type", "STOCK"),
+                "direction": sig["direction"],
+                "spot_entry": limit_px, "spot_sl": sig.get("sl"),
+                "spot_target1": sig.get("target1"), "spot_target2": sig.get("target2"),
+                "source": "AUTO_PAPER",
+                "reasons": sig.get("reasons", []),
+                "indicators": {
+                    "confidence": sig.get("confidence"),
+                    "rsi": sig.get("rsi"),
+                    "risk_reward": sig.get("risk_reward"),
+                    "hold_days_est": sig.get("hold_days_est"),
+                    "strategy": sig.get("strategy"),
+                    "score": sig.get("score"),
+                    "premium_source": (opt or {}).get("premium_source"),
+                    "limit_entry": limit_px,
+                    "signal_close": sig.get("price"),
+                    "atr": sig.get("atr"),
+                    "max_hold_days": int(os.environ.get("PULLBACK_MAX_HOLD_DAYS", "10")),
+                },
+            }
+            if opt:
+                pos.update({
+                    "option_symbol": opt.get("symbol"), "option_strike": opt.get("strike"),
+                    "option_type": opt.get("type"), "option_expiry": opt.get("expiry"),
+                    "option_token": opt.get("token"), "option_dte": opt.get("dte"),
+                    "option_entry": opt.get("entry"), "option_sl": opt.get("sl"),
+                    "option_target1": opt.get("target1"),
+                    "lot_size": opt.get("lot_size"), "lots": 1,
+                    "capital": opt.get("capital"),
+                })
+            row_id = swing_pos_save(pos)
+            swing_pos_update(row_id, status="PENDING")
+            log.info(f"[Swing] ⏳ limit order #{row_id}: {name} LONG @ ₹{limit_px} "
+                     f"(signal close {sig.get('price')}, valid through next session)")
+        except Exception as e:
+            log.warning(f"[Swing] pending-entry failed {name}: {e}")
+        return row_id
+
+    def _process_pending_entries(self):
+        """Fill or expire PENDING limit orders. Fill: LTP at/below the limit
+        (fill at LTP when it gapped through — a better price). Expire: the
+        next trading session after placement has ended without a touch.
+        NSE holidays are treated as trading days by this check, which can
+        only expire an order one session early — acceptable for paper."""
+        rows = [p for p in swing_pos_list(status="PENDING")
+                if (p.get("source") or "") == "AUTO_PAPER"]
+        if not rows:
+            return
+        now = datetime.now(IST)
+        today = now.date()
+        session_over = (now.hour * 60 + now.minute) >= (15 * 60 + 40)
+        for pos in rows:
+            try:
+                try:
+                    ind = json.loads(pos.get("indicators") or "{}") or {}
+                except Exception:
+                    ind = {}
+                limit_px = float(ind.get("limit_entry") or pos.get("spot_entry") or 0)
+                atr = float(ind.get("atr") or 0)
+                try:
+                    created = datetime.strptime(pos.get("entry_date", ""), "%Y-%m-%d").date()
+                except Exception:
+                    created = today
+                ltp = self._paper_live_quote(pos)
+                if ltp is not None and limit_px > 0 and float(ltp) <= limit_px:
+                    fill = round(min(limit_px, float(ltp)), 2)
+                    upd = {"status": "OPEN", "spot_entry": fill,
+                           "entry_date": today.strftime("%Y-%m-%d"),
+                           "entry_time": now.strftime("%H:%M")}
+                    if atr > 0:
+                        upd.update({"spot_sl": round(fill - 2.0 * atr, 2),
+                                    "spot_target1": round(fill + 3.0 * atr, 2),
+                                    "spot_target2": round(fill + 5.0 * atr, 2)})
+                    swing_pos_update(pos["id"], **upd)
+                    log.info(f"[Swing] ✅ limit filled #{pos['id']}: {pos['instrument']} @ ₹{fill}")
+                    if os.environ.get("SWING_SLACK_ENABLED", "true").lower() == "true":
+                        SlackAlert.send(f"✅ *Swing limit filled* — {pos['instrument']} LONG @ "
+                                        f"₹{fill:,.1f} (limit ₹{limit_px:,.1f})")
+                    continue
+                # expiry: next weekday session after creation has closed
+                nxt = created + timedelta(days=1)
+                while nxt.weekday() >= 5:
+                    nxt += timedelta(days=1)
+                if (today > nxt) or (today == nxt and session_over):
+                    swing_pos_update(pos["id"], status="CANCELLED")
+                    log.info(f"[Swing] ⌛ limit expired #{pos['id']}: {pos['instrument']} "
+                             f"never dipped to ₹{limit_px}")
+                    if os.environ.get("SWING_SLACK_ENABLED", "true").lower() == "true":
+                        SlackAlert.send(f"⌛ *Swing limit expired* — {pos['instrument']} never "
+                                        f"dipped to ₹{limit_px:,.1f}; no trade (by design)")
+            except Exception as e:
+                log.warning(f"[Swing] pending check err #{pos.get('id')}: {e}")
+
     def _track_paper_outcomes(self):
         """Close AUTO_PAPER positions on SL / T1 / T2 / max-hold and report
         the outcome to Slack. Runs every swing cycle (~30 min)."""
+        try:
+            self._process_pending_entries()
+        except Exception as e:
+            log.warning(f"[Swing] pending-entry pass failed: {e}")
         opens = [p for p in swing_pos_list(status="OPEN")
                  if (p.get("source") or "") == "AUTO_PAPER"]
         for pos in opens:
@@ -6873,13 +7042,21 @@ class SwingEngine:
         opt_entry = float(pos.get("option_entry") or 0)
         favorable = (ltp - entry) if direction == "LONG" else (entry - ltp)
 
+        # v1.2: the spot SL is DISABLED for pullback rows by default.
+        # Connors/Alvarez both published that stops below ~3x ATR damage
+        # this entry type, and our own 3y backtest agreed: the SL_HIT
+        # bucket was -171% while removing it (with the premium backstop,
+        # strength/stagnation/time exits intact) took the combo from
+        # -15% to +57%. Re-enable with PULLBACK_SPOT_SL=on.
+        spot_sl_on = ((not is_pullback)
+                      or os.environ.get("PULLBACK_SPOT_SL", "off").lower() == "on")
         exit_reason = None
         if direction == "LONG":
-            if sl > 0 and ltp <= sl:      exit_reason = "SL_HIT"
+            if spot_sl_on and sl > 0 and ltp <= sl:  exit_reason = "SL_HIT"
             elif t2 > 0 and ltp >= t2:    exit_reason = "T2_HIT"
             elif t1 > 0 and ltp >= t1:    exit_reason = "T1_HIT"
         else:
-            if sl > 0 and ltp >= sl:      exit_reason = "SL_HIT"
+            if spot_sl_on and sl > 0 and ltp >= sl:  exit_reason = "SL_HIT"
             elif t2 > 0 and ltp <= t2:    exit_reason = "T2_HIT"
             elif t1 > 0 and ltp <= t1:    exit_reason = "T1_HIT"
         # Premium backstop: est option premium down ~50% from entry
