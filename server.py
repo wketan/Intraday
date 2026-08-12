@@ -2782,7 +2782,11 @@ Bias & overrides:
 - bias = LONG / SHORT / NEUTRAL (suggested directional skew, NOT mandatory)
 - confidence_floor — minimum scanner confidence to alert. Higher in volatile/event days
 - min_rr — risk:reward floor on the index trigger. 1.5 baseline; 2.0+ on event days
-- avoid_instruments — list any of NIFTY/BANKNIFTY/FINNIFTY to skip entirely today
+- avoid_instruments — list any of NIFTY/BANKNIFTY/FINNIFTY to skip entirely today.
+  Reserve this for scheduled event risk or genuinely broken market structure. TIME_STOP
+  exits are neutral scratches (flat exits on stalled trades), NOT losses — a few recent
+  time-stops are normal for this system and are NEVER by themselves a reason to avoid an
+  instrument. On an ordinary day this list should be [].
 
 Respond in EXACTLY this JSON (no markdown, no prose):
 {"regime": "TRENDING_UP" | "TRENDING_DOWN" | "RANGING" | "VOLATILE" | "EVENT_RISK",
@@ -2799,14 +2803,23 @@ Respond in EXACTLY this JSON (no markdown, no prose):
         if existing:
             return dict(existing)
 
-        # Pull yesterday's closes for context (best effort)
+        # Pull recent closes for context (best effort). Cutoff matters: with
+        # no date floor, a handful of ancient scratches haunted every morning
+        # brief — 3 stale TIME_STOPs (net -₹175) kept producing "avoid
+        # BANKNIFTY" day after day, which Layer B then honored as a veto,
+        # which meant no new trades, which meant the same stale closes came
+        # back tomorrow. Only the last 3 calendar days are relevant context.
+        cutoff = (datetime.now(IST) - timedelta(days=3)).strftime("%Y-%m-%d")
         recent = db_exec("""SELECT instrument, direction, result, pnl_rupees FROM signals
-                            WHERE status='CLOSED' AND date < ?
-                            ORDER BY id DESC LIMIT 10""", (today,), fetch=True)
+                            WHERE status='CLOSED' AND date < ? AND date >= ?
+                            ORDER BY id DESC LIMIT 10""", (today, cutoff), fetch=True)
         recent_txt = "; ".join(
             f"{r['instrument']} {r['direction']} {r['result']} ₹{r['pnl_rupees']}"
             for r in (recent or [])
         ) or "no recent closes"
+        if recent:
+            net = sum(float(r["pnl_rupees"] or 0) for r in recent)
+            recent_txt += f"  [net over these: ₹{net:+,.0f}]"
 
         events = EventCalendar.today_events()
         event_txt = "; ".join(f"{e.get('time','')} {e.get('name','')}" for e in events) or "none"
@@ -2913,6 +2926,10 @@ SIGNAL RULES
 - BANKNIFTY monthly slips harder — use 75% position_pct for BANKNIFTY if in doubt
 - BIAS TOWARD TAKING: a missed trade costs 0, but a blocked good trade also costs 0. The engine's
   confidence gates already protect capital. Your job is to confirm clear edge, not find reasons to SKIP.
+- The "Today's regime" line is PRE-MARKET context written at ~08:45 and is hours stale by mid-session.
+  It ADVISES; it does not veto. Never SKIP primarily because the morning brief said avoid/choppy —
+  judge the LIVE chain data in front of you. If the morning brief is cautious but live flow confirms
+  the signal, express that caution as position_pct 50-75, not as a SKIP.
 
 Respond in EXACTLY this JSON (no markdown, no prose):
 {"verdict": "TAKE" | "SKIP" | "WAIT",
@@ -3002,9 +3019,25 @@ OPTION CHAIN MARKET SNAPSHOT (scan from live chain — use this as primary signa
 
         regime_txt = ""
         if regime:
+            # Mirror of scanner BUG FIX #7 at the AI layer: when the operator
+            # has pinned the engine to specific instruments via
+            # ENABLED_INSTRUMENTS, a morning-brief "avoid" flag on a pinned
+            # instrument must not reach this prompt as a standing veto — the
+            # scanner already overrides it, but Layer B was re-reading the
+            # avoid list + notes verbatim and SKIPping every signal all day
+            # (16 AI_SKIPs in 3 days, incl. 95%-confidence setups).
+            _avoid = list(regime.get("avoid_instruments") or [])
+            _notes = str(regime.get("notes") or "")
+            _env = os.environ.get("ENABLED_INSTRUMENTS", "").strip()
+            _pinned = {x.strip().upper() for x in _env.split(",") if x.strip()}
+            if instrument.upper() in _pinned and any(a.upper() == instrument.upper() for a in _avoid):
+                _avoid = [a for a in _avoid if a.upper() != instrument.upper()]
+                _notes += (f" [operator override: engine is pinned to {instrument} via "
+                           f"ENABLED_INSTRUMENTS; the morning avoid flag for it is void — "
+                           f"judge THIS setup on the live chain data above.]")
             regime_txt = (f"\nToday's regime: {regime.get('regime')} / bias {regime.get('bias')} "
                           f"/ floor {regime.get('confidence_floor')}%  min RR {regime.get('min_rr')}  "
-                          f"avoid {regime.get('avoid_instruments')}  notes: {regime.get('notes','')}")
+                          f"avoid {_avoid}  notes: {_notes}")
 
         # ── Static system prefix (cached) ────────────────────────────────
         # Everything that does NOT change per-signal goes here. Cached as one
