@@ -6426,6 +6426,23 @@ class SwingEngine:
                "vix": None, "vix_band": "full", "note": ""}
         notes = []
         _ncl = None   # NIFTY closes, kept for the tiered-regime EMA20 check
+
+        def _fallback(reason):
+            # A transient Angel timeout (common in the boot-time fetch storm)
+            # must not flip the gate closed for a whole 30-min cycle. Reuse
+            # the last good read if it is under 6h old; fail closed otherwise.
+            prev = cached if cached and (now_ts - cached.get("_ts", 0) < 6 * 3600) else None
+            if prev and prev.get("nifty_close") is not None:
+                for k in ("nifty_close", "nifty_sma200", "nifty_gap_pts", "nifty_ret126"):
+                    ctx[k] = prev.get(k)
+                ctx["_fb_tier"] = prev.get("tier")
+                notes.append(f"{reason} — reusing last good read from "
+                             f"{datetime.fromtimestamp(prev['_ts'], IST).strftime('%H:%M')} "
+                             f"(tier {prev.get('tier', '?')})")
+                return bool(prev.get("_trend_ok", False))
+            notes.append(f"{reason} — gate failed closed")
+            return False
+
         try:
             candles = self.client.daily_candles("99926000", "NSE", days=400)
             if len(candles) >= 220:
@@ -6467,11 +6484,9 @@ class SwingEngine:
                                  f"({run_above if above200 else run_below}d run, 3d confirm "
                                  f"{'ON' if trend_ok else 'OFF'})")
             else:
-                trend_ok = False
-                notes.append("NIFTY history short — trend gate failed closed")
+                trend_ok = _fallback("NIFTY history short")
         except Exception as e:
-            trend_ok = False
-            notes.append(f"NIFTY fetch failed ({e}) — gate closed")
+            trend_ok = _fallback(f"NIFTY fetch failed ({e})")
         try:
             vd = self.client.ltp("NSE", "India VIX", "26017")
             vix = float((vd or {}).get("ltp") or 0)
@@ -6550,6 +6565,9 @@ class SwingEngine:
                             notes.append(f"Tier C: breadth {b200:.0f}% > 200DMA, NIFTY {'>' if above_now else '<'} 20EMA")
             except Exception as e:
                 log.warning(f"[Swing] tiered regime check failed: {e}")
+        if ctx.get("_fb_tier") and trend_ok:
+            ctx["tier"] = ctx["_fb_tier"]   # carried over with the fallback read
+        ctx["_trend_ok"] = trend_ok
         ctx["long_ok"] = trend_ok and ctx["vix_band"] != "block" and not blackout
         ctx["note"] = " · ".join(notes)
         self._mctx = ctx

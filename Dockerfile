@@ -37,6 +37,7 @@ COPY options_intel.py .
 COPY regime.py .
 COPY events.json .
 COPY swing_backfill.json .
+COPY swing_breadth_backfill.json .
 COPY index.html .
 COPY manifest.json .
 COPY start.sh .
