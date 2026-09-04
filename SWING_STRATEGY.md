@@ -121,3 +121,89 @@ Known gap the backtest cannot see (research finding, not yet acted on): NSE
 single-stock option spreads + theta on a 5-day hold may consume much of a
 +1.66%-avg-win edge; recommendation on live capital is options only for
 indices (delta >= 0.75) and cash equity for stock signals.
+
+## v1.3 (2026-09-04) — "can we trade below the 200SMA?" answered with data
+
+Owner question after a month of zero entries with NIFTY ~3% under its 200SMA.
+Same 746-day walk-forward, same v1.2 rules, only the regime gate varied:
+
+| Gate | Trades | Win | Payoff | Exp/trade | SUM | Max DD |
+|---|---|---|---|---|---|---|
+| v1.2 confirm-3 200SMA (shipped) | 51 | 70.6% | 0.73 | +0.56% | +28.5% | **-5.8%** |
+| NO index gate | 74 | 73.0% | 0.53 | +0.37% | +27.2% | **-25.4%** |
+| ONLY the gate-OFF periods | 23 | 78.3% | 0.26 | -0.06% | -1.4% | -20.6% |
+| Gate-OFF periods at half size | 74 | 73.0% | 0.57 | +0.38% | +27.8% | -15.4% |
+| confirm-3 + breadth-thrust override | 56 | 71.4% | 0.73 | +0.58% | **+32.2%** | **-5.8%** |
+
+Reading: the 23 extra trades taken below the 200SMA win 78% of the time and
+still lose money — avg loss -5.1% vs avg win +1.3%. Trading through the gate
+gives the same total for 4x the drawdown. Half-sizing doesn't fix it. The
+one thing that adds trades WITHOUT adding drawdown is the Zweig-style
+breadth thrust: when universe breadth (% above own 50DMA) snaps from <30% to
+>55% within 10 sessions, entries are allowed for the next 20 sessions
+regardless of the 200SMA. Adopted.
+
+Implementation: `swing_breadth` table (one reading per session, seeded from
+`swing_breadth_backfill.json` on a cold start), `SwingEngine._breadth_thrust_active()`,
+override applied inside `_swing_market_ctx()`; surfaced as `breadth_thrust`
+in `/api/swing/results.regime` and in the regime note. Knobs:
+`SWING_BREADTH_THRUST` (on|off) · `BREADTH_THRUST_LOW` (30) ·
+`BREADTH_THRUST_HIGH` (55) · `BREADTH_THRUST_HOLD_DAYS` (20).
+
+Practitioner consensus the data agrees with: Connors/Alvarez require price
+above the 200SMA for dip-buys; ~90% of extreme days occur below it; the
+sanctioned early re-entry is a breadth thrust, not "buy dips anyway".
+
+### v1.3 addendum — tiered exposure (2026-09-04, two research passes: 30+ quant sources, 30+ practitioner sources)
+
+Both passes converged on the same verdict: nobody credible runs a long-only
+stock system on a binary index-200DMA switch; the split is breadth-based bias
+with pilot positions (Nitin R / Stockbee / Minervini), stock-level rules only
+(Weekend Investing, Capitalmind), or RS names at reduced size (TradingQnA
+regulars). War stories: the 200DMA reclaim arrives ~11% off the low in 2022
+and 2025, and never arrived at all in 2026 (100+ sessions) while ~50% of
+stocks sat above their own 200DMA and printed 52-week highs.
+
+Own backtest of the tier design (same 746 days, v1.2 rules):
+
+| Regime | Trades | Win | Exp/trade | SUM | Max DD |
+|---|---|---|---|---|---|
+| Hard gate (v1.2) | 51 | 70.6% | +0.56% | +28.5% | -5.8% |
+| Gate + breadth thrust | 56 | 71.4% | +0.58% | +32.2% | -5.8% |
+| Tiered A/B, half size in B | 56 | 71.4% | +0.55% | +31.0% | -6.4% |
+| Tiered A/B, full size in B | 56 | 71.4% | +0.60% | +33.6% | -7.3% |
+| Tier-B trades alone (half size) | 5 | 80% | +0.32% | +1.6% | -1.6% |
+
+Reading: with the per-stock filters (own 100/200SMA, beats NIFTY, near 52w
+high, 2-day washout) already emptying the screen in a weak tape, opening the
+index gate adds only a handful of trades, and they are small positives. The
+gate was mostly redundant with the stock filters; the tier design keeps the
+drawdown profile while letting the system participate in bear-market rallies
+led by relative-strength names.
+
+Shipped rules (`_swing_market_ctx`, env `SWING_TIERED_REGIME` on|off):
+- **Tier A** (4 slots, full): NIFTY > 200SMA confirm-3, OR breadth thrust, OR
+  B200 >= 60% (`SWING_TIER_A_B200`).
+- **Tier B** (2 slots, tagged HALF SIZE, `SWING_TIER_B_MAX_OPEN`): B200 >= 40%
+  (`SWING_TIER_B_B200`) AND NIFTY above its 20EMA two sessions; or capitulation
+  (B200 < 20% within 20 sessions) with NIFTY back above the 20EMA once.
+- **Tier C**: flat. B200 = % of the universe above its own 200DMA, one reading
+  per session in `swing_breadth.pct200` (seeded from the backfill).
+- Tier is stored on each position (`indicators.tier`), shown in the regime
+  pill and the Slack alert; `/api/swing/results.regime` exposes `tier`, `b200`.
+
+State on 2026-09-04: B200 46.7% (Tier-B eligible), NIFTY 23,873 vs 20EMA
+24,165 → Tier C. Tier B opens on two closes above the 20EMA (~+1.2%), versus
+~+3.1% to the 200SMA.
+
+Research items deliberately NOT shipped (no backtest support or out of scope
+for a paper tracker): ATR-based position sizing (1-lot floor), futures/cash
+instead of stock options, VIX-above-10dMA entry qualifier for Tier B (India
+VIX history not fetched), sector-index regime, F&O ban / MWPL check, gap-cancel
+on resting limits. The last three are execution hygiene worth adding before
+real capital.
+
+Intraday side, same session: EOD learning-loop time blocks clamped (one
+window, <= 30 min, never before 10:30; it had blocked 10:00-11:00 +
+13:45-14:15 off a 3-trade day). MAX_OPEN_POSITIONS=1 in the Railway env
+blocked 40 signals in 21 days, many at 95% confidence — operator decision.

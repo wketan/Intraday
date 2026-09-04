@@ -1264,7 +1264,7 @@ function SwingTab({swing}){
     {(swing&&swing.regime)&&(()=>{const rg=swing.regime;const ok=rg.long_ok;
       return(<section className="panel g12" style={{padding:'13px 18px',borderLeft:'3px solid '+(ok?'var(--up)':'var(--warn)')}}>
         <div style={{display:'flex',alignItems:'center',gap:10,flexWrap:'wrap'}}>
-          <span className={'mc '+(ok?'take':'watch')}>{ok?'REGIME OK':'REGIME BLOCKED'}</span>
+          <span className={'mc '+(ok?(rg.tier==='B'?'watch':'take'):'watch')}>{ok?(rg.tier==='B'?'REGIME · TIER B · HALF SIZE':'REGIME OK'):'REGIME BLOCKED'}</span>
           <span style={{fontFamily:'var(--mono)',fontSize:11.5,color:'var(--ink2)'}}>{rg.note||''}{rg.breadth!=null?(' · breadth '+rg.breadth+'% of universe above 50DMA'):''}</span>
           {rg.checked_at&&<span className="lbl" style={{marginLeft:'auto'}}>checked {rg.checked_at}</span>}</div>
         {!ok&&<div style={{fontFamily:'var(--mono)',fontSize:10,color:'var(--ink3)',marginTop:6,lineHeight:1.5}}>

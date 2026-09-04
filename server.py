@@ -948,6 +948,33 @@ def init_db():
         )
     """)
 
+    # ── swing_breadth — one universe-breadth reading per session ──────
+    # % of the swing universe above its own 50DMA. Feeds the breadth-thrust
+    # regime override (needs ~11 sessions of history to evaluate).
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS swing_breadth (
+            date TEXT PRIMARY KEY, pct REAL NOT NULL, pct200 REAL
+        )
+    """)
+    # Cold-start seed: the thrust/tier checks need history that only
+    # accrues one reading per session. swing_breadth_backfill.json
+    # (computed offline from the same daily bars) fills it when empty.
+    try:
+        _n = c.execute("SELECT COUNT(*) FROM swing_breadth").fetchone()[0]
+        _bf = os.path.join(os.path.dirname(os.path.abspath(__file__)), "swing_breadth_backfill.json")
+        if int(_n or 0) == 0 and os.path.exists(_bf):
+            _rows = json.load(open(_bf))
+            _vals = []
+            for d, v in sorted(_rows.items()):
+                if isinstance(v, dict):
+                    _vals.append((d, float(v.get("pct") or 0), v.get("pct200")))
+                else:
+                    _vals.append((d, float(v), None))
+            c.executemany("INSERT OR REPLACE INTO swing_breadth (date, pct, pct200) VALUES (?,?,?)", _vals)
+            log.info(f"📼 swing_breadth seeded with {len(_vals)} sessions from backfill")
+    except Exception as _e:
+        log.warning(f"swing_breadth seed skipped: {_e}")
+
     conn.commit(); conn.close()
     log.info("📊 Database ready")
 
@@ -3112,9 +3139,14 @@ EXTRA_FILTERS examples:
 - "require PCR confirmation on BANKNIFTY SHORTs"
 - "block any signal with RSI>78"
 
+TIME WINDOW RULES (the scanner enforces these regardless of what you return):
+- A single day of 3-6 trades is NOT evidence about a time of day. Return time_windows_to_avoid: []
+  unless the day had 8+ closed trades AND the losses cluster tightly in one window.
+- At most ONE window, at most 30 minutes long, never before 10:30 IST.
+
 Respond in EXACTLY this JSON (no markdown):
 {"indicator_weight_adjustments": {"rsi": -5..+5, "macd": -5..+5, "supertrend": -5..+5, "vwap": -5..+5, "ema": -5..+5, "volume": -5..+5},
-  "time_windows_to_avoid": ["HH:MM-HH:MM", ...],
+  "time_windows_to_avoid": ["HH:MM-HH:MM"] or [],
   "extra_filters": ["short plain-English filters the scanner should apply tomorrow"],
   "summary": "one line recap of today"}"""
 
@@ -4304,6 +4336,14 @@ class Engine:
                 try:
                     self._blocked_windows = json.loads(row.get("time_windows_to_avoid") or "[]") or []
                 except Exception: self._blocked_windows = []
+                # Clamp: the EOD reviewer sees ~3-6 trades and was emitting
+                # blocks like "10:00-11:00" + "13:45-14:15" (90 min of a
+                # 6h session; 171 of 675 scans skipped on 2026-09-03). A
+                # one-day sample can't justify blocking prime hours. Honor
+                # at most ONE window, at most LEARN_MAX_BLOCK_MIN minutes
+                # (default 30), never overlapping the 09:15-10:30 opening
+                # drive. Same anti-pattern as the regime-avoid deadlock.
+                self._blocked_windows = self._clamp_blocked_windows(self._blocked_windows)
                 log.info(f"🧠 Layer C feedback loaded from {row.get('date')}: "
                          f"weights={self._weight_adj}  blocked={self._blocked_windows}")
             else:
@@ -4368,6 +4408,37 @@ class Engine:
         except Exception as e:
             log.warning(f"  killswitch check err: {e}")
             return False
+
+    @staticmethod
+    def _clamp_blocked_windows(wins):
+        """Keep at most one AI-proposed time block, capped at
+        LEARN_MAX_BLOCK_MIN minutes, and drop any block touching the
+        09:15-10:30 opening drive. Returns [] on any parse problem."""
+        try:
+            max_min = int(os.environ.get("LEARN_MAX_BLOCK_MIN", "30") or 0)
+            if max_min <= 0:
+                return []
+            out = []
+            for w in (wins or []):
+                try:
+                    a, b = [x.strip() for x in str(w).split("-")]
+                    ah, am = map(int, a.split(":")); bh, bm = map(int, b.split(":"))
+                    start, end = ah * 60 + am, bh * 60 + bm
+                except Exception:
+                    continue
+                if end <= start:
+                    continue
+                if start < 10 * 60 + 30:
+                    log.info(f"🧠 dropped EOD block {w} — overlaps the opening drive")
+                    continue
+                if end - start > max_min:
+                    end = start + max_min
+                    log.info(f"🧠 trimmed EOD block {w} to {max_min} min")
+                out.append(f"{start//60:02d}:{start%60:02d}-{end//60:02d}:{end%60:02d}")
+                break   # one window only
+            return out
+        except Exception:
+            return []
 
     def _log_gate(self, name, gate, sig=None, detail=None):
         """Shadow-log a gate rejection to the gate_rejections table.
@@ -6319,6 +6390,7 @@ class SwingEngine:
         # ── Pullback v1: gate → collect → rank → admit top slots ──────
         EarningsCalendar.refresh()   # once/day; drives T-3 blackout + T-1 exits
         ctx = self._swing_market_ctx()
+        ctx["_breadth"] = []; ctx["_breadth200"] = []   # per-scan samples; ctx is cached 30 min so don't accumulate
         log.info(f"[Swing] Pullback scan: regime={'OK' if ctx['long_ok'] else 'BLOCKED'} "
                  f"({ctx['note']}) · {len(SWING_STOCKS)} instruments")
         candidates = []
@@ -6353,10 +6425,12 @@ class SwingEngine:
         ctx = {"_ts": now_ts, "long_ok": False, "nifty_ret126": 0.0,
                "vix": None, "vix_band": "full", "note": ""}
         notes = []
+        _ncl = None   # NIFTY closes, kept for the tiered-regime EMA20 check
         try:
             candles = self.client.daily_candles("99926000", "NSE", days=400)
             if len(candles) >= 220:
                 closes = pd.Series([c["close"] for c in candles], dtype=float)
+                _ncl = closes
                 c = float(closes.iloc[-1])
                 sma200_s = closes.rolling(200).mean()
                 sma200 = float(sma200_s.iloc[-1])
@@ -6416,10 +6490,94 @@ class SwingEngine:
                 notes.append(f"event blackout: {(ev or {}).get('name', '?')}")
         except Exception:
             pass
+        # v1.3 breadth-thrust override (Zweig; own 3y backtest: +5 trades,
+        # +3.7% total, ZERO extra drawdown vs the plain gate, while simply
+        # trading below the 200SMA quadrupled drawdown for the same money).
+        # When universe breadth snaps from <30% to >55% above-50DMA within
+        # 10 sessions, allow entries for the next 20 sessions even though
+        # NIFTY hasn't reclaimed its 200SMA — the early door experienced
+        # traders use after a washout, without buying the downtrend itself.
+        ctx["breadth_thrust"] = None
+        try:
+            thrust = self._breadth_thrust_active()
+            if thrust:
+                ctx["breadth_thrust"] = thrust
+                if not trend_ok:
+                    trend_ok = True
+                    notes.append(f"breadth-thrust override ON ({thrust})")
+        except Exception as e:
+            log.warning(f"[Swing] breadth thrust check failed: {e}")
+        # v1.3 tiered exposure (practitioner consensus: Nitin R breadth
+        # quadrants, Stockbee capitulation, Minervini pilot sizing; own
+        # backtest: adds a handful of small-positive trades, DD -6.4% vs
+        # -5.8% for the hard gate, vs -25% for simply trading through it).
+        #   Tier A (full, 4 slots): 200SMA confirm-3 OR thrust OR B200 >= 60%
+        #   Tier B (half, 2 slots): B200 >= 40% AND NIFTY > 20EMA two sessions,
+        #                           or capitulation (B200 < 20% in last 20
+        #                           sessions) with NIFTY back above its 20EMA
+        #   Tier C (flat):          everything else
+        # B200 = % of the swing universe above its own 200DMA — the stock
+        # filters already empty the screen in a weak tape, so this mostly
+        # unlocks the bear-market-rally names that lead the recovery.
+        ctx["b200"] = None
+        ctx["tier"] = "A" if trend_ok else "C"
+        if os.environ.get("SWING_TIERED_REGIME", "on").lower() != "off":
+            try:
+                row = db_exec("SELECT pct200 FROM swing_breadth WHERE pct200 IS NOT NULL "
+                              "ORDER BY date DESC LIMIT 1", fetchone=True)
+                b200 = float(dict(row)["pct200"]) if row else None
+                ctx["b200"] = b200
+                if not trend_ok and b200 is not None and _ncl is not None and len(_ncl) >= 25:
+                    ema20 = _ncl.ewm(span=20, adjust=False).mean()
+                    above_now = float(_ncl.iloc[-1]) > float(ema20.iloc[-1])
+                    above_prev = float(_ncl.iloc[-2]) > float(ema20.iloc[-2])
+                    tier_a_b200 = float(os.environ.get("SWING_TIER_A_B200", "60"))
+                    tier_b_b200 = float(os.environ.get("SWING_TIER_B_B200", "40"))
+                    if b200 >= tier_a_b200:
+                        trend_ok = True; ctx["tier"] = "A"
+                        notes.append(f"Tier A via breadth: {b200:.0f}% of universe > 200DMA")
+                    elif b200 >= tier_b_b200 and above_now and above_prev:
+                        trend_ok = True; ctx["tier"] = "B"
+                        notes.append(f"Tier B (half size): breadth {b200:.0f}% > 200DMA, NIFTY > 20EMA 2d")
+                    else:
+                        rows = db_exec("SELECT pct200 FROM swing_breadth WHERE pct200 IS NOT NULL "
+                                       "ORDER BY date DESC LIMIT 20", fetch=True) or []
+                        lo = min((float(dict(r)["pct200"]) for r in rows), default=100.0)
+                        if lo < 20 and above_now:
+                            trend_ok = True; ctx["tier"] = "B"
+                            notes.append(f"Tier B (capitulation): breadth hit {lo:.0f}% in last 20d, NIFTY back > 20EMA")
+                        else:
+                            notes.append(f"Tier C: breadth {b200:.0f}% > 200DMA, NIFTY {'>' if above_now else '<'} 20EMA")
+            except Exception as e:
+                log.warning(f"[Swing] tiered regime check failed: {e}")
         ctx["long_ok"] = trend_ok and ctx["vix_band"] != "block" and not blackout
         ctx["note"] = " · ".join(notes)
         self._mctx = ctx
         return ctx
+
+    def _breadth_thrust_active(self):
+        """Short note if a Zweig-style breadth thrust fired within the last
+        BREADTH_THRUST_HOLD_DAYS sessions (default 20), else None. A thrust
+        = a session with breadth > BREADTH_THRUST_HIGH (55%) where any of
+        the previous 10 sessions was < BREADTH_THRUST_LOW (30%)."""
+        if os.environ.get("SWING_BREADTH_THRUST", "on").lower() == "off":
+            return None
+        rows = db_exec("SELECT date, pct FROM swing_breadth ORDER BY date DESC LIMIT 40",
+                       fetch=True) or []
+        hist = [(dict(r)["date"], float(dict(r)["pct"])) for r in rows][::-1]
+        if len(hist) < 11:
+            return None
+        lo = float(os.environ.get("BREADTH_THRUST_LOW", "30"))
+        hi = float(os.environ.get("BREADTH_THRUST_HIGH", "55"))
+        hold = int(os.environ.get("BREADTH_THRUST_HOLD_DAYS", "20"))
+        for i in range(len(hist) - 1, 9, -1):
+            d, p = hist[i]
+            window = hist[i - 10:i]
+            if p > hi and any(x[1] < lo for x in window):
+                if len(hist) - 1 - i < hold:
+                    return f"{d}: {min(x[1] for x in window):.0f}%→{p:.0f}%"
+                break
+        return None
 
     def _scan_pullback(self, name, info, ctx):
         """One instrument: run strength-exits on its open pullback rows
@@ -6438,8 +6596,9 @@ class SwingEngine:
         try:
             if info.get("type") != "INDEX" and len(candles) >= 55:
                 closes = [c["close"] for c in candles]
-                ctx.setdefault("_breadth", []).append(
-                    closes[-1] > sum(closes[-50:]) / 50)
+                ctx.setdefault("_breadth", []).append(closes[-1] > sum(closes[-50:]) / 50)
+                if len(candles) >= 200:
+                    ctx.setdefault("_breadth200", []).append(closes[-1] > sum(closes[-200:]) / 200)
         except Exception:
             pass
 
@@ -6501,8 +6660,18 @@ class SwingEngine:
         # the tape is too weak for dip-buying even if NIFTY itself is fine.
         _b = ctx.get("_breadth") or []
         breadth = round(100.0 * sum(_b) / len(_b), 1) if len(_b) >= 30 else None
-        self._breadth_last = {"pct": breadth, "n": len(_b),
+        _b2 = ctx.get("_breadth200") or []
+        breadth200 = round(100.0 * sum(_b2) / len(_b2), 1) if len(_b2) >= 30 else None
+        self._breadth_last = {"pct": breadth, "pct200": breadth200, "n": len(_b),
                               "ts": datetime.now(IST).strftime("%H:%M")}
+        if breadth is not None:
+            # One reading per session feeds the breadth-thrust override
+            # (pct = % above own 50DMA) and the tiered regime (pct200).
+            try:
+                db_exec("INSERT OR REPLACE INTO swing_breadth (date, pct, pct200) VALUES (?,?,?)",
+                        (datetime.now(IST).strftime("%Y-%m-%d"), breadth, breadth200))
+            except Exception:
+                pass
         min_breadth = float(os.environ.get("PULLBACK_MIN_BREADTH", "30"))
         if breadth is not None and breadth < min_breadth:
             log.info(f"[Swing] breadth gate: only {breadth}% of universe above "
@@ -6511,6 +6680,10 @@ class SwingEngine:
         if not candidates:
             return
         max_open = int(os.environ.get("SWING_MAX_OPEN", "4"))
+        if ctx.get("tier") == "B":
+            # Tier B = half exposure: fewer slots. Lot-size floors mean
+            # "half size" is expressed as slots + Slack tag, not fractional lots.
+            max_open = min(max_open, int(os.environ.get("SWING_TIER_B_MAX_OPEN", "2")))
         max_sector = int(os.environ.get("SWING_MAX_PER_SECTOR", "2"))
         account = float(os.environ.get("SWING_ACCOUNT_CAPITAL", "150000"))
         open_rows = [p for p in (swing_pos_list(status="OPEN") + swing_pos_list(status="PENDING"))
@@ -6605,10 +6778,14 @@ class SwingEngine:
                         msg += (f"\n⏳ Limit entry: enters only if price dips to "
                                 f"₹{float(sig['limit_entry']):,.1f} by end of next session "
                                 f"(signal close ₹{sig.get('price')})")
+                    if ctx.get("tier") == "B":
+                        msg += (f"\n🟡 Tier B regime (breadth {ctx.get('b200') or '?'}% above 200DMA, "
+                                f"NIFTY > 20EMA but < 200SMA): HALF SIZE, max 2 positions")
                     if half:
                         msg += "\n⚠️ VIX 20-25: elevated-vol regime — half-size territory"
                     SlackAlert.send(msg)
             try:
+                sig["tier"] = ctx.get("tier")
                 sig_for_open = dict(sig)
                 if _limit_on:
                     self._place_pending_entry(name, info, sig_for_open, opt)
@@ -6765,6 +6942,7 @@ class SwingEngine:
                 "hold_days_est": sig.get("hold_days_est"),
                 "strategy": sig.get("strategy"),
                 "score": sig.get("score"),
+                "tier": sig.get("tier"),
                 "premium_source": (opt or {}).get("premium_source"),
                 # Pullback winners need room to run (right-tail evidence);
                 # legacy rows keep the shorter default.
@@ -6821,6 +6999,7 @@ class SwingEngine:
                     "hold_days_est": sig.get("hold_days_est"),
                     "strategy": sig.get("strategy"),
                     "score": sig.get("score"),
+                    "tier": sig.get("tier"),
                     "premium_source": (opt or {}).get("premium_source"),
                     "limit_entry": limit_px,
                     "signal_close": sig.get("price"),
@@ -8821,6 +9000,9 @@ def api_swing_results():
             "nifty_close": _mctx.get("nifty_close"),
             "nifty_sma200": _mctx.get("nifty_sma200"),
             "nifty_gap_pts": _mctx.get("nifty_gap_pts"),
+            "breadth_thrust": _mctx.get("breadth_thrust"),
+            "tier": _mctx.get("tier"),
+            "b200": _mctx.get("b200"),
             "checked_at": datetime.fromtimestamp(
                 _mctx.get("_ts", 0), IST).strftime("%H:%M") if _mctx.get("_ts") else None,
         }
