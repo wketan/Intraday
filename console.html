@@ -17,8 +17,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet"/>
-<script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script crossorigin src="https://unpkg.com/react@18.3.1/umd/react.production.min.js"></script>
+<script crossorigin src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js"></script>
 <script src="https://unpkg.com/@babel/standalone@7.24.7/babel.min.js"></script>
 <style>
 /* ═══════════════ INTRADAY CONSOLE — tactical trading terminal ═══════════════ */
@@ -637,7 +637,10 @@ html[data-theme="dark"] .scard{backdrop-filter:blur(22px);-webkit-backdrop-filte
 const {useState,useEffect,useMemo,useRef}=React;
 const RM=window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-const DEFAULT_SERVER='';
+// Served from GitHub Pages there is no API on this origin, so a blank
+// server URL can never connect ("Ping failed (404)"). Default to the
+// Railway engine there; keep same-origin for local / self-hosted runs.
+const DEFAULT_SERVER=(location.hostname.endsWith('github.io'))?'https://web-production-23211.up.railway.app':'';
 const getServer=()=>localStorage.getItem('signal_server_url')||DEFAULT_SERVER;
 const setServer=(u)=>localStorage.setItem('signal_server_url',(u||'').replace(/\/$/,''));
 const getToken=()=>localStorage.getItem('signal_auth_token')||'';
@@ -1393,20 +1396,27 @@ function App(){
   const rows=Array.isArray(hist)?hist.filter(s=>s.date===todayISO()):[];const closed=rows.filter(s=>s.status==='CLOSED');
   const equity=useMemo(()=>{const o=closed.slice().sort((a,b)=>(a.timestamp||'').localeCompare(b.timestamp||''));let c=0;const p=[{t:0,v:0}];o.forEach((s,i)=>{c+=sgn(s);p.push({t:i+1,v:c});});return p;},[hist]);
   const realized=closed.reduce((a,s)=>a+sgn(s),0);const unreal=open.reduce((a,s)=>a+(+s.pnl_now||0),0);const net=realized+unreal;
-  const pa=perf||{};const wins=pa.wins||0,losses=pa.losses||0,cl=wins+losses;
-  const wr=pa.win_rate!=null?pa.win_rate:(cl?(wins/cl)*100:0);
-  const exp=cl?((wr/100)*(pa.avg_win||0)+((100-wr)/100)*(pa.avg_loss||0)):0;
+  const pa=perf||{};const wins=pa.wins||0,losses=pa.losses||0,cl=pa.total||(wins+losses),scratch=Math.max(0,cl-wins-losses);
+  const wr=cl?(wins/cl)*100:0;
+  // Net rupees per closed trade, time-stop scratches included. The old
+  // avg-win/avg-loss formula left the scratches out and showed +55.
+  const exp=cl?(pa.total_pnl_net||0)/cl:0;
   const [cap,setCap]=useState(()=>+localStorage.getItem('ie-capital')||20000);
   const netCU=useCountUp(net),wrCU=useCountUp(wr,500);
   const tickers=['NIFTY','BANKNIFTY','FINNIFTY'].map(c=>{const p=(ltp&&ltp.prices&&ltp.prices[c])||{};return{c,ltp:p.ltp,pct:p.pct};});
   const bnfLtp=(ltp&&ltp.prices&&ltp.prices.BANKNIFTY)||{};
 
   const gates=useMemo(()=>{const m=metrics||{},e=m.engine||{};const ist=istNow();const hh=ist.getHours(),mm=ist.getMinutes(),wd=ist.getDay();
-    const mo=(status&&status.market_open!=null)?status.market_open:(wd>=1&&wd<=5&&((hh>9)||(hh===9&&mm>=15))&&(hh<16));const pc=mo&&(hh<12||(hh===12&&mm<30));
+    const mo=(status&&status.market_open!=null)?status.market_open:(wd>=1&&wd<=5&&((hh>9)||(hh===9&&mm>=15))&&(hh<16));const mins=hh*60+mm;
+    // Conductor's entry window (CONDUCTOR_EARLIEST/LATEST in conductor.py).
+    const pc=wd>=1&&wd<=5&&mins>=9*60+45&&mins<14*60+30;
+    const pcN=wd<1||wd>5?'Weekend':mins<9*60+45?'Opens 09:45':mins<14*60+30?'09:45 to 14:30':'Closed 14:30';
+    // The kill-switch latch clears on the first scan of a new day.
+    const stale=m.metrics_today&&m.metrics_today.date&&m.metrics_today.date!==m.date;const ks=e.killswitch_tripped&&!stale;
     const KNOWN=['v1','v2','conductor','scalper','scalper_v3','reverter','nifty_windows','deadzone_fade','patterns'];const strat=e.strategy||(status&&status.config&&status.config.strategy)||'—';
-    return[{l:'Market',ok:mo,n:mo?'In session':'Closed'},{l:'Pre-cutoff',ok:pc,n:pc?'Before 12:30':'After 12:30'},
+    return[{l:'Market',ok:mo,n:mo?'In session':'Closed'},{l:'Entry window',ok:pc,n:pcN},
       {l:'Engine',ok:!!(e.running||(status&&status.running)),n:(e.running||(status&&status.running))?'Running':'Stopped'},
-      {l:'Kill-switch',ok:!e.killswitch_tripped,n:e.killswitch_tripped?'Tripped':'Clear'},{l:'Strategy',ok:KNOWN.includes(strat),n:strat}];},[metrics,status]);
+      {l:'Kill-switch',ok:!ks,n:ks?'Tripped':(e.killswitch_tripped?'Resets at open':'Clear')},{l:'Strategy',ok:KNOWN.includes(strat),n:strat}];},[metrics,status]);
 
   const engCall=async(p)=>{setBusy(true);try{await apiFetch(p,{method:'POST',body:'{}'});}catch(e){}finally{setBusy(false);}};
 
@@ -1440,11 +1450,11 @@ function App(){
     <section className="panel g-kpi kpi"><div className="k">Win rate</div>
       <div style={{display:'flex',alignItems:'center',gap:12}}>
         <div style={{width:78,flexShrink:0}}><ArcGauge value={wr} display={wrCU.toFixed(0)+'%'} size={78}/></div>
-        <div className="s" style={{marginTop:0}}>{wins}W · {losses}L</div></div></section>
-    <section className="panel g-kpi kpi"><div className="k">Expectancy</div><div className={'v '+(exp>=0?'up':'dn')}>{exp>=0?'+':'−'}₹{fmt(exp)}</div><div className="s">per trade</div></section>
+        <div className="s" style={{marginTop:0}}>{wins}W · {losses}L · {scratch} scratch</div></div></section>
+    <section className="panel g-kpi kpi"><div className="k">Net per trade</div><div className={'v '+(exp>=0?'up':'dn')}>{exp>=0?'+':'−'}₹{fmt(Math.abs(exp))}</div><div className="s">all-time · {cl} closed</div></section>
     <section className="panel g-kpi kpi"><div className="k">Capital</div><div className="v ac">₹{fmt(cap)}</div><div className="s">{net>=0?'+':'−'}{(Math.abs(net)/cap*100).toFixed(2)}% today</div></section></>);
 
-  const chartCard=(<section className="panel hud g-chart"><div className="head"><span className="t"><b>//</b> BANKNIFTY · 5-MIN</span><span className="r"><span className="live-tag"><span className="d"/>LIVE</span></span></div>
+  const chartCard=(<section className="panel hud g-chart"><div className="head"><span className="t"><b>//</b> BANKNIFTY · 5-MIN</span><span className="r">{status&&status.market_open?<span className="live-tag"><span className="d"/>LIVE</span>:<span className="lbl">MARKET CLOSED</span>}</span></div>
     <div className="cstrip"><span className={'pxbig '+((bnfLtp.pct||0)>=0?'up':'dn')}>{bnfLtp.ltp?(+bnfLtp.ltp).toLocaleString('en-IN'):'—'}</span>
       {bnfLtp.pct!=null&&<span className={'pxd '+((bnfLtp.pct||0)>=0?'up':'dn')}>{(bnfLtp.pct>=0?'+':'')}{(+bnfLtp.pct).toFixed(2)}%</span>}<span className="pxm">{todayCandles.length>0?todayCandles.length+' candles today':'waiting for first candle'}</span></div>
     <CandleChart candles={todayCandles} ltp={bnfLtp.ltp}/></section>);
