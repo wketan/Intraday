@@ -453,6 +453,17 @@
 .kvg{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}
 .kvg div{padding:9px 13px;border-radius:14px;background:var(--surface2);font-size:13px;font-weight:600;display:flex;justify-content:space-between;gap:10px}
 .kvg span{color:var(--ink3)}.kvg b{font-variant-numeric:tabular-nums;text-align:right}
+.answer{border-radius:24px;padding:18px 20px;background:var(--surface);border:1px solid var(--line);box-shadow:var(--shadow);display:flex;flex-direction:column;gap:12px}
+.answer h4{margin:0;font-size:17px;letter-spacing:-.02em;font-weight:800}
+.answer p{margin:0;font-size:13.5px;line-height:1.55;color:var(--ink2)}
+.answer p b{color:var(--ink)}
+.answer .cost{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;font-variant-numeric:tabular-nums}
+.answer .cost b{font-size:26px;letter-spacing:-.04em;font-weight:800;color:var(--ink)}
+.answer .cost span{font-size:13px;color:var(--ink3);font-weight:600}
+.sheet .big{flex-wrap:nowrap}.sheet .big div{min-width:0;flex:1;padding:12px 16px}.sheet .big b{font-size:24px}
+@media(max-width:880px){.sheet .big{flex-wrap:wrap}.sheet .big div{flex:1 1 40%}}
+.stale{border-radius:24px;padding:14px 18px;background:var(--butter);color:var(--butter-i);font-size:13.5px;font-weight:600;line-height:1.5;margin-bottom:16px}
+.stale b{font-weight:800}
 .note2{margin-top:10px;font-size:12.5px;color:var(--ink3);line-height:1.5}
 @media(max-width:1150px){.kpis.six{grid-template-columns:repeat(3,minmax(0,1fr))}}
 .plot{position:relative;height:300px}
@@ -663,23 +674,41 @@
     const el = $('swSheet'), scrim = $('scrim');
     const x = S.openSw != null && ((S.swing && S.swing.positions) || []).find(p => String(p.id) === String(S.openSw));
     if (!x) { el.classList.remove('on'); scrim.classList.remove('on'); el.setAttribute('aria-hidden', 'true'); return; }
-    const g = swingGuide(x);
+    const g = swingGuide(x), today = todayISO();
     const entry = +x.option_entry || 0, exitP = +x.option_exit || 0, pnl = +x.pnl_rupees || 0;
     const pct = entry && exitP ? (exitP - entry) / entry * 100 : null;
     const sz = sizeFor(x.option_entry, x.option_sl || entry * 0.5, x.lot_size);
     const status = g.isOpen ? (x.status || 'OPEN').toLowerCase() : (x.exit_reason || x.result || 'closed').toLowerCase();
     const scroll = el.querySelector('.sh-body') ? el.querySelector('.sh-body').scrollTop : 0;
     el.innerHTML = `
-      <div class="sh-head"><h3>/${esc(x.instrument)} <span class="tag ${g.isOpen ? 'a' : ''}">${esc(status)}</span></h3><button class="btn sm" data-close>Close <kbd>Esc</kbd></button></div>
+      <div class="sh-head"><h3>/${esc(x.instrument)} <span class="tag ${g.isOpen ? 'a' : ''}">${g.isOpen ? 'open' : 'closed ' + esc(fmtDate(x.exit_date))}</span></h3><button class="btn sm" data-close>Close <kbd>Esc</kbd></button></div>
       <div class="sh-body">
-        <div class="big">
-          <div style="--bg-c:var(--lav);--tc:var(--lav-i)"><b>₹${num(entry)}</b><span>paid per unit</span></div>
-          <div style="--bg-c:var(--sky);--tc:var(--sky-i)"><b>${exitP ? '₹' + num(exitP) : '-'}</b><span>${g.isOpen ? 'live quote not in the feed' : 'exit premium'}</span></div>
-          <div style="--bg-c:var(--${pnl >= 0 ? 'mint' : 'blush'});--tc:var(--${pnl >= 0 ? 'mint-i' : 'blush-i'})"><b>${g.isOpen ? '-' : inr(pnl, true)}</b><span>${pct != null ? (pct >= 0 ? '+' : '') + pct.toFixed(1) + '% on premium' : 'P&L'}</span></div>
-          <div style="--bg-c:var(--butter);--tc:var(--butter-i)"><b>${g.held != null ? g.held : '-'} / ${g.maxHold}</b><span>${g.unit} held / max</span></div>
+        ${(() => {
+          const lot = +x.lot_size || 0, lotCost = entry * lot, lotEnd = exitP * lot, ago = daysBetween(x.entry_date, today);
+          const optName = `${x.instrument} ${x.option_strike ? Math.round(x.option_strike) : ''} ${x.option_type === 'PE' ? 'PUT (PE)' : 'CALL (CE)'}, expiry ${x.option_expiry || '-'}`;
+          const capLine = sz ? (lotCost <= capital * MAX_CAP_PCT
+              ? `One lot would use <b>${Math.round(lotCost / capital * 100)}%</b> of your ${inr(capital)}. ${sz.lots ? 'That fits your risk rule.' : `It fits the 50% cap, but if it fell to its stop of ₹${num(x.option_sl || entry * 0.5)} per unit you would lose about <b>${inr(sz.perLotRisk)}</b> with costs, more than the 1% (${inr(capital * RISK_PCT)}) you allow per trade.`}`
+              : `One lot (${inr(lotCost)}) is more than half of your ${inr(capital)}, so it is too big for your capital.`) : '';
+          return `<div class="answer">
+            <h4>${g.isOpen ? 'This trade is still open. You can copy it.' : `This trade is over. It closed ${ago != null ? daysBetween(x.exit_date, today) + ' days ago' : ''}, so you can't take it now.`}</h4>
+            <p>This was the engine's <b>paper trade</b>: it tracks the idea, no money was placed. The trade was a <b>${esc(optName)}</b>${x.option_symbol ? ` (<code style="font-family:var(--mono);font-size:12px">${esc(x.option_symbol)}</code>)` : ''}.</p>
+            <p><b>You can't buy a single unit.</b> Options are sold in lots. One lot of this option is <b>${esc(lot)} units</b>, so at the engine's price of ₹${num(entry)} per unit:</p>
+            <div class="cost"><b>${inr(lotCost)}</b><span>= ₹${num(entry)} × ${esc(lot)} units, for 1 lot (plus about ₹${BROKERAGE_PER_LOT} brokerage)</span></div>
+            ${g.isOpen
+              ? `<p>Today's price for this option isn't in the engine's feed. Check it in your broker before buying: if it is well above ₹${num(entry)}, the move has already happened and the plan's numbers no longer apply.</p>`
+              : `<p>If you had bought 1 lot on ${fmtDate(x.entry_date)} and sold on ${fmtDate(x.exit_date)}: <b>${inr(lotCost)} → ${inr(lotEnd)}</b>, ${pnl >= 0 ? 'a profit of' : 'a loss of'} <b style="color:var(--${pnl >= 0 ? 'good' : 'bad'})">${inr(Math.abs(+x.pnl_rupees || lotEnd - lotCost))}</b> (${pct != null ? (pct >= 0 ? '+' : '') + pct.toFixed(1) + '%' : ''}) in ${g.held} ${g.unit}, before brokerage.</p>`}
+            ${capLine ? `<p>${capLine}</p>` : ''}
+          </div>`;
+        })()}
+
+        <div class="big" style="margin-top:16px">
+          <div style="--bg-c:var(--lav);--tc:var(--lav-i)"><b>₹${num(entry)}</b><span>price per unit at the start</span></div>
+          <div style="--bg-c:var(--sky);--tc:var(--sky-i)"><b>${exitP ? '₹' + num(exitP) : '-'}</b><span>${g.isOpen ? 'today: check your broker' : 'price per unit at the end'}</span></div>
+          <div style="--bg-c:var(--${pnl >= 0 ? 'mint' : 'blush'});--tc:var(--${pnl >= 0 ? 'mint-i' : 'blush-i'})"><b>${g.isOpen ? '-' : inr(+x.pnl_rupees || 0, true)}</b><span>result for 1 lot</span></div>
+          <div style="--bg-c:var(--butter);--tc:var(--butter-i)"><b>${g.held != null ? g.held : '-'} / ${g.maxHold}</b><span>${g.unit} held / limit</span></div>
         </div>
 
-        ${!g.isOpen ? `<div class="sh-sec"><h4>What happened</h4><div class="note2" style="margin:0;font-size:13.5px;color:var(--ink2)">${esc(EXIT_TEXT[x.exit_reason] || ('Closed: ' + (x.exit_reason || x.result || '')))} Entered ${fmtDate(x.entry_date)}, out ${fmtDate(x.exit_date)}.</div></div>` : ''}
+        ${!g.isOpen ? `<div class="sh-sec"><h4>Why it closed</h4><div class="note2" style="margin:0;font-size:13.5px;color:var(--ink2)">${esc(EXIT_TEXT[x.exit_reason] || ('Closed: ' + (x.exit_reason || x.result || '')))} Entered ${fmtDate(x.entry_date)}, out ${fmtDate(x.exit_date)}.</div></div>` : ''}
 
         <div class="sh-sec"><h4>${g.isOpen ? 'How to hold it: exits, first to trigger wins' : 'The exit plan it was held under'}</h4>
           <ol class="steps">${g.steps.map((t, i) => `<li class="${t.hit ? 'hit' : ''}"><span class="n" style="--b:var(--${t.pal});--f:var(--${PAL[t.pal]})">${i + 1}</span><span>${esc(t.title)}<span class="d">${esc(t.detail)}</span></span><span class="r">${esc(t.right)}${t.hit ? ' · hit' : ''}</span></li>`).join('')}</ol>
@@ -700,7 +729,7 @@
 
         ${g.reasons.length ? `<div class="sh-sec"><h4>Why it was taken</h4><div class="lists" style="margin:0;grid-template-columns:1fr">${'<div>' + g.reasons.map((r, i) => `<div class="li"><div class="fill" style="width:100%;--c:var(--${['lav', 'sky', 'mint', 'peach'][i % 4]})"></div><span>${esc(r)}</span><span></span></div>`).join('') + '</div>'}</div></div>` : ''}
 
-        <div class="sh-sec"><h4>For your capital (${inr(capital)})</h4>
+        <div class="sh-sec"><h4>Sizing details for your ${inr(capital)}</h4>
           <div class="kvg">
             <div><span>Lots that fit</span><b>${sz ? sz.lots : '-'}</b></div>
             <div><span>One lot costs</span><b>${sz ? inr(sz.perLotCost) : '-'}</b></div>
@@ -812,7 +841,7 @@
         <div class="who">${av((x.instrument || '?')[0], palOf(x.instrument || ''))}<div style="min-width:0">
           <div class="short">/${esc(x.instrument)}<span class="dot ${isOpen ? '' : 'off'}"></span><span class="tag" style="background:var(--${resPal});color:var(--${PAL[resPal]})">${esc(isOpen ? x.status.toLowerCase() : (x.exit_reason || x.result || '').toLowerCase())}</span></div>
           <div class="meta"><span class="own">${esc(x.entry_date)}${x.exit_date ? ' → ' + esc(x.exit_date) : ''}</span><span class="chip">${esc(x.option_strike ? Math.round(x.option_strike) + ' ' + (x.option_type || '') : '')}</span>${x.hold_days != null ? `<span class="chip">${esc(x.hold_days)}d</span>` : ''}</div></div></div>
-        <div class="dest wrap2">Started ${fmtDate(x.entry_date)} at ₹${num(x.option_entry)}${isOpen ? ` · open, day ${daysBetween(x.entry_date, today)}` : ` · closed ${fmtDate(x.exit_date)} at ₹${num(x.option_exit)}`}<span class="why">1 lot (${esc(x.lot_size)}) made ${isOpen ? 'nothing yet' : inr(+x.pnl_rupees || 0, true)} · tap for the holding guide</span></div>
+        <div class="dest wrap2">Started ${fmtDate(x.entry_date)} at ₹${num(x.option_entry)}${isOpen ? ` · open, day ${daysBetween(x.entry_date, today)}` : ` · closed ${fmtDate(x.exit_date)} at ₹${num(x.option_exit)}`}<span class="why">1 lot = ${esc(x.lot_size)} units = ${inr((+x.option_entry || 0) * (+x.lot_size || 0))} · ${isOpen ? 'open now' : (+x.pnl_rupees >= 0 ? 'made ' : 'lost ') + inr(Math.abs(+x.pnl_rupees || 0))} · tap for details</span></div>
         <div class="num ${r > 0 ? 'up' : r < 0 ? 'dn' : ''}">${r != null ? (r >= 0 ? '+' : '') + (r * 100).toFixed(1) + '%' : '-'}</div>
         <div class="num ${pnl > 0 ? 'up' : pnl < 0 ? 'dn' : ''}">${isOpen || r == null ? '-' : inr(pnl, true)}</div></div>`;
     }).join('');
@@ -852,6 +881,15 @@
     </div>
 
     <div class="tb rise" style="--i:18"><h2>Swing record <span class="tag">${swOpen.length} open · ${chron.length} closed</span></h2><span class="stamp">${reg ? `regime tier ${esc(reg.tier)}${reg.tier === 'C' ? ' (no new entries)' : ''} · ` : ''}if you had put ${inr(slot)} (one of 4 slots) into each</span></div>
+    ${(() => {
+      const lastEntry = sw.map(x => x.entry_date).sort().slice(-1)[0];
+      const daysQuiet = lastEntry ? daysBetween(lastEntry, today) : null;
+      if (swOpen.length || daysQuiet == null || daysQuiet < 7) return '';
+      const why = reg && reg.tier === 'C'
+        ? `The engine only opens swing trades when the market is in an uptrend. Today NIFTY (${num(reg.nifty_close, 0)}) is <b>${num(reg.nifty_gap_pts, 0)} points below</b> its 200-day average (${num(reg.nifty_sma200, 0)}), so new entries are blocked (checked ${esc(reg.checked_at)} IST).`
+        : 'The scanner has found no stock that passes every filter.';
+      return `<div class="stale"><b>No new swing trade since ${fmtDate(lastEntry)} (${daysQuiet} days).</b> ${why} The trades below are the past record, not live ideas. New ones will appear here the day the filter turns on.</div>`;
+    })()}
     <div class="kpis six" style="margin-bottom:16px">
       <div class="kpi t-mint pop" style="--i:18;grid-column:span 2"><div class="lab">Your ${inr(slot)} slot, every trade</div><div class="val">${inr(eq, true)}</div>
         <div class="bars mini">${curve.map((v, i) => { const lo = Math.min(0, ...curve), sp = (Math.max(0, ...curve) - lo) || 1; return `<i class="${i === curve.length - 1 ? 'now' : ''}" style="height:${Math.max(8, (v - lo) / sp * 100)}%;--k:${i}"></i>`; }).join('')}</div></div>
