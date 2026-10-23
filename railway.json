@@ -2,7 +2,22 @@
   "$schema": "https://railway.app/railway.schema.json",
   "build": {
     "builder": "DOCKERFILE",
-    "dockerfilePath": "Dockerfile"
+    "dockerfilePath": "Dockerfile",
+    "watchPatterns": [
+      "/*.py",
+      "/Dockerfile",
+      "/requirements.txt",
+      "/start.sh",
+      "/railway.json",
+      "/events.json",
+      "/swing_backfill.json",
+      "/swing_breadth_backfill.json",
+      "/signals_backfill.json",
+      "/index.html",
+      "/manifest.json",
+      "/logo.svg",
+      "/icon-*.png"
+    ]
   },
   "deploy": {
     "startCommand": "sh start.sh",
