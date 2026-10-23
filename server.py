@@ -5915,6 +5915,55 @@ def restore_swing_backfill():
 restore_swing_backfill()
 
 
+def restore_signals_backfill():
+    """One-shot restore of closed intraday signals from signals_backfill.json.
+
+    Same reason as restore_swing_backfill(): without a /data volume every
+    deploy wipes signals.db, and with it the win rate, expectancy and P&L
+    history the dashboard shows. The file is a dump of /api/history taken
+    right before a deploy.
+
+    Guards:
+      • No-op when the signals table has ANY row, so a live DB is never touched.
+      • Only CLOSED rows restore. An OPEN row from before the restart has no
+        tracker behind it and would sit open forever.
+      • Columns are matched against the live schema, so an older or newer
+        dump never breaks the insert.
+    """
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "signals_backfill.json")
+    if not os.path.exists(path):
+        return
+    try:
+        rows = json.load(open(path))
+    except Exception as e:
+        log.warning(f"📼 signals backfill unreadable: {e}")
+        return
+    try:
+        existing = db_exec("SELECT COUNT(*) as c FROM signals", fetchone=True)
+        if existing and int(dict(existing).get("c") or 0) > 0:
+            return
+        conn = sqlite3.connect(DB_PATH)
+        cols = {r[1] for r in conn.execute("PRAGMA table_info(signals)").fetchall()}
+        n = 0
+        for r in rows:
+            if (r.get("status") or "") != "CLOSED":
+                continue
+            keys = [k for k in r if k in cols]
+            conn.execute(
+                f"INSERT OR IGNORE INTO signals ({','.join(keys)}) "
+                f"VALUES ({','.join('?' * len(keys))})",
+                [r[k] for k in keys])
+            n += 1
+        conn.commit()
+        conn.close()
+        if n:
+            log.info(f"📼 Signals backfill: restored {n} closed intraday signals")
+    except Exception as e:
+        log.warning(f"📼 signals backfill failed: {e}")
+
+restore_signals_backfill()
+
+
 # ═══════════════════════════════════════════════════════════════════
 # SWING ANALYSIS  — daily-timeframe technical signal engine
 # ═══════════════════════════════════════════════════════════════════
@@ -7649,6 +7698,17 @@ def home():
     return jsonify({"name": "Intraday Signal Engine",
                     "status": "running" if engine.running else "stopped",
                     "error": "index.html not found — place it in the same folder as server.py"})
+
+# Icons + PWA manifest the dashboard <head> links to. Whitelisted by name so
+# this can never serve server.py, signals.db or anything else in the folder.
+_STATIC_FILES = {"logo.svg", "icon-180.png", "icon-192.png", "icon-512.png", "manifest.json"}
+
+@app.route("/<name>")
+def static_asset(name):
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), name)
+    if name not in _STATIC_FILES or not os.path.exists(path):
+        return jsonify({"error": "not found"}), 404
+    return send_file(path)
 
 @app.route("/api/login", methods=["POST"])
 @require_auth

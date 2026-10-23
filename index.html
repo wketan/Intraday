@@ -477,6 +477,23 @@ html[data-theme="light"] .aurora .b{background:radial-gradient(circle,rgba(14,14
 .feed-msg{color:var(--ink-2);font-size:12.5px;line-height:1.55;min-width:0;overflow-wrap:break-word;word-break:break-word;}
 .feed-msg .kind{font-family:var(--font-mono);font-size:9px;letter-spacing:0.06em;text-transform:uppercase;color:var(--ink-3);margin-right:8px;font-weight:600;white-space:nowrap;}
 .feed-msg b{color:var(--ink-1);font-weight:600;}
+.feed-msg .kind{display:block;margin-bottom:3px;white-space:normal;}
+.feed-day{font-family:var(--font-mono);font-size:9px;letter-spacing:0.12em;text-transform:uppercase;color:var(--accent);padding:12px 0 4px;border-bottom:1px solid var(--line-2);}
+.oi-empty{font-family:var(--font-mono);font-size:11px;color:var(--ink-4);text-transform:uppercase;letter-spacing:0.05em;padding:18px 0;}
+.oi-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.4fr);gap:28px;align-items:center;}
+.oi-stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px 18px;}
+.oi-stats .k{display:block;font-family:var(--font-mono);font-size:9px;letter-spacing:0.1em;text-transform:uppercase;color:var(--ink-3);margin-bottom:4px;}
+.oi-stats b{font-family:var(--font-mono);font-size:14px;font-weight:600;color:var(--ink-1);text-transform:capitalize;}
+.oi-stats b.win,.oi-row .v.win{color:var(--win);} .oi-stats b.loss,.oi-row .v.loss{color:var(--loss);}
+.oi-bars{display:flex;flex-direction:column;gap:9px;}
+.oi-row{display:grid;grid-template-columns:110px 1fr 74px;gap:12px;align-items:center;}
+.oi-row .k{font-family:var(--font-mono);font-size:10px;letter-spacing:0.05em;text-transform:uppercase;color:var(--ink-2);}
+.oi-row .v{font-family:var(--font-mono);font-size:11px;text-align:right;color:var(--ink-3);}
+.oi-track{position:relative;height:8px;background:var(--surf-2);border-radius:4px;overflow:hidden;}
+.oi-mid{position:absolute;left:50%;top:-2px;bottom:-2px;width:1px;background:var(--ink-4);}
+.oi-fill{position:absolute;top:0;bottom:0;border-radius:4px;}
+.oi-fill.bull{background:var(--win);} .oi-fill.bear{background:var(--loss);}
+@media (max-width:900px){.oi-grid{grid-template-columns:1fr;}.oi-stats{grid-template-columns:repeat(2,minmax(0,1fr));}}
 .feed-empty{padding:32px 0;text-align:center;font-family:var(--font-mono);font-size:11px;color:var(--ink-4);letter-spacing:0.04em;text-transform:uppercase;}
 
 /* ── Modal ── */
@@ -617,7 +634,7 @@ html[data-theme="light"] .modal-card{box-shadow:0 24px 60px rgba(15,22,38,0.22);
   .modal-backdrop{padding:0;align-items:flex-end;}
   .modal-card,.bt-card{width:100%;max-height:92vh;border-radius:var(--r-xl) var(--r-xl) 0 0;animation:sheetUp .32s var(--ease-out) both;}
   .ring-svg{width:84px;height:84px;}
-  .feed{max-height:none;}
+  .feed{max-height:520px;}
   .sig-table{font-size:11px;}
   .sig-table th,.sig-table td{padding:8px 7px;}
   .status{position:static;}
@@ -883,9 +900,10 @@ html,body{background:var(--bg-base)!important;color:var(--ink-1)!important;trans
     } catch(e){ document.documentElement.setAttribute('data-theme','light'); }
   </script>
 
-  <script crossOrigin="anonymous" src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-  <script crossOrigin="anonymous" src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script crossOrigin="anonymous" src="https://unpkg.com/react@18.3.1/umd/react.production.min.js"></script>
+  <script crossOrigin="anonymous" src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js"></script>
+  <!-- Pinned: unpinned Babel resolves to v8, which blanks the page. -->
+  <script src="https://unpkg.com/@babel/standalone@7.24.7/babel.min.js"></script>
 
   <script type="text/babel" data-presets="env,react">
     const { useState, useEffect, useMemo, useRef, useCallback } = React;
@@ -982,6 +1000,15 @@ html,body{background:var(--bg-base)!important;color:var(--ink-1)!important;trans
       return 'NIFTY';
     }
 
+    const STRAT_NAMES = {
+      conductor: 'Conductor · 5-dim confluence', auto: 'Auto · regime router',
+      v2: 'v2 · Trend-Momentum', scalper: 'Scalper', scalper_v3: 'Scalper v3',
+      reverter: 'Reverter · mean reversion', orb: 'Opening range breakout',
+    };
+    const stratLabel = (s) => STRAT_NAMES[s] || (s ? s.replace(/_/g, ' ') : 'strategy not set');
+    // Same rule as get_perf() on the server: a trailed exit is a win.
+    const isWinResult = (r) => r === 'WIN' || r === 'T1' || r === 'T2' || r === 'TRAIL';
+
     function todayISO() {
       const d = new Date();
       return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
@@ -1072,7 +1099,7 @@ html,body{background:var(--bg-base)!important;color:var(--ink-1)!important;trans
     // ─────────────────────────────────────────────────────────
     // Status bar
     // ─────────────────────────────────────────────────────────
-    function StatusBar({ engineState, clock, theme, onToggleTheme, userName, onProfileClick, onTrip, onReset, onOpenBacktest, busy }) {
+    function StatusBar({ engineState, strategy, clock, theme, onToggleTheme, userName, onProfileClick, onTrip, onReset, onOpenBacktest, busy }) {
       const isLive = engineState === 'LIVE';
       const isOff  = engineState === 'OFF';
 
@@ -1082,7 +1109,7 @@ html,body{background:var(--bg-base)!important;color:var(--ink-1)!important;trans
             <div className="logo">I</div>
             <div className="brand-block">
               <div className="brand-name">Intraday <em>Engine</em></div>
-              <div className="brand-tag">v2 · Trend-Momentum</div>
+              <div className="brand-tag">{stratLabel(strategy)}</div>
             </div>
           </div>
 
@@ -1100,8 +1127,8 @@ html,body{background:var(--bg-base)!important;color:var(--ink-1)!important;trans
           <div className="pings">
             {isLive && <Ping kind="ok"  dot label="ENGINE" value="LIVE"/>}
             {!isLive && !isOff && <Ping kind="warn" dot label="ENGINE" value="IDLE"/>}
-            {isOff  && <Ping kind="muted" label="ENGINE" value="OFF"/>}
-            <Ping kind="info" dot label="STRAT" value="V2"/>
+            {isOff  && <Ping kind="warn" dot label="ENGINE" value="OFF"/>}
+            <Ping kind="info" dot label="STRAT" value={(strategy || '—').toUpperCase()}/>
           </div>
 
           <div className="divide"/>
@@ -1328,21 +1355,21 @@ html,body{background:var(--bg-base)!important;color:var(--ink-1)!important;trans
     // ─────────────────────────────────────────────────────────
     // Positions section
     // ─────────────────────────────────────────────────────────
-    function PositionsSection({ positions }) {
+    function PositionsSection({ positions, running }) {
       if (!positions || positions.length === 0) {
         return (
           <section className="positions">
             <div className="positions-head">
               <span className="title">Open positions <span className="count">0</span></span>
-              <span className="meta">No active trades · <b>scanning</b></span>
+              <span className="meta">No active trades · <b>{running ? 'scanning' : 'engine off'}</b></span>
             </div>
-            <div className="positions-grid" data-count="1">
-              <div className="pos-card" style={{alignItems:'center',justifyContent:'center',textAlign:'center',minHeight:200}}>
+            <div className="positions-grid">
+              <div className="pos-card" style={{alignItems:'center',justifyContent:'center',textAlign:'center',minHeight:120}}>
                 <div style={{fontFamily:'var(--font-display)',fontSize:24,fontWeight:600,color:'var(--ink-1)'}}>
                   No <em style={{fontFamily:'var(--font-italic)',color:'var(--accent)',fontStyle:'italic'}}>open positions.</em>
                 </div>
                 <div style={{fontFamily:'var(--font-mono)',fontSize:10.5,letterSpacing:'0.05em',color:'var(--ink-3)',textTransform:'uppercase',marginTop:8}}>
-                  Engine watching markets
+                  {running ? 'Engine watching markets' : 'Engine starts 08:45 IST on trading days'}
                 </div>
                 <div className="edge"/>
               </div>
@@ -1386,7 +1413,7 @@ html,body{background:var(--bg-base)!important;color:var(--ink-1)!important;trans
               <span className="num">01</span>
               <span>Session P&amp;L</span>
             </div>
-            <Ping kind="muted" label="9:15 → NOW"/>
+            <Ping kind="muted" label="Today · after costs"/>
           </div>
 
           <div className={'pnl-big ' + (isWin?'win':'loss')}>
@@ -1435,11 +1462,12 @@ html,body{background:var(--bg-base)!important;color:var(--ink-1)!important;trans
     // ─────────────────────────────────────────────────────────
     // Win-rate tile
     // ─────────────────────────────────────────────────────────
-    function WinRateTile({ wins, losses, winRate, streak, expectancy, last10 }) {
+    function WinRateTile({ wins, losses, total, winRate, streak, expectancy, last10 }) {
       const C = 2 * Math.PI * 45;
       const off = C * (1 - (winRate||0) / 100);
       const recent = last10 || [];
-      const closed = wins + losses;
+      const closed = total || (wins + losses);
+      const scratches = Math.max(0, closed - wins - losses);
       return (
         <div className="tile t-wide-tall">
           <div className="tile-head">
@@ -1469,8 +1497,9 @@ html,body{background:var(--bg-base)!important;color:var(--ink-1)!important;trans
             <div className="ring-stats" style={{gap:8}}>
               <div className="ring-row"><span className="l">Wins</span><span className="v win">{wins||0}</span></div>
               <div className="ring-row"><span className="l">Losses</span><span className="v loss">{losses||0}</span></div>
+              <div className="ring-row"><span className="l">Scratches</span><span className="v">{scratches}</span></div>
               <div className="ring-row"><span className="l">Streak</span><span className={'v ' + (streak>0?'win':streak<0?'loss':'')}>{streak>0?'+'+streak+'W':streak<0?streak+'L':'—'}</span></div>
-              <div className="ring-row"><span className="l">Expectancy</span><span className={'v ' + (expectancy>=0?'win':'loss')}>{fmtINR(expectancy||0, true)}</span></div>
+              <div className="ring-row"><span className="l">Net / trade</span><span className={'v ' + (expectancy>=0?'win':'loss')}>{fmtINR(expectancy||0, true)}</span></div>
             </div>
           </div>
 
@@ -1534,28 +1563,20 @@ html,body{background:var(--bg-base)!important;color:var(--ink-1)!important;trans
     // ─────────────────────────────────────────────────────────
     // Strategy tile
     // ─────────────────────────────────────────────────────────
-    function StrategyTile({ diag }) {
-      // diag is the v2-diag response. Pick the most recent decision across
-      // any instrument that has long_checks/short_checks.
-      let recent = null;
-      let recentInst = null;
-      if (diag && diag.decisions) {
-        for (const inst of Object.keys(diag.decisions)) {
-          const arr = diag.decisions[inst];
-          if (arr && arr.length > 0) {
-            const last = arr[arr.length-1];
-            if (!recent || (last.ts > recent.ts)) { recent = last; recentInst = inst; }
-          }
-        }
-      }
-      const checks = recent ? (recent.long_score >= recent.short_score ? recent.long_checks : recent.short_checks) : null;
-      const score = recent ? Math.max(recent.long_score||0, recent.short_score||0) : 0;
-      const total = checks ? Object.keys(checks).length : 6;
-      // Display top 4 checks
-      const items = checks ? Object.entries(checks).slice(0, 4) : [
-        ['VWAP', false], ['RSI', false], ['EMA', false], ['Range', false]
-      ];
+    const VERDICT_TEXT = {
+      TAKE: 'Signal fired', BEFORE_WINDOW: 'Before entry window', AFTER_WINDOW: 'Entry window closed',
+      AFTER_LATEST_ENTRY: 'Past last entry', INSUFFICIENT_CONFLUENCE: 'Not enough confluence',
+      SINGLE_FAMILY_CONFLUENCE: 'One indicator family only', INSUFFICIENT_BARS: 'Warming up (bars)',
+      INSUFFICIENT_TODAY_BARS: 'Warming up (today)', RR_BELOW_MIN: 'Reward:risk too low',
+      ADX_TOO_LOW: 'No trend (ADX low)', ATR_TOO_LOW: 'Too quiet (ATR low)', WEAK_VOLUME: 'Weak volume',
+      RANGE_TOO_TIGHT: 'Range too tight', NO_TRIGGER: 'No trigger', BAD_TIMESTAMP: 'Bad candle data',
+    };
+    const verdictText = (v) => VERDICT_TEXT[v] || (v ? v.replace(/_/g, ' ').toLowerCase() : '—');
 
+    function StrategyTile({ strategy, status }) {
+      const diag = (status && status.signal_diag) || {};
+      const disp = (status && status.dispatch) || {};
+      const insts = Object.keys(diag);
       return (
         <div className="tile t-md">
           <div className="tile-head">
@@ -1563,16 +1584,100 @@ html,body{background:var(--bg-base)!important;color:var(--ink-1)!important;trans
               <span className="num">06</span>
               <span>Strategy</span>
             </div>
-            <span className="strat-tag">V2</span>
+            <span className="strat-tag">{(disp.actually_ran || strategy || '—').toUpperCase()}</span>
           </div>
-          <div className="strat-name"><em>Trend-Momentum</em> · {score}-of-{total}</div>
+          <div className="strat-name"><em>{stratLabel(strategy)}</em></div>
           <div className="confluence">
-            {items.map(([key, ok], idx) => (
-              <div key={idx} className={'conf-cell ' + (ok?'':'off')}>
-                <span className="k">{key}</span>
-                <div className="v">{ok?'✓':'·'} {ok?'ok':'wait'}</div>
+            {insts.length === 0 && (
+              <div className="conf-cell off" style={{gridColumn:'span 2'}}>
+                <span className="k">Last scan</span><div className="v">· none yet today</div>
               </div>
-            ))}
+            )}
+            {insts.map(k => {
+              const d = diag[k] || {};
+              return (
+                <div key={k} className={'conf-cell ' + (d.verdict === 'TAKE' ? '' : 'off')} style={{gridColumn:'span 2'}}>
+                  <span className="k">{k} · scan {String(d.scan_at || '').slice(0, 10) === todayISO() ? '' : String(d.scan_at || '').slice(5, 10) + ' '}{String(d.scan_at || '').slice(11, 16) || '—'}</span>
+                  <div className="v">{verdictText(d.verdict)}</div>
+                </div>
+              );
+            })}
+            {disp.error && (
+              <div className="conf-cell" style={{gridColumn:'span 2', background:'var(--loss-soft)', borderColor:'var(--loss-border)'}}>
+                <span className="k">Dispatch error</span><div className="v">{String(disp.error).slice(0, 60)}</div>
+              </div>
+            )}
+          </div>
+          <div className="edge"/>
+        </div>
+      );
+    }
+
+    // ─────────────────────────────────────────────────────────
+    // Options flow tile: the OI read attached to the latest signal
+    // ─────────────────────────────────────────────────────────
+    const OI_FACTORS = [
+      ['oi_wall', 'OI wall'], ['oi_velocity', 'OI velocity'], ['pcr_vol', 'PCR (volume)'],
+      ['iv_skew', 'IV skew'], ['max_pain', 'Max pain pull'],
+    ];
+    function OptionsFlowTile({ alerts }) {
+      const a = (alerts || []).find(x => x && x.signal && x.signal.intel);
+      if (!a) {
+        return (
+          <div className="tile t-full">
+            <div className="tile-head">
+              <div className="lbl"><span className="num">10</span><span>Options flow · OI</span></div>
+            </div>
+            <div className="oi-empty">No signal with an option-chain read yet.</div>
+            <div className="edge"/>
+          </div>
+        );
+      }
+      const intel = a.signal.intel || {};
+      const f = intel.signals || {};
+      const ind = a.signal.indicators || {};
+      const flow = ind.flow_note || '';
+      const pcr = (flow.match(/PCR\s+([\d.]+)/) || [])[1];
+      const shift = (flow.match(/shift\s+([A-Z_]+)/) || (intel.summary || '').match(/OI_shift=([A-Z_]+)/) || [])[1];
+      const g = intel.greeks || {};
+      const ceIv = g.atm_ce && g.atm_ce.iv, peIv = g.atm_pe && g.atm_pe.iv;
+      const gex = intel.gex || {};
+      const stale = a.date !== todayISO();
+      const dir = (intel.dir_score || 0) >= 0 ? 'LONG' : 'SHORT';
+      return (
+        <div className="tile t-full">
+          <div className="tile-head">
+            <div className="lbl"><span className="num">10</span><span>Options flow · OI</span></div>
+            <span className="right-meta">
+              {a.instrument} · {stale ? a.date.slice(5) + ' ' : ''}{String(a.iso_ts || '').slice(11, 16)}
+              {stale ? ' · last signal, not live' : ' · at last signal'}
+            </span>
+          </div>
+          <div className="oi-grid">
+            <div className="oi-stats">
+              <div><span className="k">Gate</span><b className={intel.gate === 'PASS' ? 'win' : 'loss'}>{intel.gate || '—'}</b></div>
+              <div><span className="k">Flow leans</span><b className={dir === 'LONG' ? 'win' : 'loss'}>{dir} {Math.abs(intel.dir_score || 0).toFixed(2)}</b></div>
+              <div><span className="k">PCR</span><b>{pcr || '—'}</b></div>
+              <div><span className="k">OI shift</span><b>{shift ? shift.replace(/_/g, ' ').toLowerCase() : '—'}</b></div>
+              <div><span className="k">ATM IV CE / PE</span><b>{ceIv ? (ceIv * 100).toFixed(1) : '—'} / {peIv ? (peIv * 100).toFixed(1) : '—'}%</b></div>
+              <div><span className="k">GEX</span><b>{gex.regime || '—'}{gex.net != null ? ' · ' + Math.round(gex.net) : ''}</b></div>
+            </div>
+            <div className="oi-bars">
+              {OI_FACTORS.map(([k, label]) => {
+                const v = Math.max(-1, Math.min(1, +f[k] || 0));
+                return (
+                  <div key={k} className="oi-row">
+                    <span className="k">{label}</span>
+                    <div className="oi-track">
+                      <div className="oi-mid"/>
+                      <div className={'oi-fill ' + (v >= 0 ? 'bull' : 'bear')}
+                           style={{left: v >= 0 ? '50%' : (50 + v * 50) + '%', width: Math.abs(v) * 50 + '%'}}/>
+                    </div>
+                    <span className={'v ' + (v > 0 ? 'win' : v < 0 ? 'loss' : '')}>{v > 0 ? 'bull ' : v < 0 ? 'bear ' : ''}{Math.abs(v).toFixed(2)}</span>
+                  </div>
+                );
+              })}
+            </div>
           </div>
           <div className="edge"/>
         </div>
@@ -1611,17 +1716,14 @@ html,body{background:var(--bg-base)!important;color:var(--ink-1)!important;trans
     // ─────────────────────────────────────────────────────────
     function TelemetryTile({ metrics }) {
       const m = metrics || {};
-      const eng = m.metrics_today || {};
+      const day = m.metrics_today || {};
+      const stale = day.date && day.date !== m.date;
       const cache = (m.cache || {}).candles || {};
       const ant = (m.cache || {}).anthropic || {};
-      const scans = eng.scans || 0;
-      const apiCalls = eng.api_calls || (eng.angel_calls || 0);
-      const cacheHit = cache.hit_rate != null ? Math.round(cache.hit_rate) : (cache.hit_rate_pct || 0);
-      const aiCalls = ant.calls || 0;
-      const spend = ant.spend_usd != null ? ant.spend_usd : (ant.cost_usd || 0);
+      const budget = m.ai_budget || {};
       const byL = ant.by_layer || {};
-      const layers = ['A','B','C','D','E'];
-      const total = layers.reduce((s, L) => s + (byL[L]||0), 0) || 1;
+      const layers = [['regime', 'A'], ['validation', 'B'], ['eod', 'C'], ['inflight', 'D']];
+      const total = layers.reduce((s, [k]) => s + ((byL[k] || {}).calls || 0), 0) || 1;
       return (
         <div className="tile t-md">
           <div className="tile-head">
@@ -1629,34 +1731,34 @@ html,body{background:var(--bg-base)!important;color:var(--ink-1)!important;trans
               <span className="num">08</span>
               <span>Telemetry</span>
             </div>
-            <span className="right-meta">scan #{scans}</span>
+            <span className="right-meta">{stale ? 'last session ' + String(day.date).slice(5) : 'today'}</span>
           </div>
           <div className="tlm-grid">
             <div>
-              <span className="tlm-k">API calls</span>
-              <div className="tlm-v">{apiCalls.toLocaleString('en-IN')}</div>
+              <span className="tlm-k">Scans</span>
+              <div className="tlm-v">{(day.scans_total || 0).toLocaleString('en-IN')}</div>
             </div>
             <div>
-              <span className="tlm-k">Cache hit</span>
-              <div className="tlm-v win">{cacheHit}%</div>
+              <span className="tlm-k">Signals · alerted</span>
+              <div className="tlm-v">{day.signals_generated || 0} · {day.signals_alerted || 0}</div>
             </div>
             <div>
-              <span className="tlm-k">AI calls</span>
-              <div className="tlm-v">{aiCalls}</div>
+              <span className="tlm-k">Candle cache hit</span>
+              <div className="tlm-v win">{cache.hit_rate_pct != null ? cache.hit_rate_pct : 0}%</div>
             </div>
             <div>
-              <span className="tlm-k">Spend</span>
-              <div className="tlm-v">${Number(spend||0).toFixed(2)}</div>
+              <span className="tlm-k">AI spend · {budget.month || 'month'}</span>
+              <div className={'tlm-v ' + (budget.blocked ? 'loss' : '')}>₹{Math.round(budget.spent_inr || 0)} / ₹{Math.round(budget.cap_inr || 0)}</div>
             </div>
           </div>
           <div className="tlm-bar">
-            {layers.map(L => (
-              <div key={L} className={'seg ' + L.toLowerCase()} style={{flex: (byL[L]||0) / total}}/>
+            {layers.map(([k, L]) => (
+              <div key={L} className={'seg ' + L.toLowerCase()} style={{flex: ((byL[k] || {}).calls || 0) / total}}/>
             ))}
           </div>
           <div className="tlm-legend">
-            {layers.map(L => (
-              <span key={L}><span className={'swatch ' + L.toLowerCase()}/>L{L} {byL[L]||0}</span>
+            {layers.map(([k, L]) => (
+              <span key={L}><span className={'swatch ' + L.toLowerCase()}/>L{L} {k} {(byL[k] || {}).calls || 0}</span>
             ))}
           </div>
           <div className="edge"/>
@@ -1723,7 +1825,7 @@ html,body{background:var(--bg-base)!important;color:var(--ink-1)!important;trans
         <div className="tile t-full">
           <div className="tile-head">
             <div className="lbl">
-              <span className="num">10</span>
+              <span className="num">11</span>
               <span>Today · trade activity</span>
             </div>
             <div className="timeline-legend">
@@ -1851,46 +1953,53 @@ html,body{background:var(--bg-base)!important;color:var(--ink-1)!important;trans
     // AI inflight feed — derived from engine alerts
     // ─────────────────────────────────────────────────────────
     function AiFeedPanel({ alerts }) {
+      const today = todayISO();
       const items = (alerts || []).slice(0, 40).map(a => {
-        // alerts may be strings or { ts, msg, layer }
-        if (typeof a === 'string') {
-          // Try to parse "HH:MM:SS · MSG"
-          const m = a.match(/^(\d{2}:\d{2}:\d{2})\s*[·\-]\s*(.+)$/);
-          const time = m ? m[1] : '';
-          const msg = m ? m[2] : a;
-          return { time, layer: 'D', kind: 'MONITOR', msg };
-        }
+        if (typeof a === 'string') return { date: '', time: '', verdict: 'NOTE', msg: a };
+        const ai = a.ai || {}, sig = a.signal || {}, opt = a.option || {};
         return {
-          time: a.ts || a.time || '',
-          layer: a.layer || 'D',
-          kind: (a.kind || 'MONITOR').toUpperCase(),
-          msg: a.msg || a.message || ''
+          date: a.date || String(a.iso_ts || '').slice(0, 10),
+          time: a.time || String(a.iso_ts || '').slice(11, 16),
+          verdict: (ai.verdict || 'NO AI').toUpperCase(),
+          head: [a.instrument, opt.action, opt.strike].filter(Boolean).join(' ')
+                + (sig.confidence != null ? ' · conf ' + sig.confidence : ''),
+          msg: ai.reasoning || ai.risk_note || '',
         };
       });
+      const todayN = items.filter(f => f.date === today).length;
+      let lastDate = null;
       return (
         <div className="panel">
           <div className="panel-head">
             <div>
-              <div className="panel-title">AI <em>inflight</em></div>
-              <div className="panel-sub">Claude commentary · 5 layers</div>
+              <div className="panel-title">AI <em>signal journal</em></div>
+              <div className="panel-sub">Layer B verdicts · {todayN} today · {items.length} recent</div>
             </div>
           </div>
           {items.length === 0 ? (
-            <div className="feed-empty">No commentary yet · waiting for engine</div>
+            <div className="feed-empty">No signals reviewed yet</div>
           ) : (
             <div className="feed">
-              {items.map((f, i) => (
-                <div key={i} className="feed-item">
-                  <div className="feed-time">
-                    {String(f.time).slice(0,5)}<br/>
-                    <span className={'layer ' + String(f.layer).toLowerCase()}>L{f.layer}</span>
-                  </div>
-                  <div className="feed-msg">
-                    <span className="kind">{f.kind}</span>
-                    {f.msg}
-                  </div>
-                </div>
-              ))}
+              {items.map((f, i) => {
+                const sep = f.date !== lastDate;
+                lastDate = f.date;
+                const ok = f.verdict === 'TAKE';
+                return (
+                  <React.Fragment key={i}>
+                    {sep && <div className="feed-day">{f.date === today ? 'Today' : f.date}</div>}
+                    <div className="feed-item">
+                      <div className="feed-time">
+                        {f.time}<br/>
+                        <span className={'layer ' + (ok ? 'b' : 'd')}>{f.verdict}</span>
+                      </div>
+                      <div className="feed-msg">
+                        <span className="kind">{f.head}</span>
+                        <div>{f.msg}</div>
+                      </div>
+                    </div>
+                  </React.Fragment>
+                );
+              })}
             </div>
           )}
         </div>
@@ -2451,7 +2560,6 @@ html,body{background:var(--bg-base)!important;color:var(--ink-1)!important;trans
       const [perfData]   = usePoll('/api/performance', 12000, { enabled: !needsSetup });
       const [ltpData]    = usePoll('/api/ltp', 6000, { enabled: !needsSetup });
       const [historyData] = usePoll('/api/history?limit=50&date=' + todayISO(), 15000, { enabled: !needsSetup });
-      const [diagData]   = usePoll('/api/v2-diag', 20000, { enabled: !needsSetup });
       const [metricsData] = usePoll('/api/metrics', 15000, { enabled: !needsSetup });
 
       // Index sparkline buffers (in-memory ring)
@@ -2485,14 +2593,14 @@ html,body{background:var(--bg-base)!important;color:var(--ink-1)!important;trans
       // Derived perf
       const perfAll = perfData || {};
       const todayClosed = todaySignals.filter(s => s.status === 'CLOSED');
-      const todayWins = todayClosed.filter(s => s.result === 'WIN' || s.result === 'T1' || s.result === 'T2');
+      const todayWins = todayClosed.filter(s => isWinResult(s.result));
       const todayLosses = todayClosed.filter(s => s.result === 'LOSS');
 
       // Signed P&L per row + cumulative equity curve
       const sgn = (s) => {
         const raw = (s.pnl_rupees_net != null ? +s.pnl_rupees_net : +s.pnl_rupees) || 0;
         if (s.result === 'LOSS') return -Math.abs(raw);
-        if (s.result === 'WIN' || s.result === 'T1' || s.result === 'T2') return Math.abs(raw);
+        if (isWinResult(s.result)) return Math.abs(raw);
         return raw;
       };
       const equityCurve = useMemo(() => {
@@ -2515,22 +2623,24 @@ html,body{background:var(--bg-base)!important;color:var(--ink-1)!important;trans
       const realized = todayClosed.reduce((a, s) => a + sgn(s), 0);
       const unrealized = openSignals.reduce((a, s) => a + (+s.pnl_now || 0), 0);
       const perfNet = realized + unrealized;
-      const perfGross = perfNet;
-      const brokerage = perfAll.total_brokerage || 0;
-      const slippage = perfAll.total_slippage || 0;
+      // Costs for TODAY's closed rows. This tile used to show all-time
+      // brokerage/slippage next to today's P&L.
+      const brokerage = todayClosed.reduce((a, s) => a + (+s.brokerage_rs || 0), 0);
+      const slippage = todayClosed.reduce((a, s) => a + (+s.slippage_rs || 0), 0);
+      const perfGross = perfNet + brokerage + slippage;
 
       // Win rate (all-time, from /api/performance)
       const winsAll = perfAll.wins || 0;
       const lossesAll = perfAll.losses || 0;
-      const closedAll = winsAll + lossesAll;
-      const winRate = perfAll.win_rate != null ? perfAll.win_rate : (closedAll ? (winsAll/closedAll)*100 : 0);
+      const closedAll = perfAll.total || (winsAll + lossesAll);
+      const winRate = closedAll ? (winsAll/closedAll)*100 : 0;
 
       // Streak: count consecutive same-result from most recent closed
       const streak = useMemo(() => {
         if (!Array.isArray(historyData) || historyData.length === 0) return 0;
-        const closed = historyData.filter(s => s.status === 'CLOSED' && (s.result === 'WIN' || s.result === 'T1' || s.result === 'T2' || s.result === 'LOSS'));
+        const closed = historyData.filter(s => s.status === 'CLOSED' && (isWinResult(s.result) || s.result === 'LOSS'));
         if (closed.length === 0) return 0;
-        const isWin = (r) => r === 'WIN' || r === 'T1' || r === 'T2';
+        const isWin = isWinResult;
         const firstWin = isWin(closed[0].result);
         let n = 0;
         for (const s of closed) {
@@ -2543,17 +2653,14 @@ html,body{background:var(--bg-base)!important;color:var(--ink-1)!important;trans
       // Last 10 trades (1=win 0=loss) for win-rate tile
       const last10 = useMemo(() => {
         if (!Array.isArray(historyData)) return [];
-        const closed = historyData.filter(s => s.status === 'CLOSED' && (s.result === 'WIN' || s.result === 'T1' || s.result === 'T2' || s.result === 'LOSS')).slice(0, 10).reverse();
+        const closed = historyData.filter(s => s.status === 'CLOSED' && (isWinResult(s.result) || s.result === 'LOSS')).slice(0, 10).reverse();
         return closed.map(s => (s.result === 'LOSS' ? 0 : 1));
       }, [historyData]);
 
       // Expectancy
-      const expectancy = useMemo(() => {
-        if (!closedAll) return 0;
-        const avgWin  = perfAll.avg_win || 0;
-        const avgLoss = perfAll.avg_loss || 0;
-        return (winRate/100) * avgWin + ((100-winRate)/100) * avgLoss;
-      }, [perfAll, winRate, closedAll]);
+      // Net rupees per closed trade, scratches included. The old formula
+      // weighted avg win/loss by a win rate that left time-stops out.
+      const expectancy = closedAll ? (perfAll.total_pnl_net || 0) / closedAll : 0;
 
       // Deployed capital
       const deployed = useMemo(() => {
@@ -2588,8 +2695,15 @@ html,body{background:var(--bg-base)!important;color:var(--ink-1)!important;trans
         const day = ist.getDay();
         const isWeekday = day >= 1 && day <= 5;
         const marketOpen = isWeekday && ((hh > 9) || (hh === 9 && mm >= 15)) && (hh < 16);
-        const preCutoff = marketOpen && (hh < 12 || (hh === 12 && mm < 30));
-        const tripped = eng.killswitch_tripped;
+        const mins = hh * 60 + mm;
+        // Conductor's entry window (CONDUCTOR_EARLIEST/LATEST in conductor.py).
+        const inWindow = isWeekday && mins >= 9*60+45 && mins < 14*60+30;
+        const windowNote = !isWeekday ? 'Weekend' : mins < 9*60+45 ? 'Opens 09:45' : mins < 14*60+30 ? '09:45 to 14:30' : 'Closed 14:30';
+        // The latch clears on the first scan of a new day; before that the
+        // flag still reflects the last session.
+        const today = m.metrics_today || {};
+        const fromLastSession = today.date && today.date !== m.date;
+        const tripped = eng.killswitch_tripped && !fromLastSession;
         // Recognized production strategies. The gate is green when a known
         // strategy is configured, and genuinely red only if it's unset or a
         // typo (which would silently fall back to v1 on the backend). It used
@@ -2599,10 +2713,10 @@ html,body{background:var(--bg-base)!important;color:var(--ink-1)!important;trans
                               'reverter','nifty_windows','deadzone_fade','patterns'];
         const strat = eng.strategy || '';
         return [
-          { label: 'Market open', ok: marketOpen, note: marketOpen ? 'In session' : 'Outside hours' },
-          { label: 'Pre-cutoff',  ok: preCutoff, note: preCutoff ? 'Before 12:30' : 'After 12:30' },
+          { label: 'Market open', ok: marketOpen, note: marketOpen ? 'In session' : (mins < 9*60+15 && isWeekday ? 'Opens 09:15' : 'Closed') },
+          { label: 'Entry window', ok: inWindow, note: windowNote },
           { label: 'Engine',      ok: eng.running, note: eng.running ? 'Running' : 'Stopped' },
-          { label: 'Kill-switch', ok: !tripped, note: tripped ? 'Tripped' : 'Clear' },
+          { label: 'Kill-switch', ok: !tripped, note: tripped ? 'Tripped' : (eng.killswitch_tripped ? 'Resets at open' : 'Clear') },
           { label: 'Strategy',    ok: KNOWN_STRATS.includes(strat), note: strat ? strat.replace(/_/g,' ') : 'not set' },
         ];
       }, [metricsData]);
@@ -2623,7 +2737,7 @@ html,body{background:var(--bg-base)!important;color:var(--ink-1)!important;trans
           const sym = head + ' ' + type;
           let kind = 'open';
           if (s.status === 'CLOSED') {
-            kind = (s.result === 'LOSS') ? 'loss' : (s.result==='WIN'||s.result==='T1'||s.result==='T2') ? 'win' : 'filter';
+            kind = (s.result === 'LOSS') ? 'loss' : isWinResult(s.result) ? 'win' : 'filter';
           }
           evs.push({
             t: minOffset, label: t.slice(0,5), sym,
@@ -2670,6 +2784,7 @@ html,body{background:var(--bg-base)!important;color:var(--ink-1)!important;trans
           <div className="page">
             <StatusBar
               engineState={engineState}
+              strategy={(metricsData && metricsData.engine && metricsData.engine.strategy) || (statusData && statusData.config && statusData.config.strategy)}
               clock={clock}
               theme={theme}
               onToggleTheme={toggleTheme}
@@ -2688,7 +2803,7 @@ html,body{background:var(--bg-base)!important;color:var(--ink-1)!important;trans
               dayCount={todayClosed.length}
             />
 
-            <PositionsSection positions={openSignals}/>
+            <PositionsSection positions={openSignals} running={!!(statusData && statusData.running)}/>
 
             {/* ── Hero band: headline P&L + win-rate ring ── */}
             <div className="hero-band">
@@ -2704,6 +2819,7 @@ html,body{background:var(--bg-base)!important;color:var(--ink-1)!important;trans
               <WinRateTile
                 wins={winsAll}
                 losses={lossesAll}
+                total={closedAll}
                 winRate={winRate}
                 streak={streak}
                 expectancy={expectancy}
@@ -2725,12 +2841,17 @@ html,body{background:var(--bg-base)!important;color:var(--ink-1)!important;trans
                 />
               ))}
               <CapitalTile capital={capital} deployed={deployed} positionsCount={openSignals.length}/>
-              <StrategyTile diag={diagData}/>
+              <StrategyTile strategy={statusData && statusData.config && statusData.config.strategy} status={statusData}/>
             </div>
 
             {/* ── Full-width regime gates ── */}
             <div className="strip">
               <RegimeTile regimeChecks={regimeChecks}/>
+            </div>
+
+            {/* ── Full-width OI read from the engine's options intel ── */}
+            <div className="strip">
+              <OptionsFlowTile alerts={alerts}/>
             </div>
 
             {/* ── Full-width session timeline ── */}

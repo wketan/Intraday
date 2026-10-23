@@ -38,8 +38,10 @@ COPY regime.py .
 COPY events.json .
 COPY swing_backfill.json .
 COPY swing_breadth_backfill.json .
+COPY signals_backfill.json .
 COPY index.html .
 COPY manifest.json .
+COPY logo.svg icon-180.png icon-192.png icon-512.png ./
 COPY start.sh .
 RUN chmod +x start.sh
 # Persistent data cache directory — gitignored locally but writable in container.
