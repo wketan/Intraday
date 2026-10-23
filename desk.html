@@ -466,11 +466,41 @@
 .stale b{font-weight:800}
 .note2{margin-top:10px;font-size:12.5px;color:var(--ink3);line-height:1.5}
 @media(max-width:1150px){.kpis.six{grid-template-columns:repeat(3,minmax(0,1fr))}}
-.plot{position:relative;height:300px}
-.plot svg{width:100%;height:100%;display:block;overflow:visible}
+.plot{position:relative;height:300px;width:100%}
+.plot svg{display:block;overflow:visible;max-width:100%}
 .plot .tipx{position:absolute;pointer-events:none;background:var(--pill);color:var(--pillink);font-size:12px;font-weight:700;border-radius:10px;padding:5px 9px;white-space:nowrap;transform:translate(-50%,-130%);opacity:0;transition:opacity .15s}
 .legend{display:flex;gap:16px;flex-wrap:wrap;font-size:12px;color:var(--ink3);font-weight:600;margin-top:4px}
 .legend i{display:inline-block;width:14px;height:3px;border-radius:2px;vertical-align:middle;margin-right:6px}
+.sigs{display:grid;grid-template-columns:repeat(auto-fill,minmax(380px,1fr));gap:16px}
+.scard{border-radius:28px;padding:20px 22px 18px;display:flex;flex-direction:column;gap:2px;min-width:0}
+.sc-top{display:flex;align-items:center;gap:10px}
+.sc-top .lbl{font-size:11px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:var(--ink3)}
+.sc-top .live{margin-left:auto;display:inline-flex;align-items:center;gap:7px;font-size:12px;font-weight:700;color:var(--ink2)}
+.sc-name{font-size:22px;font-weight:800;letter-spacing:-.03em;margin-top:10px}
+.sc-name .ot{font-size:13px;font-weight:800;border-radius:99px;padding:2px 10px;margin-left:6px;vertical-align:middle;background:var(--lav);color:var(--lav-i)}
+.sc-name .ot.pe{background:var(--blush);color:var(--blush-i)}.sc-name .ot.ce{background:var(--mint);color:var(--mint-i)}
+.sc-meta{font-size:12px;font-weight:600;color:var(--ink3);margin-top:2px}
+.sc-prices{display:flex;justify-content:space-between;align-items:flex-end;margin:16px 0 2px}
+.sc-prices .k{font-size:11px;font-weight:700;color:var(--ink3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:3px}
+.sc-prices .v{font-size:24px;font-weight:800;letter-spacing:-.03em;font-variant-numeric:tabular-nums}
+.sc-prices .r{text-align:right}.v.up{color:var(--good)}.v.dn{color:var(--bad)}
+.trk{position:relative;height:50px;margin:6px 0 4px}
+.trk .bar{position:absolute;top:22px;left:0;right:0;height:6px;border-radius:99px}
+.trk .tick{position:absolute;top:16px;width:2px;height:18px;border-radius:2px;background:var(--ink3);transform:translateX(-50%);opacity:.6}
+.trk .dot{position:absolute;top:25px;width:16px;height:16px;border-radius:50%;transform:translate(-50%,-50%);border:3px solid var(--surface);box-shadow:0 0 0 1.5px currentColor}
+.trk .lab,.trk .val{position:absolute;transform:translateX(-50%);white-space:nowrap;font-variant-numeric:tabular-nums}
+.trk .lab{top:0;font-size:10.5px;font-weight:800;letter-spacing:.05em;color:var(--ink3)}
+.trk .val{top:34px;font-size:12px;font-weight:700;color:var(--ink2)}
+.trk .l{transform:none}.trk .r{transform:translateX(-100%)}
+.sc-pnl{display:flex;justify-content:space-between;align-items:flex-end;padding-top:12px;margin-top:6px;border-top:1px solid var(--line)}
+.sc-pnl .k{font-size:11px;font-weight:700;color:var(--ink3);text-transform:uppercase;letter-spacing:.06em}
+.sc-pnl .v{font-size:22px;font-weight:800;letter-spacing:-.03em;font-variant-numeric:tabular-nums}
+.sc-pnl .v small{font-size:13px;margin-left:8px}
+.need{margin-top:12px;border-radius:18px;background:var(--surface2);padding:11px 14px;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.need div{display:flex;flex-direction:column;gap:1px;min-width:0}
+.need span{font-size:11px;font-weight:700;color:var(--ink3)}
+.need b{font-size:14.5px;font-weight:800;font-variant-numeric:tabular-nums}
+.sc-note{margin-top:10px;font-size:12.5px;color:var(--ink3);line-height:1.5}
 .thead.s5,.tr.s5{grid-template-columns:minmax(0,1.3fr) minmax(0,1.3fr) 110px 96px 96px}
 .thead.s4,.tr.s4{grid-template-columns:minmax(0,1.3fr) minmax(0,1.5fr) 110px 110px}
 .tr.static{cursor:default}.tr.static:hover{transform:none}
@@ -501,6 +531,7 @@
   .capbox input{width:84px}
   .bar{height:auto;flex-wrap:wrap}
   .tb .seg{order:2}
+  .tb .stamp{order:3;flex:1 1 100%}
 }
 </style>
 </head>
@@ -591,7 +622,10 @@
     const lastT = pts.length ? pts[pts.length - 1].t : '';
     const tickPts = live.filter(x => x.t > lastT).map(x => ({ t: x.t, c: x.p, h: x.p, l: x.p, live: true }));
     pts = pts.concat(tickPts);
-    const W = 1000, H = 300, P = { l: 8, r: 64, t: 14, b: 26 };
+    // Draw at the box's real pixel size so lines and labels are never stretched.
+    const box = document.getElementById('plot');
+    const W = Math.max(320, Math.round((box && box.clientWidth) || S.plotW || 1000)), H = window.innerWidth < 880 ? 220 : 300, P = { l: 4, r: 62, t: 14, b: 24 };
+    S.plotW = W;
     const lo = Math.min(...pts.map(p => p.l)), hi = Math.max(...pts.map(p => p.h)), span = hi - lo || 1;
     const X = i => P.l + i / Math.max(1, pts.length - 1) * (W - P.l - P.r);
     const Y = v => P.t + (1 - (v - lo) / span) * (H - P.t - P.b);
@@ -604,7 +638,10 @@
     let divider = '', labels = '';
     const firstToday = pts.findIndex(p => p.t.slice(0, 10) === today);
     if (firstToday > 0) divider = `<line x1="${X(firstToday)}" x2="${X(firstToday)}" y1="${P.t}" y2="${H - P.b}" stroke="var(--line2)" stroke-dasharray="4 5"/><text x="${X(firstToday) + 6}" y="${P.t + 10}" font-size="11" font-weight="700" fill="var(--ink3)">today</text>`;
-    pts.forEach((p, i) => { const t = p.t.slice(11, 16); if (['09:15', '11:00', '13:00', '15:00'].includes(t)) labels += `<text x="${X(i)}" y="${H - 6}" font-size="11" font-weight="600" fill="var(--ink3)" text-anchor="middle">${t}</text>`; });
+    // Time labels, skipping any that would sit closer than 48px to the previous one.
+    let lastX = -1e9;
+    pts.forEach((p, i) => { const t = p.t.slice(11, 16); if (!['09:15', '11:00', '13:00', '15:00'].includes(t) || p.live) return; const x = X(i); if (x - lastX < 48) return; lastX = x;
+      labels += `<text x="${x}" y="${H - 6}" font-size="11" font-weight="600" fill="var(--ink3)" text-anchor="${x < 20 ? 'start' : 'middle'}">${t}</text>`; });
     // Grid + price labels.
     let grid = '';
     for (let g = 0; g <= 3; g++) { const v = lo + span * g / 3; grid += `<line x1="${P.l}" x2="${W - P.r}" y1="${Y(v)}" y2="${Y(v)}" stroke="var(--line)"/><text x="${W - P.r + 8}" y="${Y(v) + 4}" font-size="11" font-weight="600" fill="var(--ink3)">${Math.round(v).toLocaleString('en-IN')}</text>`; }
@@ -618,11 +655,51 @@
     const last = pts[pts.length - 1];
     const up = (S.ltp && S.ltp.prices && S.ltp.prices[sym] && S.ltp.prices[sym].pct >= 0);
     const col = up ? 'var(--good)' : 'var(--bad)';
-    return `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="${esc(NAMES[sym])} price, five-minute closes">
+    return `<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="${esc(NAMES[sym])} price, five-minute closes">
       <defs><linearGradient id="ga" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="${col}" stop-opacity=".22"/><stop offset="1" stop-color="${col}" stop-opacity="0"/></linearGradient></defs>
-      ${grid}${divider}<path d="${area}" fill="url(#ga)"/><path d="${line}" fill="none" stroke="${col}" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke"/>
-      ${vw ? `<path d="${vw}" fill="none" stroke="var(--accent)" stroke-width="1.6" stroke-dasharray="5 5" vector-effect="non-scaling-stroke"/>` : ''}
+      ${grid}${divider}<path d="${area}" fill="url(#ga)"/><path d="${line}" fill="none" stroke="${col}" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round"/>
+      ${vw ? `<path d="${vw}" fill="none" stroke="var(--accent)" stroke-width="1.6" stroke-dasharray="5 5"/>` : ''}
       ${marks}<circle cx="${X(pts.length - 1)}" cy="${Y(last.c)}" r="4.5" fill="${col}"/>${labels}</svg>`;
+  }
+
+  // ── signal card (same anatomy as console.html PositionCard) ──────────
+  function signalCard(c, i) {
+    const { label, live, inst, strike, typ, dir, lots, lotSize, conf, tIn, entry, sl, t1, t2, cur, curLabel, pnl, status, statusPal, note, idea } = c;
+    const qty = (lots || 1) * (lotSize || 0);
+    const a = Math.min(sl || entry, entry, cur || entry), b = Math.max(t2 || t1 || entry, cur || entry), span = (b - a) || 1;
+    const P = x => Math.max(0, Math.min(100, ((x - a) / span) * 100));
+    const enP = P(entry), t1P = P(t1 || entry), curP = P(cur || entry);
+    const up = (cur || entry) >= entry, pct = entry ? ((cur || entry) - entry) / entry * 100 : 0;
+    const grad = `linear-gradient(90deg,var(--bad) 0%,var(--bad) ${(enP * .5).toFixed(0)}%,var(--butter-i) ${enP.toFixed(0)}%,var(--good) ${t1P.toFixed(0)}%,var(--sky-i) 100%)`;
+    const sz = sizeFor(entry, sl, lotSize);
+    const lotCost = entry * (lotSize || 0);
+    const near = (p1, p2) => Math.abs(p1 - p2) < 9;   // keep labels from overlapping
+    return `<div class="scard glass pop" style="--i:${i + 10}">
+      <div class="sc-top"><span class="lbl">${esc(label)}</span><span class="live"><span class="dot ${live ? '' : 'off'}"></span>${esc(live || 'closed')}</span></div>
+      <div class="sc-name">${esc(inst)} ${esc(strike ? Math.round(strike) : '')}<span class="ot ${String(typ).toLowerCase()}">${esc(typ)}</span></div>
+      <div class="sc-meta">${String(typ).toUpperCase() === 'PE' ? 'Buy put · expects ' + esc(inst) + ' to fall' : 'Buy call · expects ' + esc(inst) + ' to rise'} · ${esc(lots || 1)} lot · ${esc(qty)} qty · conf ${esc(conf != null ? conf : '-')} · ${tIn ? 'entered ' + esc(tIn) + ' IST' : ''}</div>
+      <div class="sc-prices"><div><div class="k">Entry</div><div class="v">₹${num(entry, 1)}</div></div>
+        <div class="r"><div class="k">${esc(curLabel)}</div><div class="v ${cur ? (up ? 'up' : 'dn') : ''}">${cur ? '₹' + num(cur, 1) : '-'}</div></div></div>
+      <div class="trk">
+        <span class="lab l" style="left:0">SL</span><span class="lab" style="left:${enP}%">ENTRY</span>${near(t1P, 100) ? '' : `<span class="lab" style="left:${t1P}%">T1</span>`}<span class="lab r" style="left:100%">T2</span>
+        <div class="bar" style="background:${grad}"></div>
+        <span class="tick" style="left:${enP}%"></span><span class="tick" style="left:${t1P}%"></span>
+        ${cur ? `<span class="dot" style="left:${curP}%;color:var(--${up ? 'good' : 'bad'});background:var(--${up ? 'good' : 'bad'})"></span>` : ''}
+        <span class="val l" style="left:0">₹${num(sl, 0)}</span><span class="val" style="left:${enP}%">₹${num(entry, 0)}</span>${near(t1P, 100) || near(t1P, enP) ? '' : `<span class="val" style="left:${t1P}%">₹${num(t1, 0)}</span>`}<span class="val r" style="left:100%">₹${num(t2, 0)}</span>
+      </div>
+      <div class="sc-pnl"><div><div class="k">${idea ? 'Per lot, if taken at entry' : (status === 'running' ? 'P&L · unrealised' : 'P&L')}</div>
+        <div class="v ${pnl > 0 ? 'up' : pnl < 0 ? 'dn' : ''}">${inr(pnl, true)}<small class="${up ? 'v up' : 'v dn'}">${pct >= 0 ? '+' : ''}${pct.toFixed(1)}%</small></div></div>
+        <span class="tag" style="background:var(--${statusPal});color:var(--${PAL[statusPal]})">${esc(status)}</span></div>
+      <div class="need">
+        <div><span>1 lot needs</span><b>${inr(lotCost)}</b></div>
+        <div><span>Lost at SL, 1 lot</span><b>${inr((entry - sl) * (lotSize || 0))}</b></div>
+        <div><span>Your ${inr(capital)} fits</span><b>${sz ? sz.lots + ' lot' + (sz.lots === 1 ? '' : 's') : '-'}</b></div>
+      </div>
+      ${sz && !sz.lots ? `<div class="sc-note">${lotCost <= capital * MAX_CAP_PCT
+        ? `You can afford 1 lot (${Math.round(lotCost / capital * 100)}% of your money), but if SL hits you lose ${inr((entry - sl) * (lotSize || 0))}, which is ${((entry - sl) * (lotSize || 0) / capital * 100).toFixed(1)}% of your capital. Your rule allows 1% (${inr(capital * RISK_PCT)}); 1 lot fits that rule from about ${inr(sz.need)} of capital.`
+        : `1 lot costs ${inr(lotCost)}, more than half of your ${inr(capital)}.`}</div>` : ''}
+      ${note ? `<div class="sc-note">${note}</div>` : ''}
+    </div>`;
   }
 
   // ── swing holding guide ──────────────────────────────────────────────
@@ -782,42 +859,31 @@
         <div class="lab">${esc(NAMES[k])}</div><div class="val">${q.ltp ? num(q.ltp, 1) : '-'}</div>
         <div class="chgl">${q.pct != null ? (q.pct >= 0 ? '+' : '') + num(q.chg, 1) + ' · ' + (q.pct >= 0 ? '+' : '') + num(q.pct, 2) + '%' : ''}</div>${miniBars(k)}</div>`; }).join('');
 
-    // Signals + open positions table rows.
+    // Signal cards: open positions first, then today's closed signals, then the
+    // engine's latest idea if it isn't already one of those.
+    const cards = [];
+    open.forEach(o => {
+      const entry = +o.entry || 0, cur = +o.current_premium || entry;
+      cards.push({ label: 'Active position', live: 'live · ' + (o.t_in || ''), inst: o.instrument, strike: o.option_strike, typ: o.option_type, dir: o.direction, lots: o.lots, lotSize: o.lot_size, conf: o.confidence, tIn: o.t_in,
+        entry, sl: +o.sl, t1: +o.t1, t2: +o.t2, cur, curLabel: 'LTP · live', pnl: +o.pnl_now || 0, status: cur >= +o.t1 ? 'past T1' : (cur >= entry ? 'running' : 'watch'), statusPal: cur >= entry ? 'mint' : 'butter',
+        note: (() => { const t1v = +o.t1, prog = t1v > entry ? Math.round((cur - entry) / (t1v - entry) * 100) : null;
+          return `${o.pnl_peak != null ? `Peaked at ${inr(o.pnl_peak, true)} at ${esc(o.peak_time || '')} IST. ` : ''}${prog == null ? '' : cur >= t1v ? 'Past T1. ' : prog >= 0 ? prog + '% of the way from entry to T1. ' : 'Below entry. '}${cur > entry * 1.05 ? `Entering now is late: you would pay ₹${num(cur, 1)}, not ₹${num(entry, 1)}.` : ''}`; })() });
+    });
+    todays.filter(s => s.status !== 'OPEN').forEach(s => {
+      const entry = +s.option_entry || 0, ex = +s.option_exit || 0, win = WIN(s.result);
+      cards.push({ label: 'Closed today', live: '', inst: s.instrument, strike: s.option_strike, typ: s.option_type, dir: s.direction, lots: s.option_lots, lotSize: s.option_lot_size, conf: s.confidence, tIn: (s.timestamp || '').slice(11, 16),
+        entry, sl: +s.option_sl, t1: +s.option_target1, t2: +s.option_target2, cur: ex, curLabel: 'Exit ' + (s.exit_time || '').slice(11, 16) + ' IST', pnl: signedPnl(s),
+        status: (s.result || '').toLowerCase().replace('_', ' '), statusPal: win ? 'mint' : s.result === 'LOSS' ? 'blush' : 'butter', note: '' });
+    });
     const latestAlert = (st.alerts || [])[0];
-    const sigRows = open.map(o => ({ open: true, s: o })).concat(todays.filter(s => s.status !== 'OPEN').map(s => ({ open: false, s })));
-    const sigHtml = sigRows.map(({ open: isOpen, s }, i) => {
-      const inst = s.instrument || '?';
-      const strike = s.option_strike || s.strike, typ = s.option_type || s.type || '';
-      const entry = +(s.option_entry || s.entry || 0), sl = +(s.option_sl || s.sl || 0), lot = +(s.option_lot_size || s.lot_size || 0);
-      const t1 = +(s.option_target1 || s.t1 || 0), tIn = s.t_in || ((s.timestamp || '') + '').slice(11, 16);
-      const pnl = isOpen ? (+s.pnl_now || 0) : signedPnl(s);
-      const sz = sizeFor(entry, sl, lot);
-      const res = isOpen ? 'open' : (s.result || '').toLowerCase();
-      const resPal = isOpen ? 'sky' : WIN(s.result) ? 'mint' : s.result === 'LOSS' ? 'blush' : 'butter';
-      return `<div class="tr s5 static rise" style="--i:${i + 10}">
-        <div class="who">${av(inst[0], palOf(inst))}<div style="min-width:0">
-          <div class="short">/${esc(inst)} ${esc(strike ? Math.round(strike) : '')} ${esc(typ)}<span class="dot ${isOpen ? '' : 'off'}"></span><span class="tag" style="background:var(--${resPal});color:var(--${PAL[resPal]})">${esc(res)}</span></div>
-          <div class="meta"><span class="own">${tIn ? esc(tIn) + ' IST' : ''}</span>${s.confidence ? `<span class="chip">conf ${esc(s.confidence)}</span>` : ''}${s.direction ? `<span class="chip c">${esc(s.direction)}</span>` : ''}</div></div></div>
-        <div class="dest wrap2">Entry ₹${num(entry, 2)}${sl ? ` · SL ₹${num(sl, 2)}` : ''}${t1 ? ` · T1 ₹${num(t1, 2)}` : ''}${isOpen && s.current_premium ? `<span class="why">Now ₹${num(s.current_premium, 2)} · peak ₹${num(s.peak_premium, 2)} at ${esc(s.peak_time || '')} IST · ${esc(s.pct_to_t1 != null ? s.pct_to_t1 + '% of the way to T1' : '')}</span>` : ''}${!isOpen && s.option_exit ? `<span class="why">Exit ₹${num(s.option_exit, 2)} at ${esc((s.exit_time || '').slice(11, 16))} IST</span>` : ''}</div>
-        <div class="size">${sz ? `<b>${sz.lots} lot${sz.lots === 1 ? '' : 's'}</b>${sz.lots ? inr(sz.cost) + ' at your capital' : esc(sz.why)}` : ''}</div>
-        <div class="num ${pnl > 0 ? 'up' : pnl < 0 ? 'dn' : ''}">${inr(pnl, true)}</div>
-        <div class="num nall dim">${capital ? (pnl / capital * 100).toFixed(2) + '%' : ''}</div>
-      </div>`;
-    }).join('');
-
-    // Latest engine idea, sized for your capital (even when it fired on an earlier day).
-    let ideaHtml = '';
-    if (latestAlert && latestAlert.option) {
-      const o = latestAlert.option, sg = latestAlert.signal || {}, ai = latestAlert.ai || {};
-      const sz = sizeFor(o.entry, o.sl, o.lot_size);
-      const stale = latestAlert.date !== today;
-      ideaHtml = `<div class="tr s5 static rise" style="--i:9">
-        <div class="who">${av('★', 'lav')}<div style="min-width:0"><div class="short">${esc(o.action || '')} ${esc(Math.round(o.strike || 0))} ${esc(o.type || '')}<span class="tag a">${stale ? 'last signal' : 'latest'}</span></div>
-          <div class="meta"><span class="own">${esc(latestAlert.date)} ${esc((latestAlert.iso_ts || '').slice(11, 16))} IST</span><span class="chip">conf ${esc(sg.confidence_ai_adj || sg.confidence || '')}</span>${ai.verdict ? `<span class="chip c">AI ${esc(ai.verdict)}</span>` : ''}</div></div></div>
-        <div class="dest wrap2">Entry ₹${num(o.entry)} · SL ₹${num(o.sl)} · T1 ₹${num(o.target1)} · lot ${esc(o.lot_size)}<span class="why">${esc(ai.reasoning || '')}</span></div>
-        <div class="size">${sz ? `<b>${sz.lots} lot${sz.lots === 1 ? '' : 's'}</b>${sz.lots ? 'risk ' + inr(sz.risk) : esc(sz.why)}` : ''}</div>
-        <div class="num">${sz && sz.lots ? inr(sz.cost) : '-'}</div><div class="num nall dim">${sz && sz.lots ? (sz.cost / capital * 100).toFixed(0) + '%' : ''}</div></div>`;
+    const la = latestAlert && latestAlert.option ? latestAlert : null;
+    if (la && !cards.some(c => Math.round(c.strike) === Math.round(la.option.strike) && c.typ === la.option.type)) {
+      const o = la.option, sg = la.signal || {}, ai = la.ai || {};
+      cards.push({ label: la.date === today ? 'Latest signal' : 'Last signal · ' + la.date, live: '', inst: la.instrument, strike: o.strike, typ: o.type, dir: sg.direction, lots: o.lots, lotSize: o.lot_size, conf: sg.confidence_ai_adj || sg.confidence, tIn: (la.iso_ts || '').slice(11, 16),
+        entry: +o.entry, sl: +o.sl, t1: +o.target1, t2: +o.target2, cur: 0, curLabel: 'Not taken', pnl: ((+o.target1 || 0) - (+o.entry || 0)) * (o.lot_size || 0), idea: true,
+        status: ai.verdict ? 'AI ' + ai.verdict.toLowerCase() : 'idea', statusPal: 'lav', note: esc(ai.reasoning || '') });
     }
+    const sigHtml = cards.map((c, i) => signalCard(c, i)).join('');
 
     // Swing.
     const sw = (S.swing && S.swing.positions) || [];
@@ -874,11 +940,8 @@
       <div class="legend"><span><i style="background:var(--good)"></i>price, 5-min + live ticks</span><span><i style="background:var(--accent)"></i>VWAP proxy (today)</span><span><i style="background:var(--bad);width:9px;height:9px;border-radius:50%"></i>engine signals</span></div>
     </div>
 
-    <div class="tb rise" style="--i:8"><h2>Signals <span class="tag">${todays.length + open.length}</span></h2><span class="stamp">sized for ${inr(capital)} · 1% risk · 50% cap per trade</span></div>
-    <div class="table glass rise" style="--i:9">
-      <div class="thead s5"><div>Signal</div><div>Plan</div><div class="num">Your size</div><div class="num">P&amp;L</div><div class="num">% capital</div></div>
-      ${ideaHtml}${sigHtml || (ideaHtml ? '' : '<div class="empty">No signals yet today. The engine fires only between 09:45 and 14:30 IST.</div>')}
-    </div>
+    <div class="tb rise" style="--i:8"><h2>Signals <span class="tag">${cards.length}</span></h2><span class="stamp">entry, SL, T1, T2 as the engine set them · sized for your ${inr(capital)}</span></div>
+    ${sigHtml ? `<div class="sigs">${sigHtml}</div>` : '<div class="table glass"><div class="empty">No signals yet today. The engine fires only between 09:45 and 14:30 IST.</div></div>'}
 
     <div class="tb rise" style="--i:18"><h2>Swing record <span class="tag">${swOpen.length} open · ${chron.length} closed</span></h2><span class="stamp">${reg ? `regime tier ${esc(reg.tier)}${reg.tier === 'C' ? ' (no new entries)' : ''} · ` : ''}if you had put ${inr(slot)} (one of 4 slots) into each</span></div>
     ${(() => {
@@ -953,6 +1016,8 @@
   setTimeout(() => $('app').classList.add('ready'), 1500);
   setInterval(loadAllCandles, 5 * 60000);
   setInterval(render, 30000);
+  let rz; window.addEventListener('resize', () => { clearTimeout(rz); rz = setTimeout(render, 120); });
+  setTimeout(render, 60);
 })();
 </script>
 </body>
