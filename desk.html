@@ -425,9 +425,36 @@
 .chart-head .chg{font-weight:800;font-size:13.5px;border-radius:99px;padding:3px 11px}
 .chg.up{background:var(--mint);color:var(--mint-i)}.chg.dn{background:var(--blush);color:var(--blush-i)}
 .chart-head .grow{flex:1}
-.seg button{border:0;background:transparent;height:34px;padding:0 16px;border-radius:99px;font-weight:700;font-size:13px;color:var(--ink2);cursor:pointer;transition:background-color .25s var(--ease),color .25s}
-.seg button.on{background:var(--surface);color:var(--ink);box-shadow:var(--shadow)}
 .seg button:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+/* Compact live cards: six across, the Links .kpi component at a smaller scale. */
+.kpis.six{grid-template-columns:repeat(6,minmax(0,1fr));gap:14px}
+.kpis.six .kpi{min-height:128px;padding:16px 18px;border-radius:26px}
+.kpis.six .kpi .lab{font-size:12px}
+.kpis.six .kpi .val{font-size:27px;--valh:34px;margin-top:8px;letter-spacing:-.04em}
+.kpis.six .kpi .sub{font-size:11.5px}
+.kpis.six .kpi::after{width:96px;height:96px;right:-28px;top:-28px}
+.kpis.six .kpi::before{width:44px;height:44px;right:40px;bottom:-18px}
+.kpis.six .kpi .mini{position:relative;z-index:1;margin-top:auto;height:30px}
+.kpis.six .kpi .mini i{border-radius:5px 5px 2px 2px}
+.kpis.six .kpi.idx{cursor:pointer;outline:2px solid transparent;outline-offset:3px;transition:transform .5s var(--spring),box-shadow .4s var(--ease),outline-color .25s}
+.kpis.six .kpi.idx.on{outline-color:var(--tc)}
+.kpis.six .kpi.idx:focus-visible{outline-color:var(--accent)}
+.kpis.six .kpi .chgl{font-size:12px;font-weight:800;color:var(--tc);margin-top:2px;position:relative;z-index:1}
+/* Swing sheet */
+.tr.s4.open-able{cursor:pointer}
+.sh-sec{margin:22px 0 0}
+.sh-sec h4{margin:0 0 10px;font-size:13px;font-weight:800;color:var(--ink)}
+.steps{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
+.steps li{display:grid;grid-template-columns:28px 1fr auto;gap:10px;align-items:start;padding:10px 13px;border-radius:14px;background:var(--surface2);font-size:13px;font-weight:600}
+.steps li .n{width:22px;height:22px;border-radius:8px;display:grid;place-items:center;font-size:11px;font-weight:800;background:var(--b,var(--lav));color:var(--f,var(--lav-i))}
+.steps li .d{color:var(--ink3);font-weight:600;font-size:12px;display:block;margin-top:2px}
+.steps li .r{font-variant-numeric:tabular-nums;font-weight:800;text-align:right;white-space:nowrap}
+.steps li.hit{background:var(--mint)}
+.kvg{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}
+.kvg div{padding:9px 13px;border-radius:14px;background:var(--surface2);font-size:13px;font-weight:600;display:flex;justify-content:space-between;gap:10px}
+.kvg span{color:var(--ink3)}.kvg b{font-variant-numeric:tabular-nums;text-align:right}
+.note2{margin-top:10px;font-size:12.5px;color:var(--ink3);line-height:1.5}
+@media(max-width:1150px){.kpis.six{grid-template-columns:repeat(3,minmax(0,1fr))}}
 .plot{position:relative;height:300px}
 .plot svg{width:100%;height:100%;display:block;overflow:visible}
 .plot .tipx{position:absolute;pointer-events:none;background:var(--pill);color:var(--pillink);font-size:12px;font-weight:700;border-radius:10px;padding:5px 9px;white-space:nowrap;transform:translate(-50%,-130%);opacity:0;transition:opacity .15s}
@@ -452,6 +479,10 @@
 .foot{margin:34px 4px 0;color:var(--ink3);font-size:12.5px}
 @media(min-width:1500px){.thead.s5,.tr.s5{grid-template-columns:minmax(0,1.3fr) minmax(0,1.3fr) 150px 110px 110px}}
 @media(max-width:880px){
+  .kpis.six{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+  .kpis.six .kpi{min-height:112px;padding:14px 16px}
+  .kpis.six .kpi:last-child,.kpis.six .kpi.hero-k{grid-column:auto;min-height:112px}
+  .kvg{grid-template-columns:1fr}
   .tr.s5,.tr.s4{grid-template-columns:1fr auto}
   .tr.s5 .dest,.tr.s4 .dest{grid-column:1/-1;grid-row:2;padding-left:60px}
   .tr.s5 .size,.tr.s5 .nall,.tr.s4 .size{display:none}
@@ -464,6 +495,8 @@
 </head>
 <body>
 <div id="app" class="wrap"></div>
+<div class="scrim" id="scrim"></div>
+<aside class="sheet glass wide" id="swSheet" aria-label="Swing position" aria-hidden="true"></aside>
 <script>
 (function () {
   'use strict';
@@ -526,6 +559,8 @@
     };
     run(); return setInterval(run, ms);
   }
+  const SYMS = ['BANKNIFTY', 'NIFTY', 'FINNIFTY'];
+  async function loadAllCandles() { for (const k of SYMS) await loadCandles(k); }
   async function loadCandles(sym) {
     try {
       const d = await api(`/api/historical/${sym}?days=3&interval=FIVE_MINUTE`, 80000);
@@ -579,6 +614,107 @@
       ${marks}<circle cx="${X(pts.length - 1)}" cy="${Y(last.c)}" r="4.5" fill="${col}"/>${labels}</svg>`;
   }
 
+  // ── swing holding guide ──────────────────────────────────────────────
+  // Rules from SWING_STRATEGY.md (Pullback v1.2): exits run in this order,
+  // first to trigger wins. Older rows restored from Slack carry their own
+  // SL / targets / max-hold in the row, so the guide reads the row first.
+  const EXIT_TEXT = {
+    STRENGTH_EXIT: 'Took profit on the first sign of strength (close above the 5-day average or RSI(2) above 65). This is the exit the strategy is built around.',
+    T2_HIT: 'Hit the windfall target (+5 ATR on the stock).', T1_HIT: 'Hit the first target (+3 ATR on the stock).',
+    SL_HIT: 'Hit the disaster floor on the stock price.', PREMIUM_BACKSTOP: 'The option premium halved, so the backstop closed it.',
+    STAGNATION: 'Went nowhere for 5 sessions (premium under +25%), so it was closed before theta ate more.',
+    MAX_HOLD: 'Reached the maximum holding period and was closed on time, win or lose.',
+    EARNINGS_EXIT: 'Closed the session before quarterly results to avoid the IV crush and gap risk.',
+    CANCELLED: 'The limit entry never filled, so there was no trade.',
+  };
+  const parseJ = v => { if (v == null) return null; if (typeof v !== 'string') return v; try { return JSON.parse(v); } catch (e) { return null; } };
+  const isoOf = d => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+  const addSessions = (iso, n) => { if (!iso) return null; const d = new Date(iso + 'T00:00:00'); let k = 0; while (k < n) { d.setDate(d.getDate() + 1); const w = d.getDay(); if (w && w !== 6) k++; } return isoOf(d); };
+  const addDays = (iso, n) => { if (!iso) return null; const d = new Date(iso + 'T00:00:00'); d.setDate(d.getDate() + n); return isoOf(d); };
+  const daysBetween = (a, b) => a && b ? Math.round((new Date(b + 'T00:00:00') - new Date(a + 'T00:00:00')) / 864e5) : null;
+  const sessionsBetween = (a, b) => { if (!a || !b) return null; const d = new Date(a + 'T00:00:00'), e = new Date(b + 'T00:00:00'); let k = 0; while (d < e) { d.setDate(d.getDate() + 1); const w = d.getDay(); if (w && w !== 6) k++; } return k; };
+  const fmtDate = iso => iso ? new Date(iso + 'T00:00:00').toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' }) : '-';
+
+  function swingGuide(x) {
+    const ind = parseJ(x.indicators) || {}, reasons = parseJ(x.reasons) || [];
+    const isPull = /pullback|rsi\(2\)|cumrsi/i.test(JSON.stringify(reasons) + JSON.stringify(ind)) || /PULLBACK/i.test(x.source || '');
+    const maxHold = +(ind.max_hold_days || (isPull ? 10 : 5));
+    const entry = +x.option_entry || 0, long = (x.direction || '').toUpperCase() !== 'SHORT';
+    const isOpen = x.status !== 'CLOSED';
+    // Pullback rows count trading sessions; older rows (restored from Slack) counted calendar days.
+    const unit = isPull ? 'sessions' : 'days';
+    const span = isPull ? sessionsBetween : daysBetween;
+    const held = isOpen ? span(x.entry_date, todayISO()) : (x.hold_days != null ? +x.hold_days : span(x.entry_date, x.exit_date));
+    const steps = [];
+    const st = (title, detail, right, pal, hitKey) => steps.push({ title, detail, right, pal, hit: !isOpen && hitKey && hitKey === x.exit_reason });
+    if (isPull) st('First strength: take profit', 'Close above the 5-day average or RSI(2) above 65. Most winners exit here.', 'profit exit', 'mint', 'STRENGTH_EXIT');
+    if (x.spot_target2) st('Windfall target', `${x.instrument} at ${num(x.spot_target2)} (+5 ATR). Exit everything.`, '₹' + num(x.spot_target2), 'mint', 'T2_HIT');
+    if (x.spot_target1) st('First target', `${x.instrument} at ${num(x.spot_target1)} (+3 ATR).${x.option_target1 ? ' Option near ₹' + num(x.option_target1) + '.' : ''}`, '₹' + num(x.spot_target1), 'mint', 'T1_HIT');
+    if (x.spot_sl && !isPull) st('Stop on the stock', `Out if ${x.instrument} closes ${long ? 'below' : 'above'} ${num(x.spot_sl)}.${x.option_sl ? ' Option near ₹' + num(x.option_sl) + '.' : ''}`, '₹' + num(x.spot_sl), 'blush', 'SL_HIT');
+    if (x.spot_sl && isPull) st('Disaster floor only', `Spot stop is off for pullback trades (it lost money in the backtest). ${num(x.spot_sl)} is information, not an exit.`, '₹' + num(x.spot_sl), 'butter', 'SL_HIT');
+    if (entry) st('Premium backstop', 'Exit if the option premium falls to half of what you paid.', '₹' + num(entry * 0.5), 'blush', 'PREMIUM_BACKSTOP');
+    if (isPull && entry) st('Stagnation check', `If the premium is still under ₹${num(entry * 1.25)} (+25%) after 5 sessions, close it. Flat loses to theta.`, fmtDate(addSessions(x.entry_date, 5)), 'butter', 'STAGNATION');
+    st('Results day', 'Close the session before the company reports quarterly results. Never hold an option through earnings.', 'T-1', 'butter', 'EARNINGS_EXIT');
+    st('Time limit', `Hold at most ${maxHold} ${unit}, win or lose.`, fmtDate(isPull ? addSessions(x.entry_date, maxHold) : addDays(x.entry_date, maxHold)), 'lav', 'MAX_HOLD');
+    return { ind, reasons, isPull, maxHold, held, steps, isOpen, unit };
+  }
+
+  function renderSheet() {
+    const el = $('swSheet'), scrim = $('scrim');
+    const x = S.openSw != null && ((S.swing && S.swing.positions) || []).find(p => String(p.id) === String(S.openSw));
+    if (!x) { el.classList.remove('on'); scrim.classList.remove('on'); el.setAttribute('aria-hidden', 'true'); return; }
+    const g = swingGuide(x);
+    const entry = +x.option_entry || 0, exitP = +x.option_exit || 0, pnl = +x.pnl_rupees || 0;
+    const pct = entry && exitP ? (exitP - entry) / entry * 100 : null;
+    const sz = sizeFor(x.option_entry, x.option_sl || entry * 0.5, x.lot_size);
+    const status = g.isOpen ? (x.status || 'OPEN').toLowerCase() : (x.exit_reason || x.result || 'closed').toLowerCase();
+    const scroll = el.querySelector('.sh-body') ? el.querySelector('.sh-body').scrollTop : 0;
+    el.innerHTML = `
+      <div class="sh-head"><h3>/${esc(x.instrument)} <span class="tag ${g.isOpen ? 'a' : ''}">${esc(status)}</span></h3><button class="btn sm" data-close>Close <kbd>Esc</kbd></button></div>
+      <div class="sh-body">
+        <div class="big">
+          <div style="--bg-c:var(--lav);--tc:var(--lav-i)"><b>₹${num(entry)}</b><span>paid per unit</span></div>
+          <div style="--bg-c:var(--sky);--tc:var(--sky-i)"><b>${exitP ? '₹' + num(exitP) : '-'}</b><span>${g.isOpen ? 'live quote not in the feed' : 'exit premium'}</span></div>
+          <div style="--bg-c:var(--${pnl >= 0 ? 'mint' : 'blush'});--tc:var(--${pnl >= 0 ? 'mint-i' : 'blush-i'})"><b>${g.isOpen ? '-' : inr(pnl, true)}</b><span>${pct != null ? (pct >= 0 ? '+' : '') + pct.toFixed(1) + '% on premium' : 'P&L'}</span></div>
+          <div style="--bg-c:var(--butter);--tc:var(--butter-i)"><b>${g.held != null ? g.held : '-'} / ${g.maxHold}</b><span>${g.unit} held / max</span></div>
+        </div>
+
+        ${!g.isOpen ? `<div class="sh-sec"><h4>What happened</h4><div class="note2" style="margin:0;font-size:13.5px;color:var(--ink2)">${esc(EXIT_TEXT[x.exit_reason] || ('Closed: ' + (x.exit_reason || x.result || '')))} Entered ${fmtDate(x.entry_date)}, out ${fmtDate(x.exit_date)}.</div></div>` : ''}
+
+        <div class="sh-sec"><h4>${g.isOpen ? 'How to hold it: exits, first to trigger wins' : 'The exit plan it was held under'}</h4>
+          <ol class="steps">${g.steps.map((t, i) => `<li class="${t.hit ? 'hit' : ''}"><span class="n" style="--b:var(--${t.pal});--f:var(--${PAL[t.pal]})">${i + 1}</span><span>${esc(t.title)}<span class="d">${esc(t.detail)}</span></span><span class="r">${esc(t.right)}${t.hit ? ' · hit' : ''}</span></li>`).join('')}</ol>
+          <div class="note2">${g.isPull ? 'Swing Pullback rules: momentum picks the stock, a 2-day dip times the entry, the first strength takes the exit. Backtest: 71-74% win over 746 days, but a few big losers decide the month.' : 'This position was opened under the earlier swing rules (restored from the Slack alerts), so its own stop, targets and time limit apply.'} Mid-term means days, not weeks: the plan never holds past the time limit.</div>
+        </div>
+
+        <div class="sh-sec"><h4>The plan</h4>
+          <div class="kvg">
+            <div><span>Direction</span><b>${esc(x.direction || '-')}</b></div>
+            <div><span>Option</span><b>${esc((x.option_strike ? Math.round(x.option_strike) : '') + ' ' + (x.option_type || ''))} · ${esc(x.option_expiry || '')}</b></div>
+            <div><span>Stock at entry</span><b>₹${num(x.spot_entry)}</b></div>
+            <div><span>Days to expiry at entry</span><b>${esc(x.option_dte != null ? x.option_dte : '-')}</b></div>
+            <div><span>Lot size</span><b>${esc(x.lot_size || '-')}</b></div>
+            <div><span>Capital it used</span><b>${x.capital ? inr(x.capital) : '-'}</b></div>
+            ${g.ind.confidence ? `<div><span>Confidence</span><b>${esc(g.ind.confidence)}</b></div>` : ''}
+            ${g.ind.risk_reward ? `<div><span>Reward : risk</span><b>${esc(g.ind.risk_reward)}</b></div>` : ''}
+          </div></div>
+
+        ${g.reasons.length ? `<div class="sh-sec"><h4>Why it was taken</h4><div class="lists" style="margin:0;grid-template-columns:1fr">${'<div>' + g.reasons.map((r, i) => `<div class="li"><div class="fill" style="width:100%;--c:var(--${['lav', 'sky', 'mint', 'peach'][i % 4]})"></div><span>${esc(r)}</span><span></span></div>`).join('') + '</div>'}</div></div>` : ''}
+
+        <div class="sh-sec"><h4>For your capital (${inr(capital)})</h4>
+          <div class="kvg">
+            <div><span>Lots that fit</span><b>${sz ? sz.lots : '-'}</b></div>
+            <div><span>One lot costs</span><b>${sz ? inr(sz.perLotCost) : '-'}</b></div>
+            <div><span>Risk per lot at the backstop</span><b>${sz ? inr(sz.perLotRisk) : '-'}</b></div>
+            <div><span>Capital for 1 lot</span><b>${sz ? inr(sz.need) : '-'}</b></div>
+          </div>
+          <div class="note2">1% of capital at risk, at most 50% of capital in one trade. Research note from the strategy file: stock-option spreads and theta can eat much of this edge, so on real money it suggests cash equity for stock signals.</div></div>
+
+        ${x.last_ai_reasoning ? `<div class="sh-sec"><h4>Last AI review ${x.last_ai_ts ? '(' + esc(String(x.last_ai_ts).slice(0, 16)) + ' IST)' : ''}</h4><div class="note2" style="font-size:13.5px;color:var(--ink2)"><b>${esc(x.last_ai_decision || '')}</b> ${esc(x.last_ai_reasoning)}</div></div>` : ''}
+      </div>`;
+    const b = el.querySelector('.sh-body'); if (b && scroll) { b.scrollTop = scroll; b.querySelectorAll(':scope>*').forEach(n => n.style.animation = 'none'); }
+    el.classList.add('on'); scrim.classList.add('on'); el.setAttribute('aria-hidden', 'false');
+  }
+
   // ── render ───────────────────────────────────────────────────────────
   function render() {
     const st = S.status || {}, perf = S.perf || {}, prices = (S.ltp && S.ltp.prices) || {};
@@ -599,12 +735,23 @@
     const h = istNow().getHours();
     const hi = h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening';
 
-    // Hero bars: today's 5-min closes for the selected index.
-    const series = (S.candles[sym] || []).filter(c => c.t.slice(0, 10) === today).map(c => c.c);
-    const src = series.length >= 6 ? series : (S.candles[sym] || []).slice(-30).map(c => c.c);
-    let bars = '';
-    if (src.length) { let a = src; if (a.length > 30) { const step = a.length / 30; a = Array.from({ length: 30 }, (_, i) => { const s = a.slice(Math.floor(i * step), Math.floor((i + 1) * step)); return s.reduce((x, y) => x + y, 0) / s.length; }); }
-      const lo = Math.min(...a), sp = (Math.max(...a) - lo) || 1; bars = `<div class="bars">${a.map((v, i) => `<i class="${i === a.length - 1 ? 'now' : ''}" style="height:${Math.max(8, (v - lo) / sp * 100)}%;--k:${i}"></i>`).join('')}</div>`; }
+    // Mini bars per index: today's 5-min closes plus the latest tick (last session early in the day).
+    const miniBars = k => {
+      const c = S.candles[k] || [];
+      let a = c.filter(x => x.t.slice(0, 10) === today).map(x => x.c);
+      if (a.length < 6) a = c.slice(-24).map(x => x.c);
+      const tk = (S.ticks[k] || []).slice(-1)[0];
+      if (tk) a = a.concat([tk.p]);
+      if (!a.length) return '<div class="mini"></div>';
+      if (a.length > 24) { const step = a.length / 24; a = Array.from({ length: 24 }, (_, i) => { const s = a.slice(Math.floor(i * step), Math.floor((i + 1) * step)); return s.reduce((x, y) => x + y, 0) / s.length; }); }
+      const lo = Math.min(...a), sp = (Math.max(...a) - lo) || 1;
+      return `<div class="bars mini">${a.map((v, i) => `<i class="${i === a.length - 1 ? 'now' : ''}" style="height:${Math.max(10, (v - lo) / sp * 100)}%;--k:${i}"></i>`).join('')}</div>`;
+    };
+    const idxTone = { BANKNIFTY: 'lav', NIFTY: 'sky', FINNIFTY: 'mint' };
+    const idxCards = SYMS.map((k, i) => { const q = prices[k] || {}; return `
+      <div class="kpi idx t-${idxTone[k]} ${k === sym ? 'on' : ''} pop" style="--i:${i + 2}" data-sym="${k}" role="button" tabindex="0" aria-pressed="${k === sym}" aria-label="Show ${NAMES[k]} on the chart">
+        <div class="lab">${esc(NAMES[k])}</div><div class="val">${q.ltp ? num(q.ltp, 1) : '-'}</div>
+        <div class="chgl">${q.pct != null ? (q.pct >= 0 ? '+' : '') + num(q.chg, 1) + ' · ' + (q.pct >= 0 ? '+' : '') + num(q.pct, 2) + '%' : ''}</div>${miniBars(k)}</div>`; }).join('');
 
     // Signals + open positions table rows.
     const latestAlert = (st.alerts || [])[0];
@@ -613,6 +760,7 @@
       const inst = s.instrument || '?';
       const strike = s.option_strike || s.strike, typ = s.option_type || s.type || '';
       const entry = +(s.option_entry || s.entry || 0), sl = +(s.option_sl || s.sl || 0), lot = +(s.option_lot_size || s.lot_size || 0);
+      const t1 = +(s.option_target1 || s.t1 || 0), tIn = s.t_in || ((s.timestamp || '') + '').slice(11, 16);
       const pnl = isOpen ? (+s.pnl_now || 0) : signedPnl(s);
       const sz = sizeFor(entry, sl, lot);
       const res = isOpen ? 'open' : (s.result || '').toLowerCase();
@@ -620,8 +768,8 @@
       return `<div class="tr s5 static rise" style="--i:${i + 10}">
         <div class="who">${av(inst[0], palOf(inst))}<div style="min-width:0">
           <div class="short">/${esc(inst)} ${esc(strike ? Math.round(strike) : '')} ${esc(typ)}<span class="dot ${isOpen ? '' : 'off'}"></span><span class="tag" style="background:var(--${resPal});color:var(--${PAL[resPal]})">${esc(res)}</span></div>
-          <div class="meta"><span class="own">${esc(((s.timestamp || s.entry_time || '') + '').slice(11, 16) || '')} IST</span>${s.confidence ? `<span class="chip">conf ${esc(s.confidence)}</span>` : ''}${s.direction ? `<span class="chip c">${esc(s.direction)}</span>` : ''}</div></div></div>
-        <div class="dest wrap2">Entry ₹${num(entry, 2)}${sl ? ` · SL ₹${num(sl, 2)}` : ''}${s.option_target1 ? ` · T1 ₹${num(s.option_target1, 2)}` : ''}${!isOpen && s.option_exit ? `<span class="why">Exit ₹${num(s.option_exit, 2)} at ${esc((s.exit_time || '').slice(11, 16))} IST</span>` : ''}</div>
+          <div class="meta"><span class="own">${tIn ? esc(tIn) + ' IST' : ''}</span>${s.confidence ? `<span class="chip">conf ${esc(s.confidence)}</span>` : ''}${s.direction ? `<span class="chip c">${esc(s.direction)}</span>` : ''}</div></div></div>
+        <div class="dest wrap2">Entry ₹${num(entry, 2)}${sl ? ` · SL ₹${num(sl, 2)}` : ''}${t1 ? ` · T1 ₹${num(t1, 2)}` : ''}${isOpen && s.current_premium ? `<span class="why">Now ₹${num(s.current_premium, 2)} · peak ₹${num(s.peak_premium, 2)} at ${esc(s.peak_time || '')} IST · ${esc(s.pct_to_t1 != null ? s.pct_to_t1 + '% of the way to T1' : '')}</span>` : ''}${!isOpen && s.option_exit ? `<span class="why">Exit ₹${num(s.option_exit, 2)} at ${esc((s.exit_time || '').slice(11, 16))} IST</span>` : ''}</div>
         <div class="size">${sz ? `<b>${sz.lots} lot${sz.lots === 1 ? '' : 's'}</b>${sz.lots ? inr(sz.cost) + ' at your capital' : esc(sz.why)}` : ''}</div>
         <div class="num ${pnl > 0 ? 'up' : pnl < 0 ? 'dn' : ''}">${inr(pnl, true)}</div>
         <div class="num nall dim">${capital ? (pnl / capital * 100).toFixed(2) + '%' : ''}</div>
@@ -644,21 +792,29 @@
 
     // Swing.
     const sw = (S.swing && S.swing.positions) || [];
+    // One of the engine's 4 swing slots (SWING_MAX_OPEN), so "your slot" = a quarter of your capital.
+    const slot = Math.round(capital / 4);
+    const ret = x => (+x.option_entry > 0 && +x.option_exit > 0) ? (x.option_exit - x.option_entry) / x.option_entry : null;
+    const chron = sw.filter(x => x.status === 'CLOSED' && ret(x) != null).sort((a, b) => (a.exit_date || '').localeCompare(b.exit_date || '') || a.id - b.id);
+    let eq = 0; const curve = chron.map(x => (eq += slot * ret(x)));
+    const recWins = chron.filter(x => ret(x) > 0).length;
+    const best = chron.reduce((m, x) => ret(x) > (m ? ret(m) : -1e9) ? x : m, null), worst = chron.reduce((m, x) => ret(x) < (m ? ret(m) : 1e9) ? x : m, null);
     const swOpen = sw.filter(x => x.status === 'OPEN' || x.status === 'PENDING');
     const swClosed = sw.filter(x => x.status === 'CLOSED').sort((a, b) => (b.exit_date || '').localeCompare(a.exit_date || '')).slice(0, 8);
     const swNet = sw.filter(x => x.status === 'CLOSED').reduce((a, x) => a + (+x.pnl_rupees || 0), 0);
-    const swHtml = swOpen.concat(swClosed).map((x, i) => {
+    const swList = swOpen.concat(S.swAll ? sw.filter(x => x.status === 'CLOSED').sort((a, b) => (b.exit_date || '').localeCompare(a.exit_date || '')) : swClosed);
+    const swHtml = swList.map((x, i) => {
       const isOpen = x.status !== 'CLOSED';
-      const sz = sizeFor(x.option_entry, x.option_sl, x.lot_size);
-      const pnl = +x.pnl_rupees || 0;
+      const r = ret(x);
+      const pnl = r != null ? slot * r : 0;
       const resPal = isOpen ? 'sky' : WIN(x.result) ? 'mint' : x.result === 'LOSS' ? 'blush' : 'butter';
-      return `<div class="tr s4 static rise" style="--i:${i + 20}">
+      return `<div class="tr s4 open-able rise" style="--i:${i + 20}" data-sw="${esc(x.id)}" role="button" tabindex="0" aria-label="Open ${esc(x.instrument)} holding guide">
         <div class="who">${av((x.instrument || '?')[0], palOf(x.instrument || ''))}<div style="min-width:0">
           <div class="short">/${esc(x.instrument)}<span class="dot ${isOpen ? '' : 'off'}"></span><span class="tag" style="background:var(--${resPal});color:var(--${PAL[resPal]})">${esc(isOpen ? x.status.toLowerCase() : (x.exit_reason || x.result || '').toLowerCase())}</span></div>
           <div class="meta"><span class="own">${esc(x.entry_date)}${x.exit_date ? ' → ' + esc(x.exit_date) : ''}</span><span class="chip">${esc(x.option_strike ? Math.round(x.option_strike) + ' ' + (x.option_type || '') : '')}</span>${x.hold_days != null ? `<span class="chip">${esc(x.hold_days)}d</span>` : ''}</div></div></div>
-        <div class="dest wrap2">Entry ₹${num(x.option_entry)}${x.option_exit ? ' · exit ₹' + num(x.option_exit) : ''} · lot ${esc(x.lot_size)}</div>
-        <div class="size">${sz ? `<b>${sz.lots} lot${sz.lots === 1 ? '' : 's'}</b>${sz.lots ? 'at your capital' : esc(sz.why)}` : ''}</div>
-        <div class="num ${pnl > 0 ? 'up' : pnl < 0 ? 'dn' : ''}">${isOpen ? '-' : inr(pnl, true)}</div></div>`;
+        <div class="dest wrap2">Started ${fmtDate(x.entry_date)} at ₹${num(x.option_entry)}${isOpen ? ` · open, day ${daysBetween(x.entry_date, today)}` : ` · closed ${fmtDate(x.exit_date)} at ₹${num(x.option_exit)}`}<span class="why">1 lot (${esc(x.lot_size)}) made ${isOpen ? 'nothing yet' : inr(+x.pnl_rupees || 0, true)} · tap for the holding guide</span></div>
+        <div class="num ${r > 0 ? 'up' : r < 0 ? 'dn' : ''}">${r != null ? (r >= 0 ? '+' : '') + (r * 100).toFixed(1) + '%' : '-'}</div>
+        <div class="num ${pnl > 0 ? 'up' : pnl < 0 ? 'dn' : ''}">${isOpen || r == null ? '-' : inr(pnl, true)}</div></div>`;
     }).join('');
     const reg = (S.swingRes && S.swingRes.regime) || null;
 
@@ -675,11 +831,10 @@
     ${S.err ? `<div class="err">${esc(S.err)}</div>` : ''}
     <div class="hero rise" style="--i:1"><h1><span class="hl">${hi}</span><span class="hl hl2">${todays.length ? `${todays.length} signal${todays.length === 1 ? '' : 's'} today, ${inr(net, true)}` : (mk.open ? 'Engine is scanning' : 'Market is closed')}</span></h1></div>
 
-    <div class="kpis">
-      <div class="kpi t-lav hero-k pop" style="--i:2"><div class="lab">${esc(NAMES[sym])} · live</div><div class="val">${p.ltp ? num(p.ltp, 1) : '-'}<span class="pct">${p.pct != null ? (p.pct >= 0 ? '+' : '') + num(p.pct, 2) + '%' : ''}</span></div>${bars}</div>
-      <div class="kpi t-mint pop" style="--i:3"><div class="lab">Today's P&amp;L</div><div class="val">${inr(net, true)}</div><div class="sub">${capital ? (net / capital * 100).toFixed(2) + '% of capital' : ''} · ${closedToday.length + open.length} trades</div></div>
-      <div class="kpi t-peach pop" style="--i:4"><div class="lab">Capital deployed</div><div class="val">${capital ? Math.round(deployed / capital * 100) : 0}%</div><div class="sub">${inr(deployed)} in · ${inr(Math.max(0, capital - deployed))} free</div></div>
-      <div class="kpi t-butter pop" style="--i:5"><div class="lab">Net per trade</div><div class="val">${inr(perTrade, true)}</div><div class="sub">${wins} W · ${losses} L · ${Math.max(0, total - wins - losses)} scratch</div></div>
+    <div class="kpis six">${idxCards}
+      <div class="kpi t-peach pop" style="--i:5"><div class="lab">Today's P&amp;L</div><div class="val">${inr(net, true)}</div><div class="sub">${capital ? (net / capital * 100).toFixed(2) + '% of capital' : ''} · ${closedToday.length + open.length} trades</div></div>
+      <div class="kpi t-butter pop" style="--i:6"><div class="lab">Capital deployed</div><div class="val">${capital ? Math.round(deployed / capital * 100) : 0}%</div><div class="sub">${inr(deployed)} in · ${inr(Math.max(0, capital - deployed))} free</div></div>
+      <div class="kpi t-blush pop" style="--i:7"><div class="lab">Net per trade</div><div class="val">${inr(perTrade, true)}</div><div class="sub">${wins} W · ${losses} L · ${Math.max(0, total - wins - losses)} scratch</div></div>
     </div>
 
     <div class="tb rise" style="--i:6"><h2>Live price</h2>
@@ -696,11 +851,21 @@
       ${ideaHtml}${sigHtml || (ideaHtml ? '' : '<div class="empty">No signals yet today. The engine fires only between 09:45 and 14:30 IST.</div>')}
     </div>
 
-    <div class="tb rise" style="--i:18"><h2>Swing <span class="tag">${swOpen.length} open</span></h2><span class="stamp">${reg ? `regime tier ${esc(reg.tier)} · ` : ''}${sw.filter(x => x.status === 'CLOSED').length} closed · net ${inr(swNet, true)}</span></div>
-    <div class="table glass rise" style="--i:19">
-      <div class="thead s4"><div>Position</div><div>Plan</div><div class="num">Your size</div><div class="num">P&amp;L</div></div>
-      ${swHtml || '<div class="empty">No swing positions.</div>'}
+    <div class="tb rise" style="--i:18"><h2>Swing record <span class="tag">${swOpen.length} open · ${chron.length} closed</span></h2><span class="stamp">${reg ? `regime tier ${esc(reg.tier)}${reg.tier === 'C' ? ' (no new entries)' : ''} · ` : ''}if you had put ${inr(slot)} (one of 4 slots) into each</span></div>
+    <div class="kpis six" style="margin-bottom:16px">
+      <div class="kpi t-mint pop" style="--i:18;grid-column:span 2"><div class="lab">Your ${inr(slot)} slot, every trade</div><div class="val">${inr(eq, true)}</div>
+        <div class="bars mini">${curve.map((v, i) => { const lo = Math.min(0, ...curve), sp = (Math.max(0, ...curve) - lo) || 1; return `<i class="${i === curve.length - 1 ? 'now' : ''}" style="height:${Math.max(8, (v - lo) / sp * 100)}%;--k:${i}"></i>`; }).join('')}</div></div>
+      <div class="kpi t-lav pop" style="--i:19"><div class="lab">Win rate</div><div class="val">${chron.length ? Math.round(recWins / chron.length * 100) : 0}%</div><div class="sub">${recWins} of ${chron.length} closed green</div></div>
+      <div class="kpi t-sky pop" style="--i:20"><div class="lab">Engine, 1 lot each</div><div class="val">${inr(swNet, true)}</div><div class="sub">actual lots, not your slot</div></div>
+      <div class="kpi t-peach pop" style="--i:21"><div class="lab">Best</div><div class="val">${best ? '+' + (ret(best) * 100).toFixed(0) + '%' : '-'}</div><div class="sub">${best ? esc(best.instrument) + ' · ' + fmtDate(best.entry_date) : ''}</div></div>
+      <div class="kpi t-blush pop" style="--i:22"><div class="lab">Worst</div><div class="val">${worst ? (ret(worst) * 100).toFixed(0) + '%' : '-'}</div><div class="sub">${worst ? esc(worst.instrument) + ' · ' + fmtDate(worst.entry_date) : ''}</div></div>
     </div>
+    <div class="table glass rise" style="--i:23">
+      <div class="thead s4"><div>Trade</div><div>Started → now</div><div class="num">Return</div><div class="num">Your slot</div></div>
+      ${swHtml || '<div class="empty">No swing trades yet.</div>'}
+      ${sw.filter(x => x.status === 'CLOSED').length > swClosed.length ? `<div style="padding:8px 24px 14px;display:flex;justify-content:center"><button class="btn sm" data-swall>${S.swAll ? 'Show recent only' : 'Show all ' + sw.filter(x => x.status === 'CLOSED').length + ' trades'}</button></div>` : ''}
+    </div>
+    <p class="foot" style="margin-top:12px">Return is the option premium's change from entry to exit. "Your slot" scales that to ${inr(slot)}, ignoring lot sizes, so it shows how the strategy did, not what a broker would have filled. Open trades show "-" until the engine closes them: the swing feed has no live quote for stock options.</p>
 
     <div class="tb rise" style="--i:28"><h2>All-time</h2><span class="stamp">intraday engine since 4 Sep 2026</span></div>
     <div class="big">
@@ -713,10 +878,16 @@
     <p class="foot">Read-only view of the engine at ${esc(server().replace(/^https?:\/\//, ''))}. Sizes use your capital, 1% risk at the premium stop, a 50% capital cap per trade, ₹115/lot brokerage and 50 bps slippage per side. Advisory only, never an order. Start/stop the engine from the <a href="console.html" style="color:var(--accent);font-weight:700">console</a>.</p>`;
 
     if (keep) { const c = $('cap'); c.focus(); c.setSelectionRange(c.value.length, c.value.length); }
+    if (S.openSw != null) renderSheet();
   }
 
   // ── events ───────────────────────────────────────────────────────────
+  const openSw = id => { S.openSw = id; const el = $('swSheet'); el.innerHTML = ''; renderSheet(); setTimeout(() => { const c = el.querySelector('[data-close]'); c && c.focus(); }, 50); };
+  const closeSw = () => { const id = S.openSw; S.openSw = null; renderSheet(); const row = document.querySelector(`[data-sw="${id}"]`); row && row.focus(); };
   document.addEventListener('click', e => {
+    if (e.target.closest('[data-close]') || e.target.id === 'scrim') { closeSw(); return; }
+    if (e.target.closest('[data-swall]')) { S.swAll = !S.swAll; render(); return; }
+    const r = e.target.closest('[data-sw]'); if (r) { openSw(r.dataset.sw); return; }
     const b = e.target.closest('[data-sym]');
     if (b) { S.sym = b.dataset.sym; ls.set('desk-sym', S.sym); if (!S.candles[S.sym]) loadCandles(S.sym); render(); return; }
     if (e.target.closest('#theme')) { const t = root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark'; root.setAttribute('data-theme', t); ls.set('links-theme', t); render(); }
@@ -724,7 +895,11 @@
   document.addEventListener('change', e => {
     if (e.target.id === 'cap') { const v = Math.round(+String(e.target.value).replace(/[^\d.]/g, '')); if (v > 0) { capital = v; ls.set('ie-capital', String(v)); } render(); }
   });
-  document.addEventListener('keydown', e => { if (e.target.id === 'cap' && e.key === 'Enter') e.target.blur(); });
+  document.addEventListener('keydown', e => {
+    if (e.target.id === 'cap' && e.key === 'Enter') { e.target.blur(); return; }
+    if (e.key === 'Escape' && S.openSw != null) { closeSw(); return; }
+    if ((e.key === 'Enter' || e.key === ' ') && e.target.matches('[data-sw],.kpi[data-sym]')) { e.preventDefault(); e.target.click(); }
+  });
 
   poll('status', '/api/status', 10000);
   poll('ltp', '/api/ltp', 5000, () => {
@@ -736,9 +911,9 @@
   poll('perf', '/api/performance', 60000);
   poll('swing', '/api/swing/positions', 120000);
   poll('swingRes', '/api/swing/results', 300000, null, 60000);
-  loadCandles(S.sym);
+  loadCandles(S.sym).then(() => { for (const k of SYMS) if (k !== S.sym) loadCandles(k); });
   setTimeout(() => $('app').classList.add('ready'), 1500);
-  setInterval(() => loadCandles(S.sym), 5 * 60000);
+  setInterval(loadAllCandles, 5 * 60000);
   setInterval(render, 30000);
 })();
 </script>
