@@ -235,3 +235,25 @@ So the rules stay. Shipped instead:
   blackout still apply. 19 trades is under the 30-trade bar: tracked, never recommended.
 - Affordability gate off by default (`PULLBACK_AFFORD_GATE`): a 1-lot option over 10% of the
   account silently discarded the signal, though the edge is measured on the stock.
+
+### v1.4 addendum: falling-market swing tested and rejected (2026-11-01)
+
+Mirror of the pullback (weak stock under its 100/200SMA, lagging NIFTY, within 15% of its 52-week
+low, sharp 2-day bounce, buy a put). Harness `research/bt4.py`, Nov 2022 to Oct 2026. Put prices
+are Black-Scholes estimates, ~1 strike ITM, 30 days, IV flat at max(18%, 20d realised) x 1.15,
+costs on premium. No history of expired option prices exists for free, so treat as indicative.
+Today's universe (survivors) biases this against shorts.
+
+| Variant | Trades | Win | Exp/trade on premium | SUM | Share short, exp |
+|---|---|---|---|---|---|
+| Stocks, all markets | 48 | 46% | -9.0% | -433% | -0.67% |
+| Stocks, NIFTY below 200SMA | 21 | 43% | -2.4% | -51% | -0.24% |
+| Stocks, Tier C only | 11 | 73% | +13.5% | +149% | +0.86% |
+| Stocks, bounce > 170 | 154 | 53% | -1.6% | -253% | -0.09% |
+| Stocks, 20-day breakdown | 772 | 45% | -1.1% | -808% | -0.16% |
+| NIFTY + BANKNIFTY, below 200SMA | 3 | 0% | -39.9% | -120% | -2.31% |
+| NIFTY + BANKNIFTY, any trend | 32 | 44% | -7.2% | -231% | -0.43% |
+
+Not shipped. Tier C only is the one positive row, picked after the fact from 11 trades: a lead to
+retest as trades accumulate, not an edge. Lost even on the share short in most rows, so the
+loss is not just option decay.
