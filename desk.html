@@ -549,7 +549,7 @@
 .pills button[disabled]{opacity:.45;cursor:not-allowed}
 .pills button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 #calcNote{font-size:13px}
-@media(max-width:560px){.calc .seg{align-self:stretch}.calc .seg button{flex:1;padding:0 8px;font-size:12px}.camt,.camt input,#calcGet{font-size:21px}.camt{padding:4px 9px}.cmain{gap:7px}.cmain .arr{font-size:14px;padding-top:26px}}
+@media(max-width:560px){.calc .seg{align-self:stretch}.calc .seg button{flex:1 1 auto;min-width:0;padding:0 7px;font-size:11.5px}.camt,.camt input,#calcGet{font-size:21px}.camt{padding:4px 9px}.cmain{gap:7px}.cmain .arr{font-size:14px;padding-top:26px}}
 .tr.s7 .whyline{grid-column:1/-1;padding-left:60px;margin-top:-2px;font-size:12.5px;line-height:1.45;color:var(--ink2);font-weight:500}
 .whyline b{font-weight:700;color:var(--ink)}.whyline i{font-style:normal;color:var(--blush-i);font-weight:600}
 .reasons{list-style:none;margin:10px 0 0;padding:0;display:flex;flex-direction:column;gap:6px}
@@ -557,6 +557,16 @@
 .reasons li::before{content:"";flex:none;width:8px;height:8px;border-radius:50%;background:var(--good);transform:translateY(-1px)}
 .reasons li.bad::before{background:var(--bad)}
 @media(max-width:880px){.tr.s7 .whyline{padding-left:0}}
+.calc [hidden]{display:none!important}
+.cwrap{display:flex;flex-direction:column;gap:14px}
+.gq{margin:0 0 4px;display:block;font-size:14px;font-weight:800;color:var(--ink)}
+.camt.yrs input{text-align:left}
+.gout{border-radius:18px;background:var(--mint);color:var(--mint-i);padding:12px 16px}
+.gout .k{display:block;font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase}
+.gout b{display:block;font-size:26px;font-weight:800;letter-spacing:-.03em;font-variant-numeric:tabular-nums}
+.gout .sm{display:block;font-size:12.5px;font-weight:600}
+.gout.off{background:var(--surface2);color:var(--ink2)}
+@media(max-width:360px){.calc .seg button{padding:0 4px;font-size:10.5px}}
 .stale{border-radius:24px;padding:14px 18px;background:var(--butter);color:var(--butter-i);font-size:13.5px;font-weight:600;line-height:1.5;margin-bottom:16px}
 .stale b{font-weight:800}
 .note2{margin-top:10px;font-size:12.5px;color:var(--ink3);line-height:1.5}
@@ -826,28 +836,94 @@
   S.calc = { amt: null, per: '1y', mode: 'future' };
   const calcAmt = () => S.calc.amt == null ? tradeAmt() : S.calc.amt;
   const calcStock = () => ((S.lt || {}).stocks || []).find(s => s.stock === String(S.openSw).slice(3));
+  const GOALS = [[100000, '₹1L'], [500000, '₹5L'], [1000000, '₹10L'], [2500000, '₹25L'], [5000000, '₹50L'], [10000000, '₹1Cr']];
+  S.goal = { end: 1000000, by: 'years', yrs: 5, start: null };
+  const YEARS = { '1m': 1 / 12, '3m': .25, '6m': .5, '1y': 1, '3y': 3, '5y': 5, '20y': 20 };
+  // Typical growth between the tested periods: straight line on log growth, the last rate after 20y.
+  const growthPts = x => [[0, 0]].concat(Object.keys(YEARS).map(k => [YEARS[k], Math.log(x.ranges[k].typical)]));
+  function muAt(x, t) {
+    const pts = growthPts(x), last = pts[pts.length - 1];
+    if (t >= last[0]) return last[1] * t / last[0];
+    for (let i = 1; i < pts.length; i++) if (t <= pts[i][0]) return pts[i - 1][1] + (pts[i][1] - pts[i - 1][1]) * (t - pts[i - 1][0]) / (pts[i][0] - pts[i - 1][0]);
+  }
+  function yearsFor(x, lnMult) {
+    const pts = growthPts(x), last = pts[pts.length - 1];
+    if (lnMult >= last[1]) return last[0] * lnMult / last[1];
+    for (let i = 1; i < pts.length; i++) if (lnMult <= pts[i][1]) return pts[i - 1][0] + (pts[i][0] - pts[i - 1][0]) * (lnMult - pts[i - 1][1]) / (pts[i][1] - pts[i - 1][1]);
+  }
+  const spreadAt = (x, t) => 1.2816 * (x.vol / 100) * Math.sqrt(t);
+  const yearsText = t => { const mo = Math.max(1, Math.round(t * 12)), y = Math.floor(mo / 12), m = mo % 12; return [y ? `${y} year${y > 1 ? 's' : ''}` : '', m ? `${m} month${m > 1 ? 's' : ''}` : ''].filter(Boolean).join(' '); };
+  const longNote = t => t > 20 ? ' Past 20 years this is only the same rate carried forward.' : t > 5 ? ' Past 5 years the tests found no extra edge, so this is about the market\'s long-run return.' : '';
+  function goalPaint(x, typing) {
+    const g = S.goal, set = (id, v) => { if (typing !== id) $(id).value = v; };
+    set('goalEnd', g.end ? g.end.toLocaleString('en-IN') : '');
+    const start = g.start == null ? calcAmt() : g.start;
+    set('goalYears', g.yrs || ''); set('goalStart', start ? start.toLocaleString('en-IN') : '');
+    $('goalByYears').hidden = g.by !== 'years'; $('goalByStart').hidden = g.by !== 'start';
+    document.querySelectorAll('[data-gby]').forEach(b => b.classList.toggle('on', b.dataset.gby === g.by));
+    document.querySelectorAll('[data-gend]').forEach(b => b.classList.toggle('on', +b.dataset.gend === g.end));
+    document.querySelectorAll('[data-gyrs]').forEach(b => b.classList.toggle('on', +b.dataset.gyrs === g.yrs));
+    document.querySelectorAll('[data-gstart]').forEach(b => b.classList.toggle('on', +b.dataset.gstart === start));
+    const out = (k, v, sm, note, ok) => { $('goalK').textContent = k; $('goalV').textContent = v; $('goalS').textContent = sm; $('goalOut').classList.toggle('off', !ok); $('calcNote').innerHTML = note; };
+    if (!g.end) return out('You need to invest', '-', 'Enter your end amount first.', '', false);
+    if (g.by === 'years') {
+      const t = g.yrs;
+      if (!(t > 0)) return out('You need to invest', '-', 'Enter the number of years.', '', false);
+      if (t > 40) return out('You need to invest', '-', 'Enter 40 years or less.', '', false);
+      const mult = Math.exp(muAt(x, t)), sh = Math.ceil(g.end / (mult * x.price)), inv = sh * x.price, sp = spreadAt(x, t);
+      out('You need to invest', inr(inv), `${sh.toLocaleString('en-IN')} share${sh === 1 ? '' : 's'} at ₹${num(x.price)}, today`,
+        `That grows to about <b>${inr(inv * mult)}</b> in ${esc(yearsText(t))} at the typical rate, so there is <b>about a 1 in 2 chance</b> of reaching ${inr(g.end)} by then. Bad case <b>${inr(inv * mult * Math.exp(-sp))}</b>, good case <b>${inr(inv * mult * Math.exp(sp))}</b>. To reach it even in the bad case you'd need to invest <b>${inr(g.end / (mult * Math.exp(-sp)))}</b>.${longNote(t)} Before taxes and costs.`, true);
+    } else {
+      const sh = Math.floor(start / x.price), spend = sh * x.price, left = start - spend;
+      if (!sh) return out('It could take', '-', `One share costs ₹${num(x.price)}. Enter at least that much.`, '', false);
+      if (g.end <= start) return out('It could take', 'Already there', `You're starting with ${inr(start)}.`, '', true);
+      if (g.end <= left + spend * 1.0001) return out('It could take', 'Under 1 month', '', '', true);
+      const t = yearsFor(x, Math.log((g.end - left) / spend));
+      if (t > 40) return out('It could take', 'Over 40 years', `Too far ahead to estimate. Try a larger amount.`, '', false);
+      const sp = spreadAt(x, t), mult = Math.exp(muAt(x, t));
+      out('It could take', yearsText(t), `${sh.toLocaleString('en-IN')} share${sh === 1 ? '' : 's'} at ₹${num(x.price)}${left >= 1 ? `, ${inr(left)} left over` : ''}`,
+        `That's the typical rate, so there is <b>about a 1 in 2 chance</b> it takes longer. At that same date: bad case <b>${inr(spend * mult * Math.exp(-sp) + left)}</b>, good case <b>${inr(spend * mult * Math.exp(sp) + left)}</b>.${longNote(t)} Before taxes and costs.`, true);
+    }
+  }
   function calcHTML() {
     return `<div class="answer calc"><h4>Calculate your returns</h4>
-      <div class="seg" role="tablist"><button data-cmode="future">What it could become</button><button data-cmode="past">If you had invested</button></div>
-      <div class="cmain"><div><label class="ck" for="calcAmt">You invest</label><div class="camt">₹<input id="calcAmt" inputmode="numeric" autocomplete="off" aria-label="Amount to invest in rupees"></div><span class="sm" id="calcShares"></span></div>
+      <div class="seg" role="tablist"><button data-cmode="future">Could become</button><button data-cmode="past">If you had invested</button><button data-cmode="goal">My goal</button></div>
+      <div class="cwrap" id="calcGoal" hidden>
+        <div><label class="gq" for="goalEnd">What's my end amount?</label><div class="camt">₹<input id="goalEnd" inputmode="numeric" autocomplete="off"></div></div>
+        <div class="pills" aria-label="End amount">${GOALS.map(([v, l]) => `<button data-gend="${v}">${l}</button>`).join('')}</div>
+        <div class="seg"><button data-gby="years">I know the years</button><button data-gby="start">I know the amount</button></div>
+        <div id="goalByYears" class="cwrap"><div><label class="gq" for="goalYears">In how many years?</label><div class="camt yrs"><input id="goalYears" inputmode="decimal" autocomplete="off"></div></div>
+          <div class="pills" aria-label="Years">${[1, 3, 5, 10, 20].map(y => `<button data-gyrs="${y}">${y}Y</button>`).join('')}</div></div>
+        <div id="goalByStart" class="cwrap" hidden><div><label class="gq" for="goalStart">How much can I invest today?</label><div class="camt">₹<input id="goalStart" inputmode="numeric" autocomplete="off"></div></div>
+          <div class="pills" aria-label="Amount to invest">${AMOUNTS.map(([v, l]) => `<button data-gstart="${v}">${l}</button>`).join('')}</div></div>
+        <div class="gout" id="goalOut"><span class="k" id="goalK"></span><b id="goalV"></b><span class="sm" id="goalS"></span></div>
+      </div>
+      <div class="cwrap" id="calcStd"><div class="cmain"><div><label class="ck" for="calcAmt">You invest</label><div class="camt">₹<input id="calcAmt" inputmode="numeric" autocomplete="off" aria-label="Amount to invest in rupees"></div><span class="sm" id="calcShares"></span></div>
         <span class="arr" aria-hidden="true">››</span>
         <div class="r"><span class="ck" id="calcGetK"></span><b id="calcGet"></b><span class="sm" id="calcGainL"></span></div></div>
       <input type="range" id="calcSlide" min="0" max="1000" aria-label="Amount to invest">
       <div class="pills" aria-label="Amount">${AMOUNTS.map(([v, l]) => `<button data-camt="${v}">${l}</button>`).join('')}</div>
-      <div class="pills" aria-label="Time period">${PERIODS.map(([k, l]) => `<button data-cper="${k}" aria-label="${PERIOD_NAME[k]}">${l}</button>`).join('')}</div>
+      <div class="pills" aria-label="Time period">${PERIODS.map(([k, l]) => `<button data-cper="${k}" aria-label="${PERIOD_NAME[k]}">${l}</button>`).join('')}</div></div>
       <p id="calcNote"></p></div>`;
+  }
+  function paintGrid(x, spend, left) {
+    const g = $('calcGrid');
+    if (g && x.ranges) g.innerHTML = `<span class="h">In</span><span class="h r">Bad</span><span class="h r">Typical</span><span class="h r">Good</span><span class="h r">Loss</span>${PERIODS.map(([k]) => { const q = x.ranges[k]; return `<span>${k}</span><span class="r bad">${short(spend * q.low + left)}</span><span class="r">${short(spend * q.typical + left)}</span><span class="r good">${short(spend * q.high + left)}</span><span class="r">${q.loss_pct}%</span>`; }).join('')}`;
   }
   function calcPaint(typing) {
     const x = calcStock(); if (!x || !$('calcSlide')) return;
     const c = S.calc, amt = calcAmt(), nf = (S.lt || {}).nifty_past || {};
     // A stock too new for a forecast shows its past, without changing the choice for the next stock.
-    const isPast = c.mode === 'past' || !x.ranges, mode = isPast ? 'past' : 'future';
+    const isGoal = c.mode === 'goal' && !!x.ranges;
+    const isPast = !isGoal && (c.mode === 'past' || !x.ranges), mode = isGoal ? 'goal' : isPast ? 'past' : 'future';
+    $('calcGoal').hidden = !isGoal; $('calcStd').hidden = isGoal;
+    document.querySelectorAll('[data-cmode]').forEach(b => { b.classList.toggle('on', b.dataset.cmode === mode); b.disabled = b.dataset.cmode !== 'past' && !x.ranges; });
+    if (isGoal) { const sh0 = Math.floor(amt / x.price) * x.price; paintGrid(x, sh0, amt - sh0); goalPaint(x, typing); return; }
     if (isPast && c.per === '20y') c.per = '5y';
     const r = (x.ranges || {})[c.per], p = (x.past || {})[c.per];
     const buyAt = isPast ? (p && p.px) : x.price, sh = buyAt ? Math.floor(amt / buyAt) : 0, spend = sh * (buyAt || 0);
     if (!typing) $('calcAmt').value = amt.toLocaleString('en-IN');
     const sl = $('calcSlide'), v = toSlide(amt); sl.value = v; sl.style.setProperty('--p', (v / 10) + '%');
-    document.querySelectorAll('[data-cmode]').forEach(b => { const on = b.dataset.cmode === mode; b.classList.toggle('on', on); b.disabled = b.dataset.cmode === 'future' && !x.ranges; });
     document.querySelectorAll('[data-camt]').forEach(b => b.classList.toggle('on', +b.dataset.camt === amt));
     document.querySelectorAll('[data-cper]').forEach(b => { const k = b.dataset.cper; b.classList.toggle('on', k === c.per); b.disabled = isPast ? !(x.past || {})[k] : !(x.ranges || {})[k]; b.hidden = isPast && k === '20y'; });
     $('calcGetK').textContent = isPast ? 'Would be today' : 'You could get';
@@ -867,8 +943,7 @@
     } else {
       note.innerHTML = `In ${PERIOD_NAME[c.per]}: bad case <b>${inr(spend * r.low + left)}</b>, good case <b>${inr(spend * r.high + left)}</b>, and a <b>${r.loss_pct}%</b> chance of ending below ${inr(amt)}. Before taxes and costs.${c.per === '20y' ? ' 20 years cannot be tested for one stock: a rough guide only.' : ' In tests, 4 in 5 real results landed inside the range.'}`;
     }
-    const g = $('calcGrid');
-    if (g && x.ranges) g.innerHTML = `<span class="h">In</span><span class="h r">Bad</span><span class="h r">Typical</span><span class="h r">Good</span><span class="h r">Loss</span>${PERIODS.map(([k]) => { const q = x.ranges[k]; return `<span>${k}</span><span class="r bad">${short(spend * q.low + left)}</span><span class="r">${short(spend * q.typical + left)}</span><span class="r good">${short(spend * q.high + left)}</span><span class="r">${q.loss_pct}%</span>`; }).join('')}`;
+    paintGrid(x, spend, left);
   }
   // Why a stock is on the list, only from figures in the data. The rank is what decides;
   // company numbers are context for and against, and were not part of the test.
@@ -1278,6 +1353,10 @@
   const openSw = id => { S.openSw = id; const el = $('swSheet'); el.innerHTML = ''; renderSheet(); setTimeout(() => { const c = el.querySelector('[data-close]'); c && c.focus(); }, 50); };
   const closeSw = () => { const id = S.openSw; S.openSw = null; renderSheet(); const row = document.querySelector(`[data-sw="${id}"]`); row && row.focus(); };
   document.addEventListener('click', e => {
+    const ge = e.target.closest('[data-gend]'); if (ge) { S.goal.end = +ge.dataset.gend; calcPaint(); return; }
+    const gb = e.target.closest('[data-gby]'); if (gb) { S.goal.by = gb.dataset.gby; calcPaint(); return; }
+    const gy = e.target.closest('[data-gyrs]'); if (gy) { S.goal.yrs = +gy.dataset.gyrs; calcPaint(); return; }
+    const gs = e.target.closest('[data-gstart]'); if (gs) { S.goal.start = +gs.dataset.gstart; calcPaint(); return; }
     const ca = e.target.closest('[data-camt]'); if (ca) { S.calc.amt = +ca.dataset.camt; calcPaint(); return; }
     const cp = e.target.closest('[data-cper]'); if (cp) { if (!cp.disabled) { S.calc.per = cp.dataset.cper; calcPaint(); } return; }
     const cm = e.target.closest('[data-cmode]'); if (cm) { if (!cm.disabled) { S.calc.mode = cm.dataset.cmode; calcPaint(); } return; }
@@ -1292,6 +1371,12 @@
   document.addEventListener('input', e => {
     if (e.target.id === 'ltq') { S.ltq = e.target.value; render(); }
     if (e.target.id === 'calcAmt') { const d = e.target.value.replace(/[^\d]/g, ''); e.target.value = d ? (+d).toLocaleString('en-IN') : ''; S.calc.amt = +d || 0; calcPaint(true); }
+    if (e.target.id === 'goalEnd' || e.target.id === 'goalStart') {
+      const d = e.target.value.replace(/[^\d]/g, ''); e.target.value = d ? (+d).toLocaleString('en-IN') : '';
+      if (e.target.id === 'goalEnd') S.goal.end = +d || 0; else S.goal.start = +d || 0;
+      calcPaint(e.target.id);
+    }
+    if (e.target.id === 'goalYears') { S.goal.yrs = parseFloat(e.target.value) || 0; calcPaint('goalYears'); }
     if (e.target.id === 'calcSlide') { S.calc.amt = fromSlide(+e.target.value); calcPaint(); }
   });
   document.addEventListener('change', e => {
