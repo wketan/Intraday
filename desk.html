@@ -477,10 +477,35 @@
 .answer .cost span{font-size:13px;color:var(--ink3);font-weight:600}
 .sheet .big{flex-wrap:nowrap}.sheet .big div{min-width:0;flex:1;padding:12px 16px}.sheet .big b{font-size:24px}
 @media(max-width:880px){.sheet .big{flex-wrap:wrap}.sheet .big div{flex:1 1 40%}}
+.funnel{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:14px}
+.funnel .st{display:flex;align-items:baseline;gap:6px;border-radius:99px;padding:7px 14px;background:var(--surface2);font-size:12.5px;font-weight:700;color:var(--ink2)}
+.funnel .st b{font-size:15px;font-weight:800;color:var(--ink);font-variant-numeric:tabular-nums}
+.funnel .st.hot{background:var(--mint);color:var(--mint-i)}.funnel .st.hot b{color:var(--mint-i)}
+.funnel .ar{color:var(--ink3);font-weight:700}
+.thead.s6,.tr.s6{grid-template-columns:minmax(0,1.1fr) 150px 110px 110px 110px}
+.dipbar{height:7px;border-radius:99px;background:var(--surface2);overflow:hidden;margin-top:5px}
+.dipbar i{display:block;height:100%;border-radius:99px;background:var(--lav-i)}
+.plan{border-radius:20px;background:var(--mint);color:var(--mint-i);padding:12px 16px;margin:0 14px 12px;font-size:13.5px;font-weight:600;line-height:1.5}
+.plan b{font-weight:800}.plan.pilot{background:var(--butter);color:var(--butter-i)}
+@media(max-width:880px){.tr.s6{grid-template-columns:1fr auto}.tr.s6 .opt6{display:none}.funnel .ar{display:none}}
+/* Endless card motion. The page re-renders every few seconds, which would restart
+   every animation; --t (seconds since load, set before each render) as a negative
+   delay puts each new element at the phase the old one had, so nothing ever jumps. */
+:root{--t:0s;--bub:rgba(255,255,255,.72)}
+:root[data-theme=dark]{--bub:rgba(255,255,255,.17)}
+.kpi::after{animation:drift 17s ease-in-out infinite alternate!important;animation-delay:calc((var(--t) + var(--i,0) * 2.3s) * -1)!important}
+.kpi::before{animation:drift2 13s ease-in-out infinite alternate!important;animation-delay:calc((var(--t) + var(--i,0) * 1.7s) * -1)!important}
+.dot::after{animation-delay:calc(var(--t) * -1)}
+@keyframes drift{from{translate:0 0}to{translate:-30px 40px}}
+@keyframes drift2{from{translate:0 0}to{translate:-36px -22px}}
+.bub{position:absolute;bottom:-26px;left:var(--x);width:var(--s);height:var(--s);border-radius:50%;pointer-events:none;z-index:0;opacity:0;
+  background:radial-gradient(circle at 34% 30%,var(--bub),transparent 72%);box-shadow:inset 0 0 0 1px var(--bub);
+  animation:bubble var(--d) linear infinite;animation-delay:calc((var(--t) + var(--o)) * -1)}
+@keyframes bubble{0%{transform:translate3d(0,0,0) scale(.72);opacity:0}15%{opacity:.8}50%{transform:translate3d(var(--w),-100px,0) scale(.95)}85%{opacity:.8}100%{transform:translate3d(0,-205px,0) scale(1.12);opacity:0}}
 .stale{border-radius:24px;padding:14px 18px;background:var(--butter);color:var(--butter-i);font-size:13.5px;font-weight:600;line-height:1.5;margin-bottom:16px}
 .stale b{font-weight:800}
 .note2{margin-top:10px;font-size:12.5px;color:var(--ink3);line-height:1.5}
-@media(max-width:1150px){.kpis.six{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(max-width:1150px){.kpis.six{grid-template-columns:repeat(3,minmax(0,1fr))}.tb .stamp{order:3}.tb .seg{order:2}}
 .plot{position:relative;height:300px;width:100%}
 .plot svg{display:block;overflow:visible;max-width:100%}
 .plot .tipx{position:absolute;pointer-events:none;background:var(--pill);color:var(--pillink);font-size:12px;font-weight:700;border-radius:10px;padding:5px 9px;white-space:nowrap;transform:translate(-50%,-130%);opacity:0;transition:opacity .15s}
@@ -741,6 +766,7 @@
     MAX_HOLD: 'Reached the maximum holding period and was closed on time, win or lose.',
     EARNINGS_EXIT: 'Closed the session before quarterly results to avoid the IV crush and gap risk.',
     CANCELLED: 'The limit entry never filled, so there was no trade.',
+    PILOT_STOP: 'Fell 3% from entry, so the pilot stop closed it.',
   };
   const parseJ = v => { if (v == null) return null; if (typeof v !== 'string') return v; try { return JSON.parse(v); } catch (e) { return null; } };
   const isoOf = d => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
@@ -803,6 +829,7 @@
               ? `<p>Today's price for this option isn't in the engine's feed. Check it in your broker before buying: if it is well above ₹${num(entry)}, the move has already happened and the plan's numbers no longer apply.</p>`
               : `<p>If you had bought 1 lot on ${fmtDate(x.entry_date)} and sold on ${fmtDate(x.exit_date)}: <b>${inr(lotCost)} → ${inr(lotEnd)}</b>, ${pnl >= 0 ? 'a profit of' : 'a loss of'} <b style="color:var(--${pnl >= 0 ? 'mint-i' : 'blush-i'})">${inr(Math.abs(+x.pnl_rupees || lotEnd - lotCost))}</b> (${pct != null ? (pct >= 0 ? '+' : '') + pct.toFixed(1) + '%' : ''}) in ${g.held} ${g.unit}, before brokerage.</p>`}
             ${capLine ? `<p>${capLine}</p>` : ''}
+            ${+x.spot_entry > 0 ? `<p><b>Or buy the stock itself, no lots needed:</b> at ₹${num(x.spot_entry)} a share, ${inr(capital / 4)} (a quarter of your capital) buys ${Math.floor(capital / 4 / x.spot_entry)} shares.</p>` : ''}
           </div>`;
         })()}
 
@@ -933,7 +960,7 @@
       const resPal = isOpen ? 'sky' : WIN(x.result) ? 'mint' : x.result === 'LOSS' ? 'blush' : 'butter';
       return `<div class="tr s4 open-able rise" style="--i:${i + 20}" data-sw="${esc(x.id)}" role="button" tabindex="0" aria-label="Open ${esc(x.instrument)} holding guide">
         <div class="who">${av((x.instrument || '?')[0], palOf(x.instrument || ''))}<div style="min-width:0">
-          <div class="short">/${esc(x.instrument)}<span class="dot ${isOpen ? '' : 'off'}"></span><span class="tag" style="background:var(--${resPal});color:var(--${PAL[resPal]})">${esc(isOpen ? x.status.toLowerCase() : (x.exit_reason || x.result || '').toLowerCase())}</span></div>
+          <div class="short">/${esc(x.instrument)}<span class="dot ${isOpen ? '' : 'off'}"></span><span class="tag" style="background:var(--${resPal});color:var(--${PAL[resPal]})">${esc(isOpen ? x.status.toLowerCase() : (x.exit_reason || x.result || '').toLowerCase())}</span>${(parseJ(x.indicators) || {}).pilot ? '<span class="tag" style="background:var(--butter);color:var(--butter-i)">pilot</span>' : ''}</div>
           <div class="meta"><span class="own">${esc(x.entry_date)}${x.exit_date ? ' → ' + esc(x.exit_date) : ''}</span><span class="chip">${esc(x.option_strike ? Math.round(x.option_strike) + ' ' + (x.option_type || '') : '')}</span>${x.hold_days != null ? `<span class="chip">${esc(x.hold_days)}d</span>` : ''}</div></div></div>
         <div class="dest wrap2">Started ${fmtDate(x.entry_date)} at ₹${num(x.option_entry)}${isOpen ? ` · open, day ${daysBetween(x.entry_date, today)}` : ` · closed ${fmtDate(x.exit_date)} at ₹${num(x.option_exit)}`}<span class="why">1 lot = ${esc(x.lot_size)} units = ${inr((+x.option_entry || 0) * (+x.lot_size || 0))} · ${isOpen ? 'open now' : (+x.pnl_rupees >= 0 ? 'made ' : 'lost ') + inr(Math.abs(+x.pnl_rupees || 0))} · tap for details</span></div>
         <div class="num ${r > 0 ? 'up' : r < 0 ? 'dn' : ''}">${r != null ? (r >= 0 ? '+' : '') + (r * 100).toFixed(1) + '%' : '-'}</div>
@@ -942,6 +969,7 @@
     const reg = (S.swingRes && S.swingRes.regime) || null;
 
     const keep = document.activeElement && document.activeElement.id === 'cap';
+    root.style.setProperty('--t', (performance.now() / 1000).toFixed(2) + 's');
     $('app').innerHTML = `
     <div class="bar rise" style="--i:0">
       <div class="brand"><div class="mark"></div>Desk<span class="host mkt"><span class="dot ${mk.open ? '' : 'off'}"></span>${clock} IST · ${mk.open ? 'market open' : 'market closed'}</span></div>
@@ -971,15 +999,34 @@
     <div class="tb rise" style="--i:8"><h2>Signals <span class="tag">${cards.length}</span></h2><span class="stamp">entry, SL, T1, T2 as the engine set them · sized for your ${inr(capital)}</span></div>
     ${sigHtml ? `<div class="sigs">${sigHtml}</div>` : '<div class="table glass"><div class="empty">No signals yet today. The engine fires only between 09:45 and 14:30 IST.</div></div>'}
 
+    ${(() => {
+      const sc = S.screen || {};
+      if (!sc.scanned) return `<div class="tb rise" style="--i:17"><h2>Swing screen</h2></div><div class="table glass"><div class="empty">The first scan after a restart takes a few minutes. It then repeats every 30 minutes in market hours.</div></div>`;
+      const slot = Math.round(capital / 4);
+      const steps = [['scanned', sc.scanned], ['in an uptrend', sc.uptrend], ['beat NIFTY', sc.beats_nifty], ['near their high', sc.near_high], ['dipped enough', sc.washout]];
+      const plans = (sc.signals || []).map(x => { const q = Math.floor(slot / x.limit_entry); return `<div class="plan ${x.pilot ? 'pilot' : ''}"><b>${esc(x.stock)}${x.pilot ? ' · PILOT, paper record only, not a recommendation' : ' · signal'}</b><br>Buy only if it falls to <b>₹${num(x.limit_entry)}</b> by the end of the next session. ${q ? `${inr(slot)} buys <b>${q} shares</b> (${inr(q * x.limit_entry)}).` : `One share costs more than your ${inr(slot)} slot.`} Sell at the first close above the 5-day average, or at ₹${num(x.t1)} / ₹${num(x.t2)}, within 10 sessions.</div>`; }).join('');
+      const rows = (sc.watchlist || []).map((w, i) => `<div class="tr s6 static rise" style="--i:${i + 18}">
+        <div class="who">${av(w.stock[0], palOf(w.stock))}<div style="min-width:0"><div class="short">/${esc(w.stock)}${w.washout ? '<span class="tag" style="background:var(--mint);color:var(--mint-i)">dipped</span>' : ''}</div><div class="meta"><span class="sub2">last close ₹${num(w.close)}</span></div></div></div>
+        <div><div class="num">${num(w.dip_score, 0)} <span class="dim" style="font-weight:600;color:var(--ink3);font-size:12px">/ under 10</span></div><div class="dipbar"><i style="width:${Math.max(3, 100 - Math.min(100, w.dip_score / 2))}%"></i></div></div>
+        <div class="num opt6 dim">+${num(w.beats_nifty_pct, 0)}%</div><div class="num opt6 dim">${num(w.from_high_pct, 1)}%</div>
+        <div class="num opt6 dim">${Math.floor(slot / w.close)} shares</div></div>`).join('');
+      return `<div class="tb rise" style="--i:17"><h2>Swing screen</h2><span class="stamp">last scan ${esc(sc.time)} IST · prices through ${esc(fmtDate(sc.bars_through))}</span></div>
+      <div class="funnel">${steps.map(([k, v], i) => `${i ? '<span class="ar">→</span>' : ''}<span class="st ${i === 4 && v ? 'hot' : ''}"><b>${esc(v)}</b>${k}</span>`).join('')}</div>
+      <div class="table glass rise" style="--i:17;margin-bottom:8px">${plans ? `<div style="height:12px"></div>${plans}` : ''}
+        <div class="thead s6"><div>Strong stocks waiting for a dip</div><div class="num">Dip score</div><div class="num opt6">Beats NIFTY, 6m</div><div class="num opt6">From 52w high</div><div class="num opt6">${inr(slot)} buys</div></div>
+        ${rows || '<div class="empty">No stock passes the first three filters today.</div>'}</div>`;
+    })()}
+
     <div class="tb rise" style="--i:18"><h2>Swing record <span class="tag">${swOpen.length} open · ${chron.length} closed</span></h2><span class="stamp">${reg ? `regime tier ${esc(reg.tier)}${reg.tier === 'C' ? ' (no new entries)' : ''} · ` : ''}if you had put ${inr(slot)} (one of 4 slots) into each</span></div>
     ${(() => {
       const lastEntry = sw.map(x => x.entry_date).sort().slice(-1)[0];
       const daysQuiet = lastEntry ? daysBetween(lastEntry, today) : null;
       if (swOpen.length || daysQuiet == null || daysQuiet < 7) return '';
-      const why = reg && reg.tier === 'C'
-        ? `The engine only opens swing trades when the market is in an uptrend. Today NIFTY (${num(reg.nifty_close, 0)}) is <b>${num(reg.nifty_gap_pts, 0)} points below</b> its 200-day average (${num(reg.nifty_sma200, 0)}), so new entries are blocked (checked ${esc(reg.checked_at)} IST).`
-        : 'The scanner has found no stock that passes every filter.';
-      return `<div class="stale"><b>No new swing trade since ${fmtDate(lastEntry)} (${daysQuiet} days).</b> ${why} The trades below are the past record, not live ideas. New ones will appear here the day the filter turns on.</div>`;
+      const blocked = reg && reg.tier === 'C';
+      const why = blocked
+        ? `The market filter is closed: NIFTY (${num(reg.nifty_close, 0)}) is <b>${num(reg.nifty_gap_pts, 0)} points below</b> its 200-day average and too few stocks are in uptrends. Rule-following trades are paused, so any new trade here will be a tagged pilot.`
+        : `The market filter is open${reg ? ` (level ${esc(reg.tier)})` : ''}, but no stock has dipped enough yet. The strategy only buys a strong stock after a sharp 2-day fall.`;
+      return `<div class="stale"><b>No new swing trade since ${fmtDate(lastEntry)} (${daysQuiet} days).</b> ${why}</div>`;
     })()}
     <div class="kpis six" style="margin-bottom:16px">
       <div class="kpi t-mint pop" style="--i:18;grid-column:span 2"><div class="lab">Your ${inr(slot)} slot, every trade</div><div class="val">${inr(eq, true)}</div>
@@ -1006,6 +1053,15 @@
     </div>
     <p class="foot">Read-only view of the engine at ${esc(server().replace(/^https?:\/\//, ''))}. Sizes use your capital, 1% risk at the premium stop, a 50% capital cap per trade, ₹115/lot brokerage and 50 bps slippage per side. Advisory only, never an order. Start/stop the engine from the <a href="console.html" style="color:var(--accent);font-weight:700">console</a>.</p>`;
 
+    // Bubbles: fixed per card (seeded by position) so a re-render changes nothing.
+    document.querySelectorAll('.kpi').forEach((card, n) => {
+      for (let b = 0; b < 6; b++) {
+        const h = (n * 7 + b * 13) % 17, el = document.createElement('i');
+        el.className = 'bub'; el.setAttribute('aria-hidden', 'true');
+        el.style.cssText = `--x:${(6 + (b * 16 + h * 3) % 86)}%;--s:${8 + (h % 5) * 5}px;--d:${10 + (h % 7)}s;--o:${(b * 2.9 + n * 1.3).toFixed(1)}s;--w:${(h % 2 ? 1 : -1) * (8 + h)}px`;
+        card.appendChild(el);
+      }
+    });
     if (keep) { const c = $('cap'); c.focus(); c.setSelectionRange(c.value.length, c.value.length); }
     if (S.openSw != null) renderSheet();
   }
@@ -1039,6 +1095,7 @@
   poll('hist', () => '/api/history?limit=200&date=' + todayISO(), 20000);
   poll('perf', '/api/performance', 60000);
   poll('swing', '/api/swing/positions', 120000);
+  poll('screen', '/api/swing/screen', 120000, null, 40000);
   poll('swingRes', '/api/swing/results', 300000, null, 60000);
   loadCandles(S.sym).then(() => { for (const k of SYMS) if (k !== S.sym) loadCandles(k); });
   setTimeout(() => $('app').classList.add('ready'), 1500);

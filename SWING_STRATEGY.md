@@ -207,3 +207,31 @@ Intraday side, same session: EOD learning-loop time blocks clamped (one
 window, <= 30 min, never before 10:30; it had blocked 10:00-11:00 +
 13:45-14:15 off a 3-trade day). MAX_OPEN_POSITIONS=1 in the Railway env
 blocked 40 signals in 21 days, many at 95% confidence — operator decision.
+
+## v1.4 (2026-11-01): "why no swing trades?" answered, nothing loosened
+
+Owner question after 95 days without a trade. Walk-forward on 76 stocks, Yahoo daily,
+Nov 2022 to Oct 2026, cash equity, 0.25% round trip, split at 2025-01-01. Harness:
+`~/.claude/skills/it/research/bt.py`. Survivorship bias: today's universe.
+
+| Variant | Trades | Win | Exp/trade | SUM | Max DD | Since Aug 2026 |
+|---|---|---|---|---|---|---|
+| v1.3 as shipped | 111 | 74% | +0.97% | +107% | -10.8% | 2 |
+| Trigger cum RSI2 < 20 | 207 | 63% | +0.41% | +84% | -36.8% | 2 |
+| Trigger cum RSI2 < 30 | 279 | 65% | +0.27% | +75% | -29.7% | 2 |
+| Plain RSI2 < 10 | 289 | 61% | +0.11% | +33% | -44.2% | 2 |
+| 20-day breakout, tiered | 214 | 26% | -0.47% | -100% | -136% | 2 |
+| NIFTY dip, cum RSI2 < 10 | 21 | 52% | -0.23% | -5% | -9% | 3 |
+| Gate off (Tier C trades only) | 19 | 74% | -0.07% | -1.3% | -20.6% | 10 |
+| Tier C only, -3% stop | 19 | 74% | +0.57% | +10.9% | -8.5% | 10 |
+
+Reading: the quiet is the market, not a bug: 54 of the last 70 sessions were Tier C, and the
+rules' long-run rate is 2.4 trades a month. Every way of loosening the trigger made it worse.
+So the rules stay. Shipped instead:
+- Screen (`pullback_inspect`, `/api/swing/screen`): filter funnel and watchlist each scan, and
+  once a day when the market is shut. Read-only.
+- Pilot (`SWING_PILOT`, `SWING_PILOT_MAX_OPEN`=2, `SWING_PILOT_STOP_PCT`=3): paper trades while
+  the gate is closed, tagged, -3% stop, breadth gate skipped as in the test, VIX block and event
+  blackout still apply. 19 trades is under the 30-trade bar: tracked, never recommended.
+- Affordability gate off by default (`PULLBACK_AFFORD_GATE`): a 1-lot option over 10% of the
+  account silently discarded the signal, though the edge is measured on the stock.

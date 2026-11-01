@@ -6371,6 +6371,28 @@ class SwingPullback:
             return None
 
 
+def pullback_inspect(candles, ctx):
+    """Where one stock stands against SwingPullback.analyze's filters, in the
+    same order, for the dashboard. Read-only: never decides a trade.
+    Returns None when there aren't enough bars to judge."""
+    if len(candles) < SwingPullback.MIN_BARS:
+        return None
+    closes = pd.Series([c["close"] for c in candles], dtype=float)
+    highs = pd.Series([c["high"] for c in candles], dtype=float)
+    c = float(closes.iloc[-1])
+    uptrend = c > float(closes.rolling(200).mean().iloc[-1]) and c > float(closes.rolling(100).mean().iloc[-1])
+    rs = c / float(closes.iloc[-127]) - 1.0 - float(ctx.get("nifty_ret126") or 0.0)
+    prox = c / float(highs.iloc[-252:].max())
+    rsi2 = TA.rsi(closes, 2)
+    cum = float(rsi2.iloc[-1]) + float(rsi2.iloc[-2])
+    return {"close": round(c, 2), "date": str(candles[-1].get("ts") or "")[:10],
+            "uptrend": uptrend, "beats_nifty": rs > 0,
+            "near_high": prox >= float(os.environ.get("PULLBACK_MIN_52W_PROX", "0.85")),
+            "washout": cum < float(os.environ.get("PULLBACK_CUMRSI2_MAX", "10")),
+            "dip_score": round(cum, 1), "beats_nifty_pct": round(rs * 100, 1),
+            "from_high_pct": round((prox - 1) * 100, 1)}
+
+
 # ═══════════════════════════════════════════════════════════════════
 # SWING ENGINE — multi-day scanner + AI exit analysis
 # ═══════════════════════════════════════════════════════════════════
@@ -6418,6 +6440,10 @@ class SwingEngine:
                     if mins_since >= self.EXIT_RECHECK_MIN:
                         self._ai_exit_all_open()
                         self._last_exit_check = now
+                elif (getattr(self, "_screen", None) or {}).get("date") != now.strftime("%Y-%m-%d"):
+                    # Market shut: no entries, but keep the dashboard's screen
+                    # current (first run after a deploy, weekends, post-close).
+                    self._screen_only()
                 time.sleep(self.SCAN_MIN * 60)
             except Exception as e:
                 log.error(f"[Swing] Loop error: {e}")
@@ -6440,6 +6466,7 @@ class SwingEngine:
         EarningsCalendar.refresh()   # once/day; drives T-3 blackout + T-1 exits
         ctx = self._swing_market_ctx()
         ctx["_breadth"] = []; ctx["_breadth200"] = []   # per-scan samples; ctx is cached 30 min so don't accumulate
+        ctx["_screen"] = []
         log.info(f"[Swing] Pullback scan: regime={'OK' if ctx['long_ok'] else 'BLOCKED'} "
                  f"({ctx['note']}) · {len(SWING_STOCKS)} instruments")
         candidates = []
@@ -6456,6 +6483,7 @@ class SwingEngine:
                 time.sleep(_stock_gap)
             except Exception as e:
                 log.warning(f"[Swing] {name} error: {e}")
+        self._publish_screen(ctx, candidates)
         try:
             self._admit_pullback_candidates(candidates, ctx)
         except Exception as e:
@@ -6618,6 +6646,7 @@ class SwingEngine:
             ctx["tier"] = ctx["_fb_tier"]   # carried over with the fallback read
         ctx["_trend_ok"] = trend_ok
         ctx["long_ok"] = trend_ok and ctx["vix_band"] != "block" and not blackout
+        ctx["blackout"] = bool(blackout)
         ctx["note"] = " · ".join(notes)
         self._mctx = ctx
         return ctx
@@ -6645,6 +6674,67 @@ class SwingEngine:
                     return f"{d}: {min(x[1] for x in window):.0f}%→{p:.0f}%"
                 break
         return None
+
+    def _screen_only(self):
+        """Fill the dashboard's screen outside market hours. Fetches daily
+        bars and inspects them; never admits or touches a position."""
+        ctx = self._swing_market_ctx()
+        ctx["_screen"] = []
+        gap = float(os.environ.get("SWING_SCAN_GAP_SEC", "0.9") or 0.9)
+        for name, info in SWING_STOCKS.items():
+            if info.get("type") == "INDEX":
+                continue
+            try:
+                token, exch, _sym = self._resolve_token(name, info)
+                if token:
+                    self._screen_add(name, info, self.client.daily_candles(token, exch, days=400), ctx)
+                time.sleep(gap)
+            except Exception as e:
+                log.warning(f"[Swing] screen {name}: {e}")
+        self._publish_screen(ctx, [])
+
+    @staticmethod
+    def _screen_add(name, info, candles, ctx):
+        if info.get("type") == "INDEX":
+            return
+        try:
+            row = pullback_inspect(candles, ctx)
+            if row:
+                row.update(stock=name, lot_size=info.get("lot_size"))
+                ctx.setdefault("_screen", []).append(row)
+        except Exception as e:
+            log.warning(f"[Swing] inspect {name}: {e}")
+
+    def _publish_screen(self, ctx, candidates):
+        rows = ctx.get("_screen") or []
+        up = [r for r in rows if r["uptrend"]]
+        rs = [r for r in up if r["beats_nifty"]]
+        hi = [r for r in rs if r["near_high"]]
+        now = datetime.now(IST)
+        self._screen = {
+            "date": now.strftime("%Y-%m-%d"), "time": now.strftime("%H:%M"),
+            "scanned": len(rows), "uptrend": len(up), "beats_nifty": len(rs), "near_high": len(hi),
+            "washout": sum(1 for r in hi if r["washout"]),
+            "bars_through": max((r["date"] for r in rows), default=None),
+            "tier": ctx.get("tier"), "long_ok": bool(ctx.get("long_ok")),
+            "pilot": self._pilot_ok(ctx), "note": ctx.get("note") or "",
+            "watchlist": sorted(hi, key=lambda r: r["dip_score"])[:15],
+            "signals": [{"stock": c["name"], "close": c["sig"].get("price"),
+                         "limit_entry": c["sig"].get("limit_entry"), "t1": c["sig"].get("target1"),
+                         "t2": c["sig"].get("target2"), "score": c["sig"].get("score"),
+                         "pilot": bool(c["sig"].get("pilot"))} for c in candidates],
+        }
+
+    @staticmethod
+    def _pilot_ok(ctx):
+        """Pilot trades: the engine's paper record while the regime gate is
+        closed (own walk-forward: 19 such trades 2025-26, 74% win, raw -1.3%
+        total and -20.6% drawdown, +10.9% and -8.5% with a -3% stop). 19 is
+        below the 30-trade bar, so these are tracked, never recommended.
+        Macro blackouts and VIX blocks still apply."""
+        return (os.environ.get("SWING_PILOT", "on").lower() != "off"
+                and not ctx.get("long_ok") and ctx.get("nifty_close") is not None
+                and ctx.get("vix_band") != "block" and not ctx.get("blackout"))
 
     def _scan_pullback(self, name, info, ctx):
         """One instrument: run strength-exits on its open pullback rows
@@ -6675,11 +6765,17 @@ class SwingEngine:
         except Exception as e:
             log.warning(f"[Swing] strength-exit check {name}: {e}")
 
-        if not ctx["long_ok"]:
+        self._screen_add(name, info, candles, ctx)
+
+        pilot = self._pilot_ok(ctx)
+        if not ctx["long_ok"] and not pilot:
             return None
         sig = SwingPullback.analyze(name, candles, info, ctx)
         if not sig:
             return None
+        if pilot:
+            sig["pilot"] = True
+            sig["reasons"].insert(0, "PILOT: market filter is closed. Paper record only, not a recommendation")
         ltp_data = self.client.ltp(exch, sym, token)
         spot = (ltp_data or {}).get("ltp") or sig["price"]
         sig["price"] = round(float(spot), 2)
@@ -6740,7 +6836,8 @@ class SwingEngine:
             except Exception:
                 pass
         min_breadth = float(os.environ.get("PULLBACK_MIN_BREADTH", "30"))
-        if breadth is not None and breadth < min_breadth:
+        pilot_run = self._pilot_ok(ctx)
+        if breadth is not None and breadth < min_breadth and not pilot_run:
             log.info(f"[Swing] breadth gate: only {breadth}% of universe above "
                      f"50DMA (<{min_breadth:.0f}%) — no new entries this cycle")
             return
@@ -6751,6 +6848,8 @@ class SwingEngine:
             # Tier B = half exposure: fewer slots. Lot-size floors mean
             # "half size" is expressed as slots + Slack tag, not fractional lots.
             max_open = min(max_open, int(os.environ.get("SWING_TIER_B_MAX_OPEN", "2")))
+        if pilot_run:
+            max_open = min(max_open, int(os.environ.get("SWING_PILOT_MAX_OPEN", "2")))
         max_sector = int(os.environ.get("SWING_MAX_PER_SECTOR", "2"))
         account = float(os.environ.get("SWING_ACCOUNT_CAPITAL", "150000"))
         open_rows = [p for p in (swing_pos_list(status="OPEN") + swing_pos_list(status="PENDING"))
@@ -6812,9 +6911,13 @@ class SwingEngine:
             # Affordability gate: 1-lot premium must fit the account.
             cap_frac = float(os.environ.get("PULLBACK_MAX_PREMIUM_FRAC", "0.10"))
             if opt and account > 0 and (opt.get("capital") or 0) > account * cap_frac:
-                log.info(f"[Swing] {name} skipped — 1 lot ≈ ₹{opt.get('capital'):,.0f} "
-                         f"> {cap_frac*100:.0f}% of ₹{account:,.0f} account")
-                continue
+                # Never drop the signal: the walk-forward that justifies this
+                # strategy is on the stock itself, which any capital can buy.
+                # A big option lot only rules out the option route.
+                log.info(f"[Swing] {name}: 1 lot ≈ ₹{opt.get('capital'):,.0f} "
+                         f"> {cap_frac*100:.0f}% of ₹{account:,.0f} account, stock route only")
+                if os.environ.get("PULLBACK_AFFORD_GATE", "off").lower() == "on":
+                    continue
             # IV-percentile gate (self-calibrating earnings/IV-crush proxy):
             # record today's IV; once >= 20 observations exist for the name,
             # skip entries whose IV sits in the top 30% of its own history —
@@ -6841,6 +6944,8 @@ class SwingEngine:
                     self._slack_sent.add(_key)
                     msg = self._format_slack(name, sig, opt)
                     msg = f"🎯 *Pullback v1 · rank #{admitted+1} · score {sig.get('score')}*\n" + msg
+                    if sig.get("pilot"):
+                        msg = "🧪 *PILOT: market filter closed. Paper record only, not a recommendation.*\n" + msg
                     if _limit_on:
                         msg += (f"\n⏳ Limit entry: enters only if price dips to "
                                 f"₹{float(sig['limit_entry']):,.1f} by end of next session "
@@ -7010,6 +7115,7 @@ class SwingEngine:
                 "strategy": sig.get("strategy"),
                 "score": sig.get("score"),
                 "tier": sig.get("tier"),
+                    "pilot": bool(sig.get("pilot")),
                 "premium_source": (opt or {}).get("premium_source"),
                 # Pullback winners need room to run (right-tail evidence);
                 # legacy rows keep the shorter default.
@@ -7067,6 +7173,7 @@ class SwingEngine:
                     "strategy": sig.get("strategy"),
                     "score": sig.get("score"),
                     "tier": sig.get("tier"),
+                    "pilot": bool(sig.get("pilot")),
                     "premium_source": (opt or {}).get("premium_source"),
                     "limit_entry": limit_px,
                     "signal_close": sig.get("price"),
@@ -7305,6 +7412,9 @@ class SwingEngine:
             if spot_sl_on and sl > 0 and ltp >= sl:  exit_reason = "SL_HIT"
             elif t2 > 0 and ltp <= t2:    exit_reason = "T2_HIT"
             elif t1 > 0 and ltp <= t1:    exit_reason = "T1_HIT"
+        if exit_reason is None and ind.get("pilot") and direction == "LONG" \
+                and ltp <= entry * (1 - float(os.environ.get("SWING_PILOT_STOP_PCT", "3")) / 100):
+            exit_reason = "PILOT_STOP"
         # Premium backstop: est option premium down ~50% from entry
         # (delta-0.5 model → spot has moved a full premium against us).
         if exit_reason is None and opt_entry > 0 and favorable * 0.5 <= -0.5 * opt_entry:
@@ -9087,6 +9197,13 @@ def api_swing_results():
     return jsonify({"open": open_rows, "closed": closed, "summary": summary,
                     "regime": regime,
                     "time": datetime.now(IST).strftime("%H:%M:%S")})
+
+
+@app.route("/api/swing/screen")
+def api_swing_screen():
+    """What the swing scanner saw on its last pass: filter funnel, the
+    strong stocks waiting for a dip, and any signal."""
+    return jsonify(getattr(swing_engine, "_screen", None) or {})
 
 
 @app.route("/api/swing/status")
