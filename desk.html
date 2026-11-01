@@ -514,7 +514,7 @@
 .sc-pnl>.tag{line-height:16px;margin-bottom:4px}
 .sc-pnl .v small{line-height:1}
 .sc-pnl .v small{font-size:13px;margin-left:8px}
-.need{margin-top:12px;border-radius:18px;background:var(--surface2);padding:11px 14px;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.need{margin-top:12px;border-radius:18px;background:var(--surface2);padding:11px 14px;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px 12px}
 .need div{display:flex;flex-direction:column;gap:1px;min-width:0}
 .need span{font-size:11px;font-weight:700;color:var(--ink3)}
 .need b{font-size:14.5px;font-weight:800;font-variant-numeric:tabular-nums}
@@ -711,17 +711,19 @@
         ${cur ? `<span class="dot" style="left:${curP}%;color:var(--${up ? 'good' : 'bad'});background:var(--${up ? 'good' : 'bad'})"></span>` : ''}
         <span class="val l" style="left:0">₹${num(sl, 0)}</span><span class="val" style="left:${enP}%">₹${num(entry, 0)}</span>${near(t1P, 100) || near(t1P, enP) ? '' : `<span class="val" style="left:${t1P}%">₹${num(t1, 0)}</span>`}<span class="val r" style="left:100%">₹${num(t2, 0)}</span>
       </div>
-      <div class="sc-pnl"><div><div class="k">${idea ? 'Per lot, if taken at entry' : (status === 'running' ? 'P&L · unrealised' : 'P&L')}</div>
+      ${idea ? `<div class="sc-pnl"><div><div class="k">If T1 hits, 1 lot</div><div class="v up">${inr((t1 - entry) * (lotSize || 0), true)}<small class="v up">+${entry ? ((t1 - entry) / entry * 100).toFixed(0) : 0}%</small></div></div>
+        <div><div class="k">If SL hits, 1 lot</div><div class="v dn">${inr((sl - entry) * (lotSize || 0), true)}<small class="v dn">${entry ? ((sl - entry) / entry * 100).toFixed(0) : 0}%</small></div></div>
+        <span class="tag" style="background:var(--${statusPal});color:var(--${PAL[statusPal]})">${esc(status)}</span></div>`
+      : `<div class="sc-pnl"><div><div class="k">${status === 'running' ? 'P&L · unrealised' : 'P&L'}</div>
         <div class="v ${pnl > 0 ? 'up' : pnl < 0 ? 'dn' : ''}">${inr(pnl, true)}<small class="${up ? 'v up' : 'v dn'}">${pct >= 0 ? '+' : ''}${pct.toFixed(1)}%</small></div></div>
-        <span class="tag" style="background:var(--${statusPal});color:var(--${PAL[statusPal]})">${esc(status)}</span></div>
+        <span class="tag" style="background:var(--${statusPal});color:var(--${PAL[statusPal]})">${esc(status)}</span></div>`}
       <div class="need">
-        <div><span>1 lot needs</span><b>${inr(lotCost)}</b></div>
-        <div><span>Lost at SL, 1 lot</span><b>${inr((entry - sl) * (lotSize || 0))}</b></div>
-        <div><span>Your ${inr(capital)} fits</span><b>${sz ? sz.lots + ' lot' + (sz.lots === 1 ? '' : 's') : '-'}</b></div>
+        <div><span>1 lot costs</span><b>${inr(lotCost)}</b></div>
+        <div><span>Your ${inr(capital)} can buy</span><b>${lotCost ? Math.floor(capital / lotCost) : 0} lot${lotCost && Math.floor(capital / lotCost) === 1 ? '' : 's'}</b></div>
+        <div><span>Loss if SL hits, 1 lot</span><b>${inr((entry - sl) * (lotSize || 0))}</b></div>
+        <div><span>Your 1% risk rule allows</span><b>${sz ? sz.lots + ' lot' + (sz.lots === 1 ? '' : 's') : '-'}</b></div>
       </div>
-      ${sz && !sz.lots ? `<div class="sc-note">${lotCost <= capital * MAX_CAP_PCT
-        ? `You can afford 1 lot (${Math.round(lotCost / capital * 100)}% of your money), but if SL hits you lose ${inr((entry - sl) * (lotSize || 0))}, which is ${((entry - sl) * (lotSize || 0) / capital * 100).toFixed(1)}% of your capital. Your rule allows 1% (${inr(capital * RISK_PCT)}); 1 lot fits that rule from about ${inr(sz.need)} of capital.`
-        : `1 lot costs ${inr(lotCost)}, more than half of your ${inr(capital)}.`}</div>` : ''}
+      ${sz && !sz.lots && lotCost <= capital ? `<div class="sc-note">You have the money. The 0 is only the safety rule: it allows a ${inr(capital * RISK_PCT)} loss per trade (1%), and this trade can lose ${inr((entry - sl) * (lotSize || 0))} (${((entry - sl) * (lotSize || 0) / capital * 100).toFixed(1)}% of your capital). Your call.</div>` : ''}
       ${note ? `<div class="sc-note">${note}</div>` : ''}
     </div>`;
   }
@@ -833,7 +835,7 @@
 
         <div class="sh-sec"><h4>Sizing details for your ${inr(capital)}</h4>
           <div class="kvg">
-            <div><span>Lots that fit</span><b>${sz ? sz.lots : '-'}</b></div>
+            <div><span>Your 1% risk rule allows</span><b>${sz ? sz.lots + ' lots' : '-'}</b></div>
             <div><span>One lot costs</span><b>${sz ? inr(sz.perLotCost) : '-'}</b></div>
             <div><span>Risk per lot at the backstop</span><b>${sz ? inr(sz.perLotRisk) : '-'}</b></div>
             <div><span>Capital for 1 lot</span><b>${sz ? inr(sz.need) : '-'}</b></div>
