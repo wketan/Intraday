@@ -572,7 +572,8 @@
   const server = () => (ls.get('signal_server_url', '') || DEFAULT_SERVER).replace(/\/$/, '');
   let capital = +ls.get('ie-capital', '') || 50000;
   const root = document.documentElement;
-  const theme0 = ls.get('links-theme', '') || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+  // Light unless the viewer chose dark with the toggle; the OS setting is ignored.
+  const theme0 = ls.get('links-theme', '') || 'light';
   root.setAttribute('data-theme', theme0);
 
   // ── engine facts (mirror server.py / conductor.py) ───────────────────
