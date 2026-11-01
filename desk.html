@@ -522,6 +522,41 @@
 .hgrid .r{text-align:right;white-space:nowrap}.hgrid .bad{color:var(--blush-i)}.hgrid .good{color:var(--mint-i)}
 @media(max-width:1150px){.thead.s7,.tr.s7{grid-template-columns:minmax(0,1.2fr) repeat(3,minmax(84px,1fr))}.hz3m,.hz20y{display:none}.trust{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:880px){.thead.s7{display:none}.tr.s7{grid-template-columns:1fr auto}.tr.s7 .hz3y,.tr.s7 .hz5y{display:none}.tr.s7 .hz1y::before{content:"in 1 year";display:block;font-size:11px;font-weight:600;color:var(--ink3)}}
+.calc{gap:14px}
+.calc .seg{align-self:flex-start;margin:0;flex-wrap:nowrap}
+.calc .seg button{white-space:nowrap}
+.cmain{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);gap:12px;align-items:start}
+.cmain .ck{display:block;margin:0 0 4px;font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--ink3)}
+.cmain .r{text-align:right}
+.camt{display:flex;align-items:center;font-size:26px;font-weight:800;letter-spacing:-.03em;border-radius:14px;background:var(--surface2);padding:4px 12px;font-variant-numeric:tabular-nums}
+.camt input{width:100%;min-width:0;border:0;background:transparent;font-weight:800;font-size:26px;letter-spacing:-.03em;outline:0;font-variant-numeric:tabular-nums}
+.camt:focus-within{outline:2px solid var(--accent);outline-offset:1px}
+.cmain .sm{display:block;margin-top:5px;font-size:12.5px;font-weight:600;color:var(--ink3);line-height:1.4}
+#calcGet{display:block;font-size:26px;font-weight:800;letter-spacing:-.03em;padding:4px 0;font-variant-numeric:tabular-nums;white-space:nowrap}
+.cmain .arr{padding-top:28px;color:var(--ink3);font-weight:800;font-size:18px}
+#calcGet.up,#calcGain.up{color:var(--mint-i)}#calcGet.dn,#calcGain.dn{color:var(--blush-i)}
+#calcGain{font-weight:800}
+#calcSlide{-webkit-appearance:none;appearance:none;width:100%;height:28px;background:transparent;cursor:pointer;margin:0}
+#calcSlide::-webkit-slider-runnable-track{height:8px;border-radius:99px;background:linear-gradient(90deg,var(--good) var(--p,50%),var(--surface2) var(--p,50%))}
+#calcSlide::-moz-range-track{height:8px;border-radius:99px;background:linear-gradient(90deg,var(--good) var(--p,50%),var(--surface2) var(--p,50%))}
+#calcSlide::-webkit-slider-thumb{-webkit-appearance:none;width:26px;height:26px;margin-top:-9px;border-radius:50%;border:0;background:var(--good);box-shadow:var(--shadow)}
+#calcSlide::-moz-range-thumb{width:26px;height:26px;border-radius:50%;border:0;background:var(--good);box-shadow:var(--shadow)}
+#calcSlide:focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius:99px}
+.pills{display:flex;flex-wrap:wrap;gap:7px}
+.pills button{height:34px;padding:0 14px;border-radius:99px;border:1px solid var(--line2);background:var(--surface);font-weight:700;font-size:12.5px;color:var(--ink2);cursor:pointer;transition:background-color .2s,transform .3s var(--spring)}
+.pills button:hover{background:var(--surface2)}.pills button:active{transform:scale(.94)}
+.pills button.on{background:var(--lav);color:var(--lav-i);border-color:transparent}
+.pills button[disabled]{opacity:.45;cursor:not-allowed}
+.pills button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+#calcNote{font-size:13px}
+@media(max-width:560px){.calc .seg{align-self:stretch}.calc .seg button{flex:1;padding:0 8px;font-size:12px}.camt,.camt input,#calcGet{font-size:21px}.camt{padding:4px 9px}.cmain{gap:7px}.cmain .arr{font-size:14px;padding-top:26px}}
+.tr.s7 .whyline{grid-column:1/-1;padding-left:60px;margin-top:-2px;font-size:12.5px;line-height:1.45;color:var(--ink2);font-weight:500}
+.whyline b{font-weight:700;color:var(--ink)}.whyline i{font-style:normal;color:var(--blush-i);font-weight:600}
+.reasons{list-style:none;margin:10px 0 0;padding:0;display:flex;flex-direction:column;gap:6px}
+.reasons li{display:flex;gap:9px;align-items:baseline;font-size:13.5px;line-height:1.45;color:var(--ink2);font-weight:500}
+.reasons li::before{content:"";flex:none;width:8px;height:8px;border-radius:50%;background:var(--good);transform:translateY(-1px)}
+.reasons li.bad::before{background:var(--bad)}
+@media(max-width:880px){.tr.s7 .whyline{padding-left:0}}
 .stale{border-radius:24px;padding:14px 18px;background:var(--butter);color:var(--butter-i);font-size:13.5px;font-weight:600;line-height:1.5;margin-bottom:16px}
 .stale b{font-weight:800}
 .note2{margin-top:10px;font-size:12.5px;color:var(--ink3);line-height:1.5}
@@ -781,40 +816,116 @@
   // ── long-term picks ──────────────────────────────────────────────────
   const short = v => { const a = Math.abs(v); return '₹' + (a >= 1e7 ? (a / 1e7).toFixed(1) + 'Cr' : a >= 1e5 ? (a / 1e5).toFixed(1) + 'L' : a >= 1000 ? (a / 1000).toFixed(1) + 'k' : Math.round(a)); };
   const HZ = [['3m', '3 months', 'Tested: picks beat the basket'], ['1y', '1 year', 'Tested: picks beat the basket'], ['3y', '3 years', 'Tested: small edge'], ['5y', '5 years', 'Tested: no edge, market-like'], ['20y', '20 years', 'Cannot be tested, rough guide only']];
+  // Returns calculator. Whole shares only, because that is what can actually be bought.
+  const PERIODS = [['1m', '1M'], ['3m', '3M'], ['6m', '6M'], ['1y', '1Y'], ['3y', '3Y'], ['5y', '5Y'], ['20y', '20Y']];
+  const PERIOD_NAME = { '1m': '1 month', '3m': '3 months', '6m': '6 months', '1y': '1 year', '3y': '3 years', '5y': '5 years', '20y': '20 years' };
+  const AMOUNTS = [[5000, '₹5k'], [10000, '₹10k'], [25000, '₹25k'], [50000, '₹50k'], [100000, '₹1L'], [500000, '₹5L'], [1000000, '₹10L']];
+  const SL_MIN = 1000, SL_MAX = 5000000;   // slider is logarithmic so small amounts stay usable
+  const toSlide = a => Math.round(1000 * Math.log(Math.min(SL_MAX, Math.max(SL_MIN, a)) / SL_MIN) / Math.log(SL_MAX / SL_MIN));
+  const fromSlide = v => { const a = SL_MIN * Math.pow(SL_MAX / SL_MIN, v / 1000), st = a < 20000 ? 100 : a < 200000 ? 1000 : 10000; return Math.round(a / st) * st; };
+  S.calc = { amt: null, per: '1y', mode: 'future' };
+  const calcAmt = () => S.calc.amt == null ? tradeAmt() : S.calc.amt;
+  const calcStock = () => ((S.lt || {}).stocks || []).find(s => s.stock === String(S.openSw).slice(3));
+  function calcHTML() {
+    return `<div class="answer calc"><h4>Calculate your returns</h4>
+      <div class="seg" role="tablist"><button data-cmode="future">What it could become</button><button data-cmode="past">If you had invested</button></div>
+      <div class="cmain"><div><label class="ck" for="calcAmt">You invest</label><div class="camt">₹<input id="calcAmt" inputmode="numeric" autocomplete="off" aria-label="Amount to invest in rupees"></div><span class="sm" id="calcShares"></span></div>
+        <span class="arr" aria-hidden="true">››</span>
+        <div class="r"><span class="ck" id="calcGetK"></span><b id="calcGet"></b><span class="sm" id="calcGainL"></span></div></div>
+      <input type="range" id="calcSlide" min="0" max="1000" aria-label="Amount to invest">
+      <div class="pills" aria-label="Amount">${AMOUNTS.map(([v, l]) => `<button data-camt="${v}">${l}</button>`).join('')}</div>
+      <div class="pills" aria-label="Time period">${PERIODS.map(([k, l]) => `<button data-cper="${k}" aria-label="${PERIOD_NAME[k]}">${l}</button>`).join('')}</div>
+      <p id="calcNote"></p></div>`;
+  }
+  function calcPaint(typing) {
+    const x = calcStock(); if (!x || !$('calcSlide')) return;
+    const c = S.calc, amt = calcAmt(), nf = (S.lt || {}).nifty_past || {};
+    // A stock too new for a forecast shows its past, without changing the choice for the next stock.
+    const isPast = c.mode === 'past' || !x.ranges, mode = isPast ? 'past' : 'future';
+    if (isPast && c.per === '20y') c.per = '5y';
+    const r = (x.ranges || {})[c.per], p = (x.past || {})[c.per];
+    const buyAt = isPast ? (p && p.px) : x.price, sh = buyAt ? Math.floor(amt / buyAt) : 0, spend = sh * (buyAt || 0);
+    if (!typing) $('calcAmt').value = amt.toLocaleString('en-IN');
+    const sl = $('calcSlide'), v = toSlide(amt); sl.value = v; sl.style.setProperty('--p', (v / 10) + '%');
+    document.querySelectorAll('[data-cmode]').forEach(b => { const on = b.dataset.cmode === mode; b.classList.toggle('on', on); b.disabled = b.dataset.cmode === 'future' && !x.ranges; });
+    document.querySelectorAll('[data-camt]').forEach(b => b.classList.toggle('on', +b.dataset.camt === amt));
+    document.querySelectorAll('[data-cper]').forEach(b => { const k = b.dataset.cper; b.classList.toggle('on', k === c.per); b.disabled = isPast ? !(x.past || {})[k] : !(x.ranges || {})[k]; b.hidden = isPast && k === '20y'; });
+    $('calcGetK').textContent = isPast ? 'Would be today' : 'You could get';
+    const get = $('calcGet'), sh2 = $('calcShares'), gl = $('calcGainL'), note = $('calcNote');
+    const none = (msg, s) => { get.textContent = '-'; get.className = ''; gl.innerHTML = ''; sh2.textContent = s || ''; note.textContent = msg; };
+    if (isPast && !p) return none(`${x.name} has no clean price history going back ${PERIOD_NAME[c.per]}.`);
+    if (!sh) return none(`One share ${isPast ? 'cost' : 'costs'} ₹${num(buyAt)}. Enter at least that much.`, 'Not enough for 1 share');
+    const left = amt - spend;
+    sh2.textContent = `${sh.toLocaleString('en-IN')} share${sh === 1 ? '' : 's'} at ₹${num(buyAt)}${left >= 1 ? `, ${inr(left)} left over` : ''}`;
+    // Cash that couldn't buy a whole share stays yours, so invest + gain = get.
+    const out = (isPast ? sh * x.price : spend * r.typical) + left, gain = out - amt, up = gain >= 0;
+    get.textContent = inr(out); get.className = up ? 'up' : 'dn';
+    gl.innerHTML = `${isPast ? (up ? 'Profit' : 'Loss') : 'Typical gain'} <span id="calcGain" class="${up ? 'up' : 'dn'}">${inr(gain, true)}</span> (${(up ? '+' : '') + (gain / spend * 100).toFixed(1)}%)`;
+    if (isPast) {
+      const n = nf[c.per], nv = n ? amt * (((S.lt || {}).nifty || 0) / n.px) : null;
+      note.innerHTML = `Bought on <b>${esc(new Date(p.date + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }))}</b> and held until today. The old price is adjusted for dividends and splits, so the result includes them.${nv ? ` The same ${inr(amt)} in NIFTY would be <b>${inr(nv)}</b>, not counting NIFTY's dividends.` : ''} This is what already happened, not a forecast.`;
+    } else {
+      note.innerHTML = `In ${PERIOD_NAME[c.per]}: bad case <b>${inr(spend * r.low + left)}</b>, good case <b>${inr(spend * r.high + left)}</b>, and a <b>${r.loss_pct}%</b> chance of ending below ${inr(amt)}. Before taxes and costs.${c.per === '20y' ? ' 20 years cannot be tested for one stock: a rough guide only.' : ' In tests, 4 in 5 real results landed inside the range.'}`;
+    }
+    const g = $('calcGrid');
+    if (g && x.ranges) g.innerHTML = `<span class="h">In</span><span class="h r">Bad</span><span class="h r">Typical</span><span class="h r">Good</span><span class="h r">Loss</span>${PERIODS.map(([k]) => { const q = x.ranges[k]; return `<span>${k}</span><span class="r bad">${short(spend * q.low + left)}</span><span class="r">${short(spend * q.typical + left)}</span><span class="r good">${short(spend * q.high + left)}</span><span class="r">${q.loss_pct}%</span>`; }).join('')}`;
+  }
+  // Why a stock is on the list, only from figures in the data. The rank is what decides;
+  // company numbers are context for and against, and were not part of the test.
+  function reasonsFor(x) {
+    const lt = S.lt || {}, f = x.fin || {}, fin = x.sector === 'Financial Services', pro = [], con = [];
+    if (f.revenue_growth >= 10) pro.push(`sales growing ${f.revenue_growth}% a year`);
+    else if (f.revenue_growth != null && f.revenue_growth >= 0 && f.revenue_growth < 5) con.push(`sales growing only ${f.revenue_growth}% a year`);
+    if (f.profit_growth >= 10) pro.push(`profit growing ${f.profit_growth}% a year`);
+    else if (f.profit_growth != null && f.profit_growth >= 0 && f.profit_growth < 5) con.push(`profit growing only ${f.profit_growth}% a year`);
+    if (f.roe >= 15) pro.push(`${f.roe}% return on equity`);
+    else if (f.roe != null && f.roe < 10) con.push(`low ${f.roe}% return on equity`);
+    if (!fin && f.debt_equity != null && f.debt_equity <= 0.5) pro.push(f.debt_equity <= 0.1 ? 'almost no debt' : 'low debt');
+    if (!fin && f.fcf_positive) pro.push('generates free cash');
+    if (x.vol <= 30) pro.push('steadier than most stocks');
+    // Serious warnings first: the row shows only the first one.
+    con.unshift(...(f.flags || []).map(t => t.toLowerCase()));
+    if (x.very_volatile) con.push('big swings both ways');
+    const main = x.mom12 != null ? `Up ${num(x.mom12, 0)}% over the past year (NIFTY ${lt.nifty_mom12 >= 0 ? '+' : ''}${num(lt.nifty_mom12, 0)}%), stronger than ${(lt.scanned || 0) - x.rank} of ${lt.scanned} stocks` : '';
+    const cap = t => t.charAt(0).toUpperCase() + t.slice(1);
+    return { main, pro: pro.map(cap), con: con.map(cap), line: main + '.' };
+  }
   const SECTOR = { 'Automobile and Auto Components': 'Auto', 'Fast Moving Consumer Goods': 'FMCG', 'Information Technology': 'IT', 'Financial Services': 'Finance', 'Oil Gas & Consumable Fuels': 'Oil & gas', 'Consumer Durables': 'Durables', 'Metals & Mining': 'Metals', 'Telecommunication': 'Telecom', 'Construction Materials': 'Cement', 'Consumer Services': 'Consumer', 'Media Entertainment & Publication': 'Media', 'Diversified': 'Diversified' };
   function ltRow(x, i, amt) {
     const flags = ((x.fin || {}).flags || []).concat(x.very_volatile ? ['Very volatile'] : []);
     return `<div class="tr s7 open-able rise" style="--i:${Math.min(i, 12) + 20}" data-sw="lt:${esc(x.stock)}" role="button" tabindex="0" aria-label="Open ${esc(x.name)}">
       <div class="who">${av(x.stock[0], palOf(x.stock))}<div style="min-width:0"><div class="short">/${esc(x.stock)}${x.pick ? `<span class="tag a">#${x.rank}</span>` : ''}${flags.length ? `<span class="tag" style="background:var(--blush);color:var(--blush-i)">${flags.length} warning${flags.length > 1 ? 's' : ''}</span>` : ''}</div>
         <div class="meta"><span class="own">₹${num(x.price)}</span><span class="sub2">${esc(SECTOR[x.sector] || x.sector)}</span></div></div></div>
-      ${HZ.map(([k]) => { const r = x.ranges[k]; return `<div class="hz hz${k}"><b>${short(amt * r.typical)}</b><small>${short(amt * r.low)} to ${short(amt * r.high)}</small></div>`; }).join('')}</div>`;
+      ${HZ.map(([k]) => { const r = (x.ranges || {})[k]; if (!r) return `<div class="hz hz${k}"><small>no estimate</small></div>`; return `<div class="hz hz${k}"><b>${short(amt * r.typical)}</b><small>${short(amt * r.low)} to ${short(amt * r.high)}</small></div>`; }).join('')}
+      ${x.pick ? (() => { const w = reasonsFor(x); return `<div class="whyline"><b>Why:</b> ${esc(w.main)}.${w.pro.length ? ' ' + esc(w.pro.slice(0, 2).map((t, i) => i ? t.charAt(0).toLowerCase() + t.slice(1) : t).join(', ')) + '.' : ''}${w.con.length ? ` <i>Watch: ${esc(w.con[0].toLowerCase())}.</i>` : ''}</div>`; })() : ''}</div>`;
   }
   function renderLtSheet(x) {
-    const el = $('swSheet'), amt = tradeAmt(), f = x.fin || {}, shares = Math.floor(amt / x.price);
+    const el = $('swSheet'), f = x.fin || {};
     const flags = (f.flags || []).concat(x.very_volatile ? ['Very volatile: big swings both ways'] : []);
     const t = ((S.lt || {}).tracked || []).filter(p => p.stock === x.stock).slice(-1)[0];
     const scroll = el.querySelector('.sh-body') ? el.querySelector('.sh-body').scrollTop : 0;
-    el.innerHTML = `<div class="sh-head"><h3>/${esc(x.stock)} ${x.pick ? `<span class="tag a">pick #${x.rank}</span>` : `<span class="tag">rank ${x.rank}</span>`}</h3><button class="btn sm" data-close>Close <kbd>Esc</kbd></button></div>
+    el.innerHTML = `<div class="sh-head"><h3>/${esc(x.stock)} ${x.pick ? `<span class="tag a">pick #${x.rank}</span>` : x.rank ? `<span class="tag">rank ${x.rank}</span>` : ''}</h3><button class="btn sm" data-close>Close <kbd>Esc</kbd></button></div>
       <div class="sh-body">
-        <div class="answer"><h4>What ${inr(amt)} in ${esc(x.name)} could become</h4>
-          <p>${shares ? `At ₹${num(x.price)} a share, that buys <b>${shares} shares</b> (${inr(shares * x.price)}).` : `One share costs ₹${num(x.price)}, more than your ${inr(amt)}.`} These are ranges, not promises: in tests, 4 in 5 real results landed inside them. Loss is the chance of ending with less than you put in.</p>
-          <div class="hgrid"><span class="h">In</span><span class="h r">Bad</span><span class="h r">Typical</span><span class="h r">Good</span><span class="h r">Loss</span>
-            ${HZ.map(([k, l]) => { const r = x.ranges[k]; return `<span>${esc(k)}</span><span class="r bad">${short(amt * r.low)}</span><span class="r">${short(amt * r.typical)}</span><span class="r good">${short(amt * r.high)}</span><span class="r">${r.loss_pct}%</span>`; }).join('')}
-          </div>
-          <p>The typical figure is the same for every pick. It comes from the market's long-run return, plus a tested extra up to 3 years. What differs is the width: a jumpier stock has a wider range. The 20-year row can't be tested and a single company can fail outright, which this range doesn't show.</p>
-        </div>
+        ${calcHTML()}
+        ${x.ranges ? `<div class="sh-sec"><h4>Every time period at a glance</h4><div class="hgrid" id="calcGrid"></div>
+          <div class="note2">The typical figure is the same for every pick: the market's long-run return, plus a tested extra up to 3 years. What differs is the width, wider for a jumpier stock. A single company can also fail outright, which these ranges don't show. Loss is the chance of ending with less than you put in.</div></div>` : `<div class="sh-sec"><div class="stale" style="margin:0">Listed under 3 years ago or with broken old prices, so there's no rank or forecast range. Its real past is above.</div></div>`}
         ${flags.length ? `<div class="sh-sec"><h4>Warnings</h4><div class="stale" style="margin:0">${flags.map(esc).join(' · ')}</div></div>` : ''}
-        <div class="sh-sec"><h4>Why it's ${x.pick ? 'a pick' : 'ranked here'}</h4><div class="note2" style="margin:0;font-size:13.5px;color:var(--ink2)">Up ${num(x.mom12, 1)}% from 12 months ago to 1 month ago, rank ${x.rank} of ${(S.lt || {}).scanned}. The top 20 are the picks. Stocks that rose most over the last year kept beating the basket for about a year in tests, faded by 3 years, and showed no edge by 5 years. So check the list at least every few months.</div></div>
+        ${x.rank ? (() => { const w = reasonsFor(x), lt = S.lt || {}; return `<div class="sh-sec"><h4>${x.pick ? 'Why it is on the list' : 'Why it is not on the list'}</h4>
+          <div class="note2" style="margin:0;font-size:13.5px;color:var(--ink2)"><b style="color:var(--ink)">${esc(w.main)}.</b> ${x.pick ? `That past-year strength is the reason it's a pick: the 20 strongest stocks make the list. In tests such stocks kept beating the rest for about a year, faded by 3 years and had no edge by 5.` : `The list takes only the 20 strongest. It needs a rise of more than ${num(lt.pick_cutoff, 0)}% to get in.`}</div>
+          ${w.pro.length ? `<ul class="reasons">${w.pro.map(t => `<li>${esc(t)}</li>`).join('')}</ul>` : ''}
+          ${w.con.length ? `<ul class="reasons">${w.con.map(t => `<li class="bad">${esc(t)}</li>`).join('')}</ul>` : ''}
+          ${x.pick ? `<div class="note2">It stays while it's in the top 20. Today that means staying above a ${num(lt.pick_cutoff, 0)}% rise, and it leaves the list the day it drops out. The green and red points are context, from its annual reports, and were not part of the test.</div>` : ''}</div>`; })() : ''}
         <div class="sh-sec"><h4>Company numbers</h4>${f.years ? `<div class="kvg">
           <div><span>Sales growth a year</span><b>${f.revenue_growth != null ? f.revenue_growth + '%' : '-'}</b></div>
           <div><span>Profit growth a year</span><b>${f.profit_growth != null ? f.profit_growth + '%' : '-'}</b></div>
           <div><span>Return on equity</span><b>${f.roe != null ? f.roe + '%' : '-'}</b></div>
           <div><span>Debt to equity</span><b>${f.debt_equity != null ? f.debt_equity : '-'}</b></div></div>
-          <div class="note2">From the last ${f.years} annual reports. These warnings were not part of the test.</div>` : '<div class="note2" style="margin:0">Fetched daily for the top 40 only.</div>'}</div>
+          <div class="note2">From the last ${f.years} annual reports.</div>` : '<div class="note2" style="margin:0">Fetched daily for the top 40 only.</div>'}</div>
         ${t ? `<div class="sh-sec"><h4>Tracked since it joined</h4><div class="kvg"><div><span>Joined</span><b>${fmtDate(t.joined)} at ₹${num(t.join_px)}</b></div><div><span>Since then</span><b>${t.joined === (S.lt || {}).prices_through ? 'Joined in the latest run' : t.ret != null ? (t.ret >= 0 ? '+' : '') + t.ret + '%' : '-'}, NIFTY ${t.nifty_ret >= 0 ? '+' : ''}${t.nifty_ret}%</b></div></div></div>` : ''}
       </div>`;
     const b = el.querySelector('.sh-body'); if (b && scroll) { b.scrollTop = scroll; b.querySelectorAll(':scope>*').forEach(n => n.style.animation = 'none'); }
     el.classList.add('on'); $('scrim').classList.add('on'); el.setAttribute('aria-hidden', 'false');
+    calcPaint();
   }
 
   // ── swing holding guide ──────────────────────────────────────────────
@@ -1075,7 +1186,8 @@
       const slot = tradeAmt();
       const steps = [['scanned', sc.scanned], ['in an uptrend', sc.uptrend], ['beat NIFTY', sc.beats_nifty], ['near their high', sc.near_high], ['dipped enough', sc.washout]];
       const plans = (sc.signals || []).map(x => { const q = Math.floor(slot / x.limit_entry); return `<div class="plan ${x.pilot ? 'pilot' : ''}"><b>${esc(x.stock)}${x.pilot ? ' · PILOT, paper record only, not a recommendation' : ' · signal'}</b><br>Buy only if it falls to <b>₹${num(x.limit_entry)}</b> by the end of the next session. ${q ? `${inr(slot)} buys <b>${q} shares</b> (${inr(q * x.limit_entry)}).` : `One share costs more than your ${inr(slot)} slot.`} Sell at the first close above the 5-day average, or at ₹${num(x.t1)} / ₹${num(x.t2)}, within 10 sessions.</div>`; }).join('');
-      const rows = (sc.watchlist || []).map((w, i) => `<div class="tr s6 static rise" style="--i:${i + 18}">
+      const ltHas = n => ((S.lt || {}).stocks || []).some(y => y.stock === n);
+      const rows = (sc.watchlist || []).map((w, i) => `<div class="tr s6 ${ltHas(w.stock) ? 'open-able' : 'static'} rise" style="--i:${i + 18}" ${ltHas(w.stock) ? `data-sw="lt:${esc(w.stock)}" role="button" tabindex="0"` : ''}>
         <div class="who">${av(w.stock[0], palOf(w.stock))}<div style="min-width:0"><div class="short">/${esc(w.stock)}${w.washout ? '<span class="tag" style="background:var(--mint);color:var(--mint-i)">dipped</span>' : ''}</div><div class="meta"><span class="sub2">last close ₹${num(w.close)}</span></div></div></div>
         <div><div class="num">${num(w.dip_score, 0)} <span class="dim" style="font-weight:600;color:var(--ink3);font-size:12px">/ under 10</span></div><div class="dipbar"><i style="width:${Math.max(3, 100 - Math.min(100, w.dip_score / 2))}%"></i></div></div>
         <div class="num opt6 dim">+${num(w.beats_nifty_pct, 0)}%</div><div class="num opt6 dim">${num(w.from_high_pct, 1)}%</div>
@@ -1129,7 +1241,7 @@
         <div style="--b:var(--butter);--f:var(--butter-i)"><b>5 years</b>No reliable edge. Expect about what the market does.</div>
         <div style="--b:var(--blush);--f:var(--blush-i)"><b>20 years</b>Nobody can test this for one stock. Treat it as a rough guide.</div>
       </div>
-      <div class="ltbar"><input id="ltq" placeholder="Check any NIFTY 200 stock" value="${esc(S.ltq || '')}" autocomplete="off" aria-label="Search NIFTY 200 stocks">
+      <div class="ltbar"><input id="ltq" placeholder="Calculate any NIFTY 200 stock" value="${esc(S.ltq || '')}" autocomplete="off" aria-label="Find a NIFTY 200 stock">
         <span class="chg2">${(lt.added_today || []).length || (lt.removed_today || []).length ? `Latest change: ${lt.added_today.length ? 'joined ' + lt.added_today.map(esc).join(', ') : ''}${lt.added_today.length && lt.removed_today.length ? ' · ' : ''}${lt.removed_today.length ? 'left ' + lt.removed_today.map(esc).join(', ') : ''}` : 'No change to the list in the latest run'}${tr.length ? ` · Since tracking: picks ${avg('ret') >= 0 ? '+' : ''}${avg('ret').toFixed(1)}%, NIFTY ${avg('nifty_ret') >= 0 ? '+' : ''}${avg('nifty_ret').toFixed(1)}%` : ' · Results tracking starts now'}</span></div>
       <div class="table glass rise" style="--i:21">
         <div class="thead s7"><div>${inr(amt)} could become</div>${HZ.map(([k, l]) => `<div class="num hz${k}">${esc(l)}</div>`).join('')}</div>
@@ -1158,13 +1270,17 @@
       }
     });
     if (keepId) { const c = $(keepId); c.value = draft; c.focus(); c.setSelectionRange(caret, caret); }
-    if (S.openSw != null) renderSheet();
+    // The calculator has its own painter; rebuilding it would interrupt typing and dragging.
+    if (S.openSw != null && !String(S.openSw).startsWith('lt:')) renderSheet();
   }
 
   // ── events ───────────────────────────────────────────────────────────
   const openSw = id => { S.openSw = id; const el = $('swSheet'); el.innerHTML = ''; renderSheet(); setTimeout(() => { const c = el.querySelector('[data-close]'); c && c.focus(); }, 50); };
   const closeSw = () => { const id = S.openSw; S.openSw = null; renderSheet(); const row = document.querySelector(`[data-sw="${id}"]`); row && row.focus(); };
   document.addEventListener('click', e => {
+    const ca = e.target.closest('[data-camt]'); if (ca) { S.calc.amt = +ca.dataset.camt; calcPaint(); return; }
+    const cp = e.target.closest('[data-cper]'); if (cp) { if (!cp.disabled) { S.calc.per = cp.dataset.cper; calcPaint(); } return; }
+    const cm = e.target.closest('[data-cmode]'); if (cm) { if (!cm.disabled) { S.calc.mode = cm.dataset.cmode; calcPaint(); } return; }
     if (e.target.closest('[data-close]') || e.target.id === 'scrim') { closeSw(); return; }
     const go = e.target.closest('[data-go]'); if (go) { const t = $(go.dataset.go); t && t.scrollIntoView({ behavior: 'smooth', block: 'start' }); return; }
     if (e.target.closest('[data-swall]')) { S.swAll = !S.swAll; render(); return; }
@@ -1173,7 +1289,11 @@
     if (b) { S.sym = b.dataset.sym; ls.set('desk-sym', S.sym); if (!S.candles[S.sym]) loadCandles(S.sym); render(); return; }
     if (e.target.closest('#theme')) { const t = root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark'; root.setAttribute('data-theme', t); ls.set('links-theme', t); render(); }
   });
-  document.addEventListener('input', e => { if (e.target.id === 'ltq') { S.ltq = e.target.value; render(); } });
+  document.addEventListener('input', e => {
+    if (e.target.id === 'ltq') { S.ltq = e.target.value; render(); }
+    if (e.target.id === 'calcAmt') { const d = e.target.value.replace(/[^\d]/g, ''); e.target.value = d ? (+d).toLocaleString('en-IN') : ''; S.calc.amt = +d || 0; calcPaint(true); }
+    if (e.target.id === 'calcSlide') { S.calc.amt = fromSlide(+e.target.value); calcPaint(); }
+  });
   document.addEventListener('change', e => {
     if (e.target.id === 'cap') { const v = Math.round(+String(e.target.value).replace(/[^\d.]/g, '')); if (v > 0) { capital = v; ls.set('ie-capital', String(v)); } e.target.blur(); render(); }
     if (e.target.id === 'perTrade') { const v = Math.round(+String(e.target.value).replace(/[^\d.]/g, '')); tradeOverride = v > 0 ? Math.min(v, capital) : 0; ls.set('desk-per-trade', tradeOverride ? String(tradeOverride) : ''); e.target.blur(); render(); }

@@ -278,5 +278,5 @@ bar is the excess over an equal-weight basket of the same stocks, annualised, to
 The last row is mostly survivorship: the laggards that recovered are the ones still on the list.
 Ranges: log return ~ N(mu T, sigma^2 T), sigma = own 36-month volatility, mu = 13% (Sensex median
 10.7-13.1% over 1-20y windows, plus dividends), plus the lower of the two excess figures up to 3y.
-80% ranges held 78-82% of the time at 3m, 1y, 3y, 5y, before and after 2016; misses lean to the
-upside. 20y cannot be tested on one stock. Financial warnings are descriptive, not tested.
+80% ranges held 78-83% of the time at 1m, 3m, 6m, 1y, 3y, 5y, before and after 2016; misses lean to
+the upside. Excess at 1m +6.6/+29.4, at 6m +7.7/+13.5. 20y cannot be tested on one stock. Financial warnings are descriptive, not tested.

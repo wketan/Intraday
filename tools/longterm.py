@@ -8,7 +8,8 @@ Method and evidence are in SWING_STRATEGY.md, "Long-term picks". In short:
   rank    : 12-1 month price return across NIFTY 200, top 20 are the picks
   ranges  : log return ~ N(mu * T, sigma^2 * T); sigma is the stock's own 36-month volatility,
             mu is 13% a year plus a small excess for picks only, up to 3 years. Past 80% ranges
-            built this way held 78-82% of the time at 3m, 1y, 3y and 5y. 20y cannot be tested.
+            built this way held 78-83% of the time from 1m to 5y. 20y cannot be tested.
+  past    : what the stock really did, from dividend-adjusted closes, for the calculator
 Read-only, standard library only. Refuses to overwrite good data with a thin run.
 """
 import csv, io, json, math, os, sys, time, urllib.request
@@ -24,10 +25,11 @@ LIST_URL = "https://nsearchives.nseindia.com/content/indices/ind_nifty200list.cs
 TOP_N = 20
 Z = 1.2816                # 10th to 90th percentile
 BASE_MU = 0.13            # Sensex median 11-13% a year over 1-20y windows, plus about 1% dividends
-HORIZONS = [("3m", 3), ("1y", 12), ("3y", 36), ("5y", 60), ("20y", 240)]
+HORIZONS = [("1m", 1), ("3m", 3), ("6m", 6), ("1y", 12), ("3y", 36), ("5y", 60), ("20y", 240)]
+PAST = [("1m", 21), ("3m", 63), ("6m", 126), ("1y", 252), ("3y", 756), ("5y", 1230)]
 # Yearly excess of the top 20 over an equal-weight basket: the lower of the pre-2016 and post-2016
 # walk-forward results. Nothing at 5y or beyond, because the tests found no reliable edge there.
-PICK_EXCESS = {3: 0.09, 12: 0.055, 36: 0.037, 60: 0.0, 240: 0.0}
+PICK_EXCESS = {1: 0.066, 3: 0.09, 6: 0.077, 12: 0.055, 36: 0.037, 60: 0.0, 240: 0.0}
 BANK_LIKE = ("Financial Services",)
 
 
@@ -63,6 +65,12 @@ def volatility(px):
     r = [math.log(m[i] / m[i - 1]) for i in range(1, 37)]
     mean = sum(r) / len(r)
     return math.sqrt(sum((x - mean) ** 2 for x in r) / len(r)) * math.sqrt(12)
+
+
+def past_prices(bars):
+    """Adjusted price and date at each look-back the stock has clean history for."""
+    n = len(bars)
+    return {k: {"date": bars[-1 - d][0], "px": round(bars[-1 - d][1], 4)} for k, d in PAST if n > d}
 
 
 def ranges(sigma, is_pick):
@@ -137,17 +145,19 @@ def universe(previous):
 def main():
     prev = load(OUT, {})
     uni = universe(prev)
-    rows, failed = [], []
+    rows, young, failed = [], [], []
     for sym, meta in uni.items():
         try:
             bars = chart(sym)
             px = [b[1] for b in bars]
             mom, vol = momentum(px), volatility(px)
+            row = {"stock": sym, **meta, "price": round(px[-1], 2), "price_date": bars[-1][0], "past": past_prices(bars)}
             if mom is None or vol is None:
+                # Too new to rank or range, but the calculator can still show its real past.
                 failed.append(f"{sym} (under 3 years of clean history)")
+                young.append(row)
                 continue
-            rows.append({"stock": sym, **meta, "price": round(px[-1], 2), "price_date": bars[-1][0],
-                         "mom12": round(mom * 100, 1), "vol": round(vol * 100, 1), "sigma": vol})
+            rows.append({**row, "mom12": round(mom * 100, 1), "vol": round(vol * 100, 1), "sigma": vol})
         except Exception as e:
             failed.append(f"{sym} ({type(e).__name__})")
         time.sleep(0.12)
@@ -171,6 +181,7 @@ def main():
 
     nifty = chart("^NSEI")
     nifty_now = nifty[-1][1]
+    nifty_past = past_prices(nifty)
     today = max(r["price_date"] for r in rows)
     px_now = {r["stock"]: r["price"] for r in rows}
     picks = [r["stock"] for r in rows if r["pick"]]
@@ -198,7 +209,8 @@ def main():
     data = {"updated": datetime.now(IST).strftime("%Y-%m-%d %H:%M"), "prices_through": today,
             "scanned": len(rows), "universe": len(uni), "failed": failed,
             "added_today": [] if first_run else added, "removed_today": removed,
-            "nifty": round(nifty_now, 2), "stocks": rows, "tracked": tracked}
+            "nifty": round(nifty_now, 2), "nifty_past": nifty_past, "nifty_mom12": round(momentum([b[1] for b in nifty]) * 100, 1),
+            "pick_cutoff": rows[TOP_N - 1]["mom12"], "stocks": rows + young, "tracked": tracked}
     os.makedirs(os.path.dirname(OUT), exist_ok=True)
     json.dump(data, open(OUT, "w"), separators=(",", ":"))
     json.dump(log, open(LOG, "w"), indent=0)
