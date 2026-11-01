@@ -503,6 +503,25 @@
   background:radial-gradient(circle at 34% 30%,var(--bub),transparent 72%);box-shadow:inset 0 0 0 1px var(--bub);
   animation:bubble var(--d) linear infinite;animation-delay:calc((var(--t) + var(--o)) * -1)}
 @keyframes bubble{0%{transform:translate3d(0,0,0) scale(.72);opacity:0}15%{opacity:.8}50%{transform:translate3d(var(--w),-100px,0) scale(.95)}85%{opacity:.8}100%{transform:translate3d(0,-205px,0) scale(1.12);opacity:0}}
+.jump{display:flex;flex-wrap:wrap;gap:8px;margin:18px 0 0}
+.jump button{height:36px;padding:0 16px;border-radius:99px;border:1px solid var(--line2);background:var(--surface);font-weight:700;font-size:13px;color:var(--ink2);cursor:pointer;transition:background-color .2s,transform .35s var(--spring)}
+.jump button:hover{background:var(--surface2);transform:translateY(-1px)}
+.jump button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.trust{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-bottom:14px}
+.trust div{border-radius:20px;padding:12px 15px;font-size:12.5px;line-height:1.45;font-weight:600;background:var(--b);color:var(--f)}
+.trust b{display:block;font-size:14px;font-weight:800;margin-bottom:2px}
+.thead.s7,.tr.s7{grid-template-columns:minmax(0,1.25fr) repeat(5,minmax(84px,1fr))}
+.hz{text-align:right;min-width:0}.hz b{display:block;font-size:14px;font-weight:800;font-variant-numeric:tabular-nums;white-space:nowrap}
+.hz small{display:block;font-size:11px;font-weight:600;color:var(--ink3);font-variant-numeric:tabular-nums;white-space:nowrap}
+.ltbar{display:flex;gap:12px;align-items:center;margin-bottom:12px;flex-wrap:wrap}
+.ltbar input{height:44px;width:250px;max-width:100%;border-radius:99px;border:1px solid var(--line2);background:var(--field);padding:0 20px}
+.ltbar input:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.ltbar .chg2{font-size:13px;font-weight:600;color:var(--ink2)}
+.hgrid{display:grid;grid-template-columns:34px repeat(3,minmax(0,1fr)) 46px;gap:6px 10px;align-items:baseline;font-variant-numeric:tabular-nums;font-size:13.5px;font-weight:700}
+.hgrid .h{line-height:1.2;font-size:11px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:var(--ink3)}
+.hgrid .r{text-align:right;white-space:nowrap}.hgrid .bad{color:var(--blush-i)}.hgrid .good{color:var(--mint-i)}
+@media(max-width:1150px){.thead.s7,.tr.s7{grid-template-columns:minmax(0,1.2fr) repeat(3,minmax(84px,1fr))}.hz3m,.hz20y{display:none}.trust{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:880px){.thead.s7{display:none}.tr.s7{grid-template-columns:1fr auto}.tr.s7 .hz3y,.tr.s7 .hz5y{display:none}.tr.s7 .hz1y::before{content:"in 1 year";display:block;font-size:11px;font-weight:600;color:var(--ink3)}}
 .stale{border-radius:24px;padding:14px 18px;background:var(--butter);color:var(--butter-i);font-size:13.5px;font-weight:600;line-height:1.5;margin-bottom:16px}
 .stale b{font-weight:800}
 .note2{margin-top:10px;font-size:12.5px;color:var(--ink3);line-height:1.5}
@@ -759,6 +778,45 @@
     </div>`;
   }
 
+  // ── long-term picks ──────────────────────────────────────────────────
+  const short = v => { const a = Math.abs(v); return '₹' + (a >= 1e7 ? (a / 1e7).toFixed(1) + 'Cr' : a >= 1e5 ? (a / 1e5).toFixed(1) + 'L' : a >= 1000 ? (a / 1000).toFixed(1) + 'k' : Math.round(a)); };
+  const HZ = [['3m', '3 months', 'Tested: picks beat the basket'], ['1y', '1 year', 'Tested: picks beat the basket'], ['3y', '3 years', 'Tested: small edge'], ['5y', '5 years', 'Tested: no edge, market-like'], ['20y', '20 years', 'Cannot be tested, rough guide only']];
+  const SECTOR = { 'Automobile and Auto Components': 'Auto', 'Fast Moving Consumer Goods': 'FMCG', 'Information Technology': 'IT', 'Financial Services': 'Finance', 'Oil Gas & Consumable Fuels': 'Oil & gas', 'Consumer Durables': 'Durables', 'Metals & Mining': 'Metals', 'Telecommunication': 'Telecom', 'Construction Materials': 'Cement', 'Consumer Services': 'Consumer', 'Media Entertainment & Publication': 'Media', 'Diversified': 'Diversified' };
+  function ltRow(x, i, amt) {
+    const flags = ((x.fin || {}).flags || []).concat(x.very_volatile ? ['Very volatile'] : []);
+    return `<div class="tr s7 open-able rise" style="--i:${Math.min(i, 12) + 20}" data-sw="lt:${esc(x.stock)}" role="button" tabindex="0" aria-label="Open ${esc(x.name)}">
+      <div class="who">${av(x.stock[0], palOf(x.stock))}<div style="min-width:0"><div class="short">/${esc(x.stock)}${x.pick ? `<span class="tag a">#${x.rank}</span>` : ''}${flags.length ? `<span class="tag" style="background:var(--blush);color:var(--blush-i)">${flags.length} warning${flags.length > 1 ? 's' : ''}</span>` : ''}</div>
+        <div class="meta"><span class="own">₹${num(x.price)}</span><span class="sub2">${esc(SECTOR[x.sector] || x.sector)}</span></div></div></div>
+      ${HZ.map(([k]) => { const r = x.ranges[k]; return `<div class="hz hz${k}"><b>${short(amt * r.typical)}</b><small>${short(amt * r.low)} to ${short(amt * r.high)}</small></div>`; }).join('')}</div>`;
+  }
+  function renderLtSheet(x) {
+    const el = $('swSheet'), amt = tradeAmt(), f = x.fin || {}, shares = Math.floor(amt / x.price);
+    const flags = (f.flags || []).concat(x.very_volatile ? ['Very volatile: big swings both ways'] : []);
+    const t = ((S.lt || {}).tracked || []).filter(p => p.stock === x.stock).slice(-1)[0];
+    const scroll = el.querySelector('.sh-body') ? el.querySelector('.sh-body').scrollTop : 0;
+    el.innerHTML = `<div class="sh-head"><h3>/${esc(x.stock)} ${x.pick ? `<span class="tag a">pick #${x.rank}</span>` : `<span class="tag">rank ${x.rank}</span>`}</h3><button class="btn sm" data-close>Close <kbd>Esc</kbd></button></div>
+      <div class="sh-body">
+        <div class="answer"><h4>What ${inr(amt)} in ${esc(x.name)} could become</h4>
+          <p>${shares ? `At ₹${num(x.price)} a share, that buys <b>${shares} shares</b> (${inr(shares * x.price)}).` : `One share costs ₹${num(x.price)}, more than your ${inr(amt)}.`} These are ranges, not promises: in tests, 4 in 5 real results landed inside them. Loss is the chance of ending with less than you put in.</p>
+          <div class="hgrid"><span class="h">In</span><span class="h r">Bad</span><span class="h r">Typical</span><span class="h r">Good</span><span class="h r">Loss</span>
+            ${HZ.map(([k, l]) => { const r = x.ranges[k]; return `<span>${esc(k)}</span><span class="r bad">${short(amt * r.low)}</span><span class="r">${short(amt * r.typical)}</span><span class="r good">${short(amt * r.high)}</span><span class="r">${r.loss_pct}%</span>`; }).join('')}
+          </div>
+          <p>The typical figure is the same for every pick. It comes from the market's long-run return, plus a tested extra up to 3 years. What differs is the width: a jumpier stock has a wider range. The 20-year row can't be tested and a single company can fail outright, which this range doesn't show.</p>
+        </div>
+        ${flags.length ? `<div class="sh-sec"><h4>Warnings</h4><div class="stale" style="margin:0">${flags.map(esc).join(' · ')}</div></div>` : ''}
+        <div class="sh-sec"><h4>Why it's ${x.pick ? 'a pick' : 'ranked here'}</h4><div class="note2" style="margin:0;font-size:13.5px;color:var(--ink2)">Up ${num(x.mom12, 1)}% from 12 months ago to 1 month ago, rank ${x.rank} of ${(S.lt || {}).scanned}. The top 20 are the picks. Stocks that rose most over the last year kept beating the basket for about a year in tests, faded by 3 years, and showed no edge by 5 years. So check the list at least every few months.</div></div>
+        <div class="sh-sec"><h4>Company numbers</h4>${f.years ? `<div class="kvg">
+          <div><span>Sales growth a year</span><b>${f.revenue_growth != null ? f.revenue_growth + '%' : '-'}</b></div>
+          <div><span>Profit growth a year</span><b>${f.profit_growth != null ? f.profit_growth + '%' : '-'}</b></div>
+          <div><span>Return on equity</span><b>${f.roe != null ? f.roe + '%' : '-'}</b></div>
+          <div><span>Debt to equity</span><b>${f.debt_equity != null ? f.debt_equity : '-'}</b></div></div>
+          <div class="note2">From the last ${f.years} annual reports. These warnings were not part of the test.</div>` : '<div class="note2" style="margin:0">Fetched daily for the top 40 only.</div>'}</div>
+        ${t ? `<div class="sh-sec"><h4>Tracked since it joined</h4><div class="kvg"><div><span>Joined</span><b>${fmtDate(t.joined)} at ₹${num(t.join_px)}</b></div><div><span>Since then</span><b>${t.joined === (S.lt || {}).prices_through ? 'Joined in the latest run' : t.ret != null ? (t.ret >= 0 ? '+' : '') + t.ret + '%' : '-'}, NIFTY ${t.nifty_ret >= 0 ? '+' : ''}${t.nifty_ret}%</b></div></div></div>` : ''}
+      </div>`;
+    const b = el.querySelector('.sh-body'); if (b && scroll) { b.scrollTop = scroll; b.querySelectorAll(':scope>*').forEach(n => n.style.animation = 'none'); }
+    el.classList.add('on'); $('scrim').classList.add('on'); el.setAttribute('aria-hidden', 'false');
+  }
+
   // ── swing holding guide ──────────────────────────────────────────────
   // Rules from SWING_STRATEGY.md (Pullback v1.2): exits run in this order,
   // first to trigger wins. Older rows restored from Slack carry their own
@@ -807,6 +865,10 @@
 
   function renderSheet() {
     const el = $('swSheet'), scrim = $('scrim');
+    if (String(S.openSw).startsWith('lt:')) {
+      const lt = ((S.lt || {}).stocks || []).find(s => s.stock === String(S.openSw).slice(3));
+      if (lt) return renderLtSheet(lt);
+    }
     const x = S.openSw != null && ((S.swing && S.swing.positions) || []).find(p => String(p.id) === String(S.openSw));
     if (!x) { el.classList.remove('on'); scrim.classList.remove('on'); el.setAttribute('aria-hidden', 'true'); return; }
     const g = swingGuide(x), today = todayISO();
@@ -973,7 +1035,7 @@
     const reg = (S.swingRes && S.swingRes.regime) || null;
 
     // Keep a half-typed amount and the cursor through the live re-render.
-    const ae = document.activeElement, keepId = ae && (ae.id === 'cap' || ae.id === 'perTrade') ? ae.id : null;
+    const ae = document.activeElement, keepId = ae && (ae.id === 'cap' || ae.id === 'perTrade' || ae.id === 'ltq') ? ae.id : null;
     const draft = keepId ? ae.value : null, caret = keepId ? ae.selectionStart : 0;
     root.style.setProperty('--t', (performance.now() / 1000).toFixed(2) + 's');
     $('app').innerHTML = `
@@ -995,7 +1057,8 @@
       <div class="kpi t-blush pop" style="--i:7"><div class="lab">Net per trade</div><div class="val">${inr(perTrade, true)}</div><div class="sub">${wins} W · ${losses} L · ${Math.max(0, total - wins - losses)} scratch</div></div>
     </div>
 
-    <div class="tb rise" style="--i:6"><h2>Live price</h2>
+    <div class="jump" aria-label="Jump to section">${[['live', 'Live price'], ['sig', 'Signals'], ['swing', 'Swing'], ['long', 'Long term']].map(([k, l]) => `<button data-go="go-${k}">${l}</button>`).join('')}</div>
+    <div class="tb rise" style="--i:6" id="go-live"><h2>Live price</h2>
       <div class="seg" role="tablist">${['NIFTY', 'BANKNIFTY', 'FINNIFTY'].map(k => `<button role="tab" aria-selected="${k === sym}" class="${k === sym ? 'on' : ''}" data-sym="${k}">${NAMES[k]}</button>`).join('')}</div></div>
     <div class="table glass chartcard rise" style="--i:7">
       <div class="chart-head"><span class="px">${p.ltp ? num(p.ltp, 2) : '-'}</span>${p.pct != null ? `<span class="chg ${p.pct >= 0 ? 'up' : 'dn'}">${p.pct >= 0 ? '+' : ''}${num(p.chg, 2)} · ${p.pct >= 0 ? '+' : ''}${num(p.pct, 2)}%</span>` : ''}<span class="grow"></span><span class="stamp" style="font-size:12.5px;font-weight:600;color:var(--ink3)">prev close ${num(p.prev_close, 2)} · ticks every 5 s</span></div>
@@ -1003,12 +1066,12 @@
       <div class="legend"><span><i style="background:var(--${p.pct >= 0 ? 'good' : 'bad'})"></i>price, 5-min + live ticks</span><span><i style="background:var(--accent)"></i>VWAP proxy (today)</span><span><i style="background:var(--bad);width:9px;height:9px;border-radius:50%"></i>engine signals</span></div>
     </div>
 
-    <div class="tb rise" style="--i:8"><h2>Signals <span class="tag">${cards.length}</span></h2><span class="stamp">entry, SL, T1, T2 as the engine set them · sized for your ${inr(capital)}</span></div>
+    <div class="tb rise" style="--i:8" id="go-sig"><h2>Signals <span class="tag">${cards.length}</span></h2><span class="stamp">entry, SL, T1, T2 as the engine set them · sized for your ${inr(capital)}</span></div>
     ${sigHtml ? `<div class="sigs">${sigHtml}</div>` : '<div class="table glass"><div class="empty">No signals yet today. The engine fires only between 09:45 and 14:30 IST.</div></div>'}
 
     ${(() => {
       const sc = S.screen || {};
-      if (!sc.scanned) return `<div class="tb rise" style="--i:17"><h2>Swing screen</h2></div><div class="table glass"><div class="empty">The first scan after a restart takes a few minutes. It then repeats every 30 minutes in market hours.</div></div>`;
+      if (!sc.scanned) return `<div class="tb rise" style="--i:17" id="go-swing"><h2>Swing screen</h2></div><div class="table glass"><div class="empty">The first scan after a restart takes a few minutes. It then repeats every 30 minutes in market hours.</div></div>`;
       const slot = tradeAmt();
       const steps = [['scanned', sc.scanned], ['in an uptrend', sc.uptrend], ['beat NIFTY', sc.beats_nifty], ['near their high', sc.near_high], ['dipped enough', sc.washout]];
       const plans = (sc.signals || []).map(x => { const q = Math.floor(slot / x.limit_entry); return `<div class="plan ${x.pilot ? 'pilot' : ''}"><b>${esc(x.stock)}${x.pilot ? ' · PILOT, paper record only, not a recommendation' : ' · signal'}</b><br>Buy only if it falls to <b>₹${num(x.limit_entry)}</b> by the end of the next session. ${q ? `${inr(slot)} buys <b>${q} shares</b> (${inr(q * x.limit_entry)}).` : `One share costs more than your ${inr(slot)} slot.`} Sell at the first close above the 5-day average, or at ₹${num(x.t1)} / ₹${num(x.t2)}, within 10 sessions.</div>`; }).join('');
@@ -1017,7 +1080,7 @@
         <div><div class="num">${num(w.dip_score, 0)} <span class="dim" style="font-weight:600;color:var(--ink3);font-size:12px">/ under 10</span></div><div class="dipbar"><i style="width:${Math.max(3, 100 - Math.min(100, w.dip_score / 2))}%"></i></div></div>
         <div class="num opt6 dim">+${num(w.beats_nifty_pct, 0)}%</div><div class="num opt6 dim">${num(w.from_high_pct, 1)}%</div>
         <div class="num opt6 dim">${Math.floor(slot / w.close)} shares</div></div>`).join('');
-      return `<div class="tb rise" style="--i:17"><h2>Swing screen</h2><span class="stamp">last scan ${esc(sc.time)} IST · prices through ${esc(fmtDate(sc.bars_through))}</span></div>
+      return `<div class="tb rise" style="--i:17" id="go-swing"><h2>Swing screen</h2><span class="stamp">last scan ${esc(sc.time)} IST · prices through ${esc(fmtDate(sc.bars_through))}</span></div>
       <div class="funnel">${steps.map(([k, v], i) => `${i ? '<span class="ar">→</span>' : ''}<span class="st ${i === 4 && v ? 'hot' : ''}"><b>${esc(v)}</b>${k}</span>`).join('')}</div>
       <div class="table glass rise" style="--i:17;margin-bottom:8px">${plans ? `<div style="height:12px"></div>${plans}` : ''}
         <div class="thead s6"><div>Strong stocks waiting for a dip</div><div class="num">Dip score</div><div class="num opt6">Beats NIFTY, 6m</div><div class="num opt6">From 52w high</div><div class="num opt6">${inr(slot)} buys</div></div>
@@ -1050,6 +1113,31 @@
     </div>
     <p class="foot" style="margin-top:12px">Return is the option premium's change from entry to exit. "Your ${inr(slot)}" scales that return to your amount per trade, ignoring lot sizes, so it shows how the strategy did, not what a broker would have filled. Open trades show "-" until the engine closes them: the swing feed has no live quote for stock options.</p>
 
+    ${(() => {
+      const lt = S.lt, amt = tradeAmt();
+      if (!lt || !lt.stocks) return '<div class="tb" id="go-long"><h2>Long-term picks</h2></div><div class="table glass"><div class="empty">Loading the daily analysis.</div></div>';
+      const q = (S.ltq || '').trim().toLowerCase();
+      const list = q ? lt.stocks.filter(x => (x.stock + ' ' + x.name + ' ' + x.sector).toLowerCase().includes(q)).slice(0, 20) : lt.stocks.filter(x => x.pick);
+      const age = daysBetween(lt.prices_through, today);
+      const tr = (lt.tracked || []).filter(p => p.ret != null && p.joined !== lt.prices_through);
+      const avg = k => tr.reduce((a, p) => a + p[k], 0) / tr.length;
+      return `<div class="tb rise" style="--i:20" id="go-long"><h2>Long-term picks <span class="tag">${lt.stocks.filter(x => x.pick).length}</span></h2><span class="stamp">analysed ${esc(fmtDate(lt.updated.slice(0, 10)))} ${esc(lt.updated.slice(11))} IST · ${esc(lt.scanned)} of ${esc(lt.universe)} NIFTY 200 stocks · prices through ${esc(fmtDate(lt.prices_through))}</span></div>
+      ${age > 4 ? `<div class="stale"><b>This analysis is ${age} days old.</b> The daily job hasn't updated it.</div>` : ''}
+      <div class="trust">
+        <div style="--b:var(--mint);--f:var(--mint-i)"><b>3 months, 1 year</b>Top picks beat an equal basket of the same stocks by about 5-10% a year in tests.</div>
+        <div style="--b:var(--sky);--f:var(--sky-i)"><b>3 years</b>A small edge, about 4% a year.</div>
+        <div style="--b:var(--butter);--f:var(--butter-i)"><b>5 years</b>No reliable edge. Expect about what the market does.</div>
+        <div style="--b:var(--blush);--f:var(--blush-i)"><b>20 years</b>Nobody can test this for one stock. Treat it as a rough guide.</div>
+      </div>
+      <div class="ltbar"><input id="ltq" placeholder="Check any NIFTY 200 stock" value="${esc(S.ltq || '')}" autocomplete="off" aria-label="Search NIFTY 200 stocks">
+        <span class="chg2">${(lt.added_today || []).length || (lt.removed_today || []).length ? `Latest change: ${lt.added_today.length ? 'joined ' + lt.added_today.map(esc).join(', ') : ''}${lt.added_today.length && lt.removed_today.length ? ' · ' : ''}${lt.removed_today.length ? 'left ' + lt.removed_today.map(esc).join(', ') : ''}` : 'No change to the list in the latest run'}${tr.length ? ` · Since tracking: picks ${avg('ret') >= 0 ? '+' : ''}${avg('ret').toFixed(1)}%, NIFTY ${avg('nifty_ret') >= 0 ? '+' : ''}${avg('nifty_ret').toFixed(1)}%` : ' · Results tracking starts now'}</span></div>
+      <div class="table glass rise" style="--i:21">
+        <div class="thead s7"><div>${inr(amt)} could become</div>${HZ.map(([k, l]) => `<div class="num hz${k}">${esc(l)}</div>`).join('')}</div>
+        ${list.map((x, i) => ltRow(x, i, amt)).join('') || '<div class="empty">No NIFTY 200 stock matches that.</div>'}
+      </div>
+      <p class="foot" style="margin-top:12px">Bold is the typical result, the same for every pick; small is the bad to good case, wider for jumpier stocks. Stocks under 3 years old are left out. Tested from 2003 to 2026 on today's NIFTY 200, which flatters results because companies that collapsed aren't on the list. Taxes and costs not included. A guide for your own research, not financial advice.</p>`;
+    })()}
+
     <div class="tb rise" style="--i:28"><h2>All-time</h2><span class="stamp">intraday engine since 4 Sep 2026</span></div>
     <div class="big">
       <div style="--bg-c:var(--lav);--tc:var(--lav-i)"><b>${inr(perf.total_pnl_net || 0, true)}</b><span>net after costs</span></div>
@@ -1078,12 +1166,14 @@
   const closeSw = () => { const id = S.openSw; S.openSw = null; renderSheet(); const row = document.querySelector(`[data-sw="${id}"]`); row && row.focus(); };
   document.addEventListener('click', e => {
     if (e.target.closest('[data-close]') || e.target.id === 'scrim') { closeSw(); return; }
+    const go = e.target.closest('[data-go]'); if (go) { const t = $(go.dataset.go); t && t.scrollIntoView({ behavior: 'smooth', block: 'start' }); return; }
     if (e.target.closest('[data-swall]')) { S.swAll = !S.swAll; render(); return; }
     const r = e.target.closest('[data-sw]'); if (r) { openSw(r.dataset.sw); return; }
     const b = e.target.closest('[data-sym]');
     if (b) { S.sym = b.dataset.sym; ls.set('desk-sym', S.sym); if (!S.candles[S.sym]) loadCandles(S.sym); render(); return; }
     if (e.target.closest('#theme')) { const t = root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark'; root.setAttribute('data-theme', t); ls.set('links-theme', t); render(); }
   });
+  document.addEventListener('input', e => { if (e.target.id === 'ltq') { S.ltq = e.target.value; render(); } });
   document.addEventListener('change', e => {
     if (e.target.id === 'cap') { const v = Math.round(+String(e.target.value).replace(/[^\d.]/g, '')); if (v > 0) { capital = v; ls.set('ie-capital', String(v)); } e.target.blur(); render(); }
     if (e.target.id === 'perTrade') { const v = Math.round(+String(e.target.value).replace(/[^\d.]/g, '')); tradeOverride = v > 0 ? Math.min(v, capital) : 0; ls.set('desk-per-trade', tradeOverride ? String(tradeOverride) : ''); e.target.blur(); render(); }
@@ -1104,6 +1194,9 @@
   poll('perf', '/api/performance', 60000);
   poll('swing', '/api/swing/positions', 120000);
   poll('screen', '/api/swing/screen', 120000, null, 40000);
+  // Long-term analysis is a static file that the daily job commits to this site.
+  const loadLong = async () => { try { const r = await fetch('longterm/picks.json?h=' + Math.floor(Date.now() / 600000)); if (r.ok) { S.lt = await r.json(); render(); } } catch (e) {} };
+  loadLong(); setInterval(loadLong, 600000);
   poll('swingRes', '/api/swing/results', 300000, null, 60000);
   loadCandles(S.sym).then(() => { for (const k of SYMS) if (k !== S.sym) loadCandles(k); });
   setTimeout(() => $('app').classList.add('ready'), 1500);

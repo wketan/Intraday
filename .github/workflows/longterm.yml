@@ -1,0 +1,36 @@
+name: Long-term analysis
+
+on:
+  schedule:
+    - cron: "30 11 * * 1-5"   # 17:00 IST, after the NSE close and Yahoo's update
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pages: write
+
+concurrency:
+  group: longterm
+  cancel-in-progress: false
+
+jobs:
+  analyse:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Analyse NIFTY 200
+        run: python3 tools/longterm.py
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git config user.name "longterm-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add longterm/picks.json longterm/log.json
+          git diff --cached --quiet && exit 0
+          git commit -m "data: long-term analysis $(date -u +%F)"
+          git pull --rebase origin main
+          git push
+          # Pushes made with this token do not start a Pages build on their own.
+          gh api -X POST "repos/${{ github.repository }}/pages/builds" || true

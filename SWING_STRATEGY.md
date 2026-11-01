@@ -257,3 +257,26 @@ Today's universe (survivors) biases this against shorts.
 Not shipped. Tier C only is the one positive row, picked after the fact from 11 trades: a lead to
 retest as trades accumulate, not an edge. Lost even on the share short in most rows, so the
 loss is not just option decay.
+
+## Long-term picks (2026-11-01)
+
+`tools/longterm.py`, run on weekdays at 17:00 IST by `.github/workflows/longterm.yml`, publishes
+`longterm/picks.json` and tracks every pick in `longterm/log.json`. Independent of the engine.
+Harness: `research/lt_bt.py`, `lt_cal.py`. Monthly dividend-adjusted Yahoo prices, today's NIFTY 200,
+from 2003, split at 2016. Today's list flatters everything (equal-weight shows 27% a year), so the
+bar is the excess over an equal-weight basket of the same stocks, annualised, top 20, forward hold.
+
+| Ranking | 3m pre/post 2016 | 1y | 3y | 5y |
+|---|---|---|---|---|
+| 12-1 month return (shipped) | +9.1 / +17.6 | +5.5 / +9.5 | +4.3 / +3.7 | +3.0 / +0.7 |
+| 3-year return | +13.3 / +13.1 | +7.6 / +6.6 | +4.4 / +2.4 | +4.2 / -1.1 |
+| Low volatility | -13.3 / -13.0 | -3.9 / -10.0 | -1.3 / -9.9 | -1.4 / -9.5 |
+| Consistency of yearly gains | -1.6 / -3.0 | -1.4 / -5.1 | -0.7 / -8.4 | -1.4 / -7.9 |
+| Near 5-year high | -3.1 / +3.0 | +0.4 / +0.9 | +1.4 / -2.8 | +0.3 / -6.2 |
+| Worst 5-year return | +17.2 / +10.0 | +4.8 / +4.1 | +0.2 / +6.0 | +0.8 / +7.3 |
+
+The last row is mostly survivorship: the laggards that recovered are the ones still on the list.
+Ranges: log return ~ N(mu T, sigma^2 T), sigma = own 36-month volatility, mu = 13% (Sensex median
+10.7-13.1% over 1-20y windows, plus dividends), plus the lower of the two excess figures up to 3y.
+80% ranges held 78-82% of the time at 3m, 1y, 3y, 5y, before and after 2016; misses lean to the
+upside. 20y cannot be tested on one stock. Financial warnings are descriptive, not tested.
