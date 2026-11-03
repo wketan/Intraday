@@ -118,7 +118,16 @@
 "stock": "RADICO",
 "joined": "2026-10-30",
 "join_px": 4086.7,
-"join_nifty": 23053.1
+"join_nifty": 23053.1,
+"left": "2026-11-02",
+"left_px": 4100.0,
+"left_nifty": 23440.8
+},
+{
+"stock": "SOLARINDS",
+"joined": "2026-11-02",
+"join_px": 19438.0,
+"join_nifty": 23440.8
 }
 ]
 }
