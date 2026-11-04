@@ -76,7 +76,10 @@
 "stock": "IDEA",
 "joined": "2026-10-30",
 "join_px": 11.83,
-"join_nifty": 23053.1
+"join_nifty": 23053.1,
+"left": "2026-11-03",
+"left_px": 12.26,
+"left_nifty": 23810.85
 },
 {
 "stock": "FEDERALBNK",
@@ -128,6 +131,12 @@
 "joined": "2026-11-02",
 "join_px": 19438.0,
 "join_nifty": 23440.8
+},
+{
+"stock": "ABB",
+"joined": "2026-11-03",
+"join_px": 6605.0,
+"join_nifty": 23810.85
 }
 ]
 }
