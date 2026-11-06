@@ -91,13 +91,19 @@
 "stock": "SAIL",
 "joined": "2026-10-30",
 "join_px": 161.0,
-"join_nifty": 23053.1
+"join_nifty": 23053.1,
+"left": "2026-11-06",
+"left_px": 171.6,
+"left_nifty": 25030.35
 },
 {
 "stock": "SHRIRAMFIN",
 "joined": "2026-10-30",
 "join_px": 823.15,
-"join_nifty": 23053.1
+"join_nifty": 23053.1,
+"left": "2026-11-06",
+"left_px": 961.15,
+"left_nifty": 25030.35
 },
 {
 "stock": "MAHABANK",
@@ -146,6 +152,18 @@
 "joined": "2026-11-04",
 "join_px": 12.55,
 "join_nifty": 23960.6
+},
+{
+"stock": "RADICO",
+"joined": "2026-11-06",
+"join_px": 4515.2,
+"join_nifty": 25030.35
+},
+{
+"stock": "BSE",
+"joined": "2026-11-06",
+"join_px": 3800.0,
+"join_nifty": 25030.35
 }
 ]
 }
