@@ -115,7 +115,10 @@
 "stock": "ADANIENSOL",
 "joined": "2026-10-30",
 "join_px": 1349.5,
-"join_nifty": 23053.1
+"join_nifty": 23053.1,
+"left": "2026-11-09",
+"left_px": 1439.1,
+"left_nifty": 25030.35
 },
 {
 "stock": "TORNTPHARM",
@@ -163,6 +166,12 @@
 "stock": "BSE",
 "joined": "2026-11-06",
 "join_px": 3800.0,
+"join_nifty": 25030.35
+},
+{
+"stock": "NYKAA",
+"joined": "2026-11-09",
+"join_px": 359.7,
 "join_nifty": 25030.35
 }
 ]
