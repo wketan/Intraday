@@ -166,13 +166,22 @@
 "stock": "BSE",
 "joined": "2026-11-06",
 "join_px": 3800.0,
-"join_nifty": 25030.35
+"join_nifty": 25030.35,
+"left": "2026-11-11",
+"left_px": 3906.0,
+"left_nifty": 25255.05
 },
 {
 "stock": "NYKAA",
 "joined": "2026-11-09",
 "join_px": 359.7,
 "join_nifty": 25030.35
+},
+{
+"stock": "TORNTPHARM",
+"joined": "2026-11-11",
+"join_px": 4761.0,
+"join_nifty": 25255.05
 }
 ]
 }
