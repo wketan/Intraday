@@ -148,7 +148,10 @@
 "stock": "ABB",
 "joined": "2026-11-03",
 "join_px": 6605.0,
-"join_nifty": 23810.85
+"join_nifty": 23810.85,
+"left": "2026-11-12",
+"left_px": 6923.0,
+"left_nifty": 25299.35
 },
 {
 "stock": "IDEA",
@@ -181,7 +184,22 @@
 "stock": "TORNTPHARM",
 "joined": "2026-11-11",
 "join_px": 4761.0,
-"join_nifty": 25255.05
+"join_nifty": 25255.05,
+"left": "2026-11-12",
+"left_px": 4727.2,
+"left_nifty": 25299.35
+},
+{
+"stock": "BSE",
+"joined": "2026-11-12",
+"join_px": 3909.1,
+"join_nifty": 25299.35
+},
+{
+"stock": "PAYTM",
+"joined": "2026-11-12",
+"join_px": 1925.0,
+"join_nifty": 25299.35
 }
 ]
 }
