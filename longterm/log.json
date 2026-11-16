@@ -199,7 +199,16 @@
 "stock": "PAYTM",
 "joined": "2026-11-12",
 "join_px": 1925.0,
-"join_nifty": 25299.35
+"join_nifty": 25299.35,
+"left": "2026-11-13",
+"left_px": 1939.9,
+"left_nifty": 25144.3
+},
+{
+"stock": "ABB",
+"joined": "2026-11-13",
+"join_px": 7054.5,
+"join_nifty": 25144.3
 }
 ]
 }
