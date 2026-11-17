@@ -157,7 +157,10 @@
 "stock": "IDEA",
 "joined": "2026-11-04",
 "join_px": 12.55,
-"join_nifty": 23960.6
+"join_nifty": 23960.6,
+"left": "2026-11-16",
+"left_px": 12.53,
+"left_nifty": 25291.1
 },
 {
 "stock": "RADICO",
@@ -193,7 +196,10 @@
 "stock": "BSE",
 "joined": "2026-11-12",
 "join_px": 3909.1,
-"join_nifty": 25299.35
+"join_nifty": 25299.35,
+"left": "2026-11-16",
+"left_px": 3887.4,
+"left_nifty": 25291.1
 },
 {
 "stock": "PAYTM",
@@ -209,6 +215,18 @@
 "joined": "2026-11-13",
 "join_px": 7054.5,
 "join_nifty": 25144.3
+},
+{
+"stock": "ADANIENSOL",
+"joined": "2026-11-16",
+"join_px": 1452.6,
+"join_nifty": 25291.1
+},
+{
+"stock": "OFSS",
+"joined": "2026-11-16",
+"join_px": 9963.0,
+"join_nifty": 25291.1
 }
 ]
 }
