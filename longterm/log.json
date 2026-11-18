@@ -34,7 +34,10 @@
 "stock": "NATIONALUM",
 "joined": "2026-10-30",
 "join_px": 314.55,
-"join_nifty": 23053.1
+"join_nifty": 23053.1,
+"left": "2026-11-17",
+"left_px": 320.9,
+"left_nifty": 25387.4
 },
 {
 "stock": "BHARATFORG",
@@ -58,7 +61,10 @@
 "stock": "GVT&D",
 "joined": "2026-10-30",
 "join_px": 4020.0,
-"join_nifty": 23053.1
+"join_nifty": 23053.1,
+"left": "2026-11-17",
+"left_px": 4320.0,
+"left_nifty": 25387.4
 },
 {
 "stock": "DIVISLAB",
@@ -226,7 +232,28 @@
 "stock": "OFSS",
 "joined": "2026-11-16",
 "join_px": 9963.0,
-"join_nifty": 25291.1
+"join_nifty": 25291.1,
+"left": "2026-11-17",
+"left_px": 9741.0,
+"left_nifty": 25387.4
+},
+{
+"stock": "IDEA",
+"joined": "2026-11-17",
+"join_px": 12.3,
+"join_nifty": 25387.4
+},
+{
+"stock": "ADANIPOWER",
+"joined": "2026-11-17",
+"join_px": 208.07,
+"join_nifty": 25387.4
+},
+{
+"stock": "BSE",
+"joined": "2026-11-17",
+"join_px": 3864.9,
+"join_nifty": 25387.4
 }
 ]
 }
