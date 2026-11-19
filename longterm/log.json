@@ -241,7 +241,10 @@
 "stock": "IDEA",
 "joined": "2026-11-17",
 "join_px": 12.3,
-"join_nifty": 25387.4
+"join_nifty": 25387.4,
+"left": "2026-11-18",
+"left_px": 12.1,
+"left_nifty": 25227.95
 },
 {
 "stock": "ADANIPOWER",
@@ -253,7 +256,22 @@
 "stock": "BSE",
 "joined": "2026-11-17",
 "join_px": 3864.9,
-"join_nifty": 25387.4
+"join_nifty": 25387.4,
+"left": "2026-11-18",
+"left_px": 3755.7,
+"left_nifty": 25227.95
+},
+{
+"stock": "TECHM",
+"joined": "2026-11-18",
+"join_px": 1750.0,
+"join_nifty": 25227.95
+},
+{
+"stock": "OFSS",
+"joined": "2026-11-18",
+"join_px": 9694.5,
+"join_nifty": 25227.95
 }
 ]
 }
