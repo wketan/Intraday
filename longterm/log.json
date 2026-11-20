@@ -265,13 +265,31 @@
 "stock": "TECHM",
 "joined": "2026-11-18",
 "join_px": 1750.0,
-"join_nifty": 25227.95
+"join_nifty": 25227.95,
+"left": "2026-11-19",
+"left_px": 1723.0,
+"left_nifty": 25514.3
 },
 {
 "stock": "OFSS",
 "joined": "2026-11-18",
 "join_px": 9694.5,
-"join_nifty": 25227.95
+"join_nifty": 25227.95,
+"left": "2026-11-19",
+"left_px": 9836.5,
+"left_nifty": 25514.3
+},
+{
+"stock": "PAYTM",
+"joined": "2026-11-19",
+"join_px": 1725.9,
+"join_nifty": 25514.3
+},
+{
+"stock": "GVT&D",
+"joined": "2026-11-19",
+"join_px": 4349.4,
+"join_nifty": 25514.3
 }
 ]
 }
