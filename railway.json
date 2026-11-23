@@ -16,7 +16,9 @@
       "/index.html",
       "/manifest.json",
       "/logo.svg",
-      "/icon-*.png"
+      "/icon-*.png",
+      "/smart.html",
+      "/smartmoney/**"
     ]
   },
   "deploy": {

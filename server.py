@@ -222,6 +222,27 @@ def fallback_delta(moneyness, dte=5, right_side=True):
 
 PORT = int(os.environ.get("PORT", "5050"))
 
+def _sm_extra_set():
+    """Instruments scanned ON TOP of ENABLED_INSTRUMENTS because every alert on
+    them must pass the Smart Money tape check (SM_CONFIRM_INSTRUMENTS) and they
+    get their own position slot. Default NIFTY (added 2026-11-23: the engine was
+    pinned to BANKNIFTY and missed a clean NIFTY put day). SM_EXTRA_INSTRUMENTS=""
+    restores the old BANKNIFTY-only behaviour."""
+    return {x.strip().upper() for x in os.environ.get("SM_EXTRA_INSTRUMENTS", "NIFTY").split(",") if x.strip()}
+
+
+def _enabled_instruments_env():
+    """ENABLED_INSTRUMENTS plus SM_EXTRA_INSTRUMENTS. Empty string = no filter (all)."""
+    base = os.environ.get("ENABLED_INSTRUMENTS", "").strip()
+    if not base:
+        return ""
+    names = [x.strip().upper() for x in base.split(",") if x.strip()]
+    for x in sorted(_sm_extra_set()):
+        if x not in names:
+            names.append(x)
+    return ",".join(names)
+
+
 # ═══════════════════════════════════════════════════════════════════
 # INSTRUMENTS
 # ═══════════════════════════════════════════════════════════════════
@@ -3044,6 +3065,12 @@ OPTION CHAIN MARKET SNAPSHOT (scan from live chain — use this as primary signa
   Volume leaders CE: {' | '.join(f"{o.get('strike')} ₹{o.get('ltp')} vol={o.get('volume',0):,}" for o in top_ce)}
   Volume leaders PE: {' | '.join(f"{o.get('strike')} ₹{o.get('ltp')} vol={o.get('volume',0):,}" for o in top_pe)}{vel_txt}"""
 
+        _smr = signal.get("smart_money") or {}
+        if _smr.get("score") is not None:
+            chain_anal_txt += (f"\nSMART MONEY TAPE (all F&O stocks, live): score {_smr['score']:+.2f} "
+                               f"(-1 sellers .. +1 buyers). " + "; ".join(_smr.get("why") or []) +
+                               "\n  Treat a strong score in the trade's direction as trend confirmation; "
+                               "on a confirmed trend day RSI overbought/oversold alone is NOT a reason to SKIP.")
         regime_txt = ""
         if regime:
             # Mirror of scanner BUG FIX #7 at the AI layer: when the operator
@@ -3055,7 +3082,7 @@ OPTION CHAIN MARKET SNAPSHOT (scan from live chain — use this as primary signa
             # (16 AI_SKIPs in 3 days, incl. 95%-confidence setups).
             _avoid = list(regime.get("avoid_instruments") or [])
             _notes = str(regime.get("notes") or "")
-            _env = os.environ.get("ENABLED_INSTRUMENTS", "").strip()
+            _env = _enabled_instruments_env()
             _pinned = {x.strip().upper() for x in _env.split(",") if x.strip()}
             if instrument.upper() in _pinned and any(a.upper() == instrument.upper() for a in _avoid):
                 _avoid = [a for a in _avoid if a.upper() != instrument.upper()]
@@ -3814,7 +3841,7 @@ class PLTracker:
         # Cross-instrument loss cooldown: when a SHORT just hit SL, the
         # immediate bearish read was wrong, so block new SHORTs across
         # ALL instruments for LOSS_COOLDOWN_MIN minutes. Same for LONG.
-        self._loss_cooldown = {}  # { "LONG" | "SHORT": datetime_until }
+        self._loss_cooldown = {}  # { "INSTRUMENT:LONG|SHORT": datetime_until }
         self.LOSS_COOLDOWN_MIN = 60
         # Two-tick exit confirmation (2026-06-12 phantom-SL incident): a
         # single bad quote closed a live winner as a -₹11k SL. An exit
@@ -4069,10 +4096,12 @@ class PLTracker:
                                      "hint": f"Could have exited at ₹{int(round(pk[0]))} "
                                              f"({int(round(favor))}% of the way to T1) at {pk[1]}."}
                 emoji = "🎯" if result == "T2" else ("✅" if result == "WIN" else "❌")
-                # Cross-instrument LOSS cooldown — same direction blocked for an hour
+                # LOSS cooldown — same instrument + direction blocked for an hour.
+                # 2026-11-23: was keyed by direction only, so a BANKNIFTY loss froze
+                # every NIFTY short too (replay: it would have killed NIFTY's put day).
                 if result == "LOSS":
                     until = datetime.now(IST) + timedelta(minutes=self.LOSS_COOLDOWN_MIN)
-                    self._loss_cooldown[s["direction"]] = until
+                    self._loss_cooldown[f"{s['instrument']}:{s['direction']}"] = until
                     log.info(f"⏸ {s['direction']} cooldown until {until.strftime('%H:%M')} IST "
                              f"(triggered by {s['instrument']} loss)")
                 log.info(f"{emoji} {s['instrument']} {s['direction']} → {result} | ₹{pnl_rs} (opt exit ₹{cur_opt})"
@@ -4227,7 +4256,7 @@ class Engine:
         self.running=True
         self._manual_stop=False
         threading.Thread(target=self._loop,daemon=True).start()
-        SlackAlert.send(f"🚀 *Signal Engine Started*\nStrategy: `{CONFIG.get('strategy','v1')}` (smoke-test passed)\nInstruments: {os.environ.get('ENABLED_INSTRUMENTS','NIFTY,BANKNIFTY,FINNIFTY')}")
+        SlackAlert.send(f"🚀 *Signal Engine Started*\nStrategy: `{CONFIG.get('strategy','v1')}` (smoke-test passed)\nInstruments: {_enabled_instruments_env() or 'NIFTY,BANKNIFTY,FINNIFTY'}")
         return{"status":"ok","message":"Engine started"}
 
     def _smoke_test_strategy(self):
@@ -4601,6 +4630,15 @@ class Engine:
                     continue
             if self._check_killswitch():
                 continue
+            # Smart Money tape must agree (same rule as conductor alerts)
+            if name in {x.strip().upper() for x in os.environ.get("SM_CONFIRM_INSTRUMENTS", "NIFTY").split(",") if x.strip()}:
+                _sm = _sm_bias(name)
+                _sc = (_sm or {}).get("score")
+                _need = float(os.environ.get("SM_MIN_SCORE", "0.2"))
+                if _sc is None or (_sc < _need if side == "CE" else _sc > -_need):
+                    self._log_gate(name, "PORB_SM_UNAVAILABLE" if _sc is None else "PORB_SM_DISAGREE",
+                                   None, {"side": side, "smart_money": _sm})
+                    continue
             _max_open = int(os.environ.get("MAX_OPEN_POSITIONS", "2") or 0)
             if _max_open > 0:
                 try:
@@ -4913,7 +4951,7 @@ class Engine:
                 # Used during the Conductor live-verification phase since
                 # backtest showed NIFTY/FINNIFTY lose on Conductor; only
                 # BANKNIFTY has confirmed edge. Default = all 3 (no filter).
-                _enabled_env = os.environ.get("ENABLED_INSTRUMENTS", "").strip()
+                _enabled_env = _enabled_instruments_env()
                 _enabled = {x.strip().upper() for x in _enabled_env.split(",") if x.strip()} if _enabled_env else None
 
                 for name,inst in INSTRUMENTS.items():
@@ -5514,7 +5552,7 @@ class Engine:
                         # If a same-direction trade just hit SL, suppress
                         # new fires of that direction for 60 min — the read
                         # was likely wrong, don't double down.
-                        cd_until = self.tracker._loss_cooldown.get(sig["direction"])
+                        cd_until = self.tracker._loss_cooldown.get(f"{name}:{sig['direction']}")
                         if cd_until and datetime.now(IST) < cd_until:
                             mins_left = int((cd_until - datetime.now(IST)).total_seconds() / 60) + 1
                             log.info(f"⏸ {name} {sig['direction']} skipped — "
@@ -5528,6 +5566,26 @@ class Engine:
                             # call), so re-evaluating every scan is fine.
                             continue
 
+                        # ── Smart Money confirmation (smartmoney/feed.py) ──
+                        # Reads every F&O stock live: index 5m structure (BOS/CHoCH),
+                        # heavyweights' move since open, heavyweight futures OI
+                        # build-up and market breadth -> score -1 (sellers) .. +1 (buyers).
+                        # Instruments in SM_CONFIRM_INSTRUMENTS (default NIFTY, whose old
+                        # backtests lost money) only alert when the tape agrees.
+                        # Others just carry the read on the alert.
+                        _sm = _sm_bias(name)
+                        sig["smart_money"] = _sm
+                        _sm_req = [x.strip().upper() for x in os.environ.get(
+                            "SM_CONFIRM_INSTRUMENTS", "NIFTY").split(",") if x.strip()]
+                        if name in _sm_req:
+                            _need = float(os.environ.get("SM_MIN_SCORE", "0.2"))
+                            _sc = (_sm or {}).get("score")
+                            _ok = _sc is not None and (_sc >= _need if sig["direction"] == "LONG" else _sc <= -_need)
+                            if not _ok:
+                                self._log_gate(name, "SM_UNAVAILABLE" if _sc is None else "SM_DISAGREE",
+                                               sig, {"smart_money": _sm})
+                                continue
+
                         # ── Max open positions cap (env-tunable) ──────
                         # Default 2: one trending-index trade plus one
                         # counter-setup can coexist; a cap of 1 was starving
@@ -5537,11 +5595,34 @@ class Engine:
                         if _max_open > 0:
                             try:
                                 today_str = datetime.now(IST).strftime("%Y-%m-%d")
-                                open_cnt_row = db_exec(
-                                    "SELECT COUNT(*) as cnt FROM signals "
-                                    "WHERE status='OPEN' AND date=?",
-                                    (today_str,), fetchone=True)
-                                open_cnt = int(dict(open_cnt_row).get("cnt", 0)) if open_cnt_row else 0
+                                # SM-extra instruments (NIFTY) have their own slot:
+                                # they skip the global count and are held only by
+                                # the per-instrument cap below; the global
+                                # MAX_OPEN_POSITIONS keeps counting the rest.
+                                _xs = sorted(_sm_extra_set())
+                                if name in _xs:
+                                    open_cnt = 0
+                                else:
+                                    _ph = ",".join("?" * len(_xs))
+                                    open_cnt_row = db_exec(
+                                        "SELECT COUNT(*) as cnt FROM signals "
+                                        "WHERE status='OPEN' AND date=?"
+                                        + (f" AND instrument NOT IN ({_ph})" if _xs else ""),
+                                        (today_str, *_xs), fetchone=True)
+                                    open_cnt = int(dict(open_cnt_row).get("cnt", 0)) if open_cnt_row else 0
+                                # Per-instrument slot: a BANKNIFTY trade no longer
+                                # blocks NIFTY (and NIFTY, scanned first, can't steal
+                                # BANKNIFTY's slot). MAX_OPEN_PER_INSTRUMENT=0 = off.
+                                _per = int(os.environ.get("MAX_OPEN_PER_INSTRUMENT", "1") or 0)
+                                if _per > 0:
+                                    _ir = db_exec("SELECT COUNT(*) as cnt FROM signals "
+                                                  "WHERE status='OPEN' AND date=? AND instrument=?",
+                                                  (today_str, name), fetchone=True)
+                                    _icnt = int(dict(_ir).get("cnt", 0)) if _ir else 0
+                                    if _icnt >= _per:
+                                        self._log_gate(name, "MAX_OPEN_INSTR", sig,
+                                                       {"open": _icnt, "cap": _per})
+                                        continue
                                 if open_cnt >= _max_open:
                                     log.info(f"⏸ {name} {sig['direction']} skipped — "
                                              f"max open positions cap ({open_cnt}/{_max_open})")
@@ -5573,7 +5654,11 @@ class Engine:
                             # kicks in even on AI SKIP/WAIT. Without this, every 5-second tick
                             # would re-evaluate the same signal and AI would SKIP it again
                             # forever — burning API calls and never moving forward.
-                            self._last_signal[name] = datetime.now(IST)
+                            # 2026-11-23: retry after 5 min instead of 15. On 11-20 the
+                            # AI skipped 5 trend-day LONGs ("RSI overbought") and each
+                            # skip parked the instrument for 15 min while it ran +400-980.
+                            _retry = int(os.environ.get("AI_SKIP_RETRY_SEC", "300"))
+                            self._last_signal[name] = datetime.now(IST) - timedelta(seconds=max(0, 900 - _retry))
                             continue
 
                         # Re-pick option with AI-suggested position_pct (may scale down)
@@ -5714,7 +5799,7 @@ class Engine:
             "config":{"scan_interval":CONFIG["scan_interval_sec"],"target_min":CONFIG["target_points_min"],
                 "target_max":CONFIG["target_points_max"],"min_confidence":CONFIG["min_confidence"],
                 "strategy":CONFIG.get("strategy","v1"),
-                "enabled_instruments":os.environ.get("ENABLED_INSTRUMENTS","")},
+                "enabled_instruments":_enabled_instruments_env()},
             "research_mode": (_rm != "0"),
             "dispatch": dict(getattr(SignalGen, "last_dispatch", {}) or {}),
             "signal_diag": dict(getattr(self, "_cond_diag", {}) or {}),
@@ -7795,6 +7880,98 @@ def require_auth(fn):
 
 engine = Engine()
 
+# ═══════════════════════════════════════════════════════════════════
+# SMART MONEY TAPE (port of github.com/heysanjeevv/market-lab, MIT)
+# Every F&O stock live from Angel batch quotes: move since open,
+# displacement, BOS/CHoCH, order blocks, FVGs, PDH/PDL sweeps, futures
+# OI build-up and order-book pressure. Page: /smart  API: /api/sm/*
+# ═══════════════════════════════════════════════════════════════════
+from smartmoney.feed import SmartMoneyFeed, INDICES as SM_INDICES
+from smartmoney import smc as _smc
+sm_feed = SmartMoneyFeed(engine.client, _master)
+
+
+def _sm_bias(name):
+    try:
+        return sm_feed.bias(name)
+    except Exception as e:
+        log.warning(f"[SM] bias {name}: {e}")
+        return None
+
+
+@app.route("/smart")
+def smart_page():
+    return send_file(os.path.join(os.path.dirname(os.path.abspath(__file__)), "smart.html"))
+
+
+@app.route("/api/sm/live")
+def sm_live():
+    lite = flask_request.args.get("lite") == "1"
+    snap = sm_feed.snapshot(paths=not lite and flask_request.args.get("paths", "1") != "0")
+    if lite:   # Desk card view: no paths, bars or chart events (~20x smaller)
+        snap["stocks"] = [{k: v for k, v in r.items() if k not in ("path", "bars", "read", "trail")}
+                          | {"struct": ((r.get("read") or {}).get("struct"))} for r in snap["stocks"]]
+        snap["indices"] = {k: {kk: vv for kk, vv in v.items() if kk not in ("bars", "path")} for k, v in snap["indices"].items()}
+    snap["bias"] = {k: _sm_bias(k) for k in ("NIFTY", "BANKNIFTY")}
+    snap["source"] = "angel"
+    return jsonify(snap)
+
+
+@app.route("/api/sm/flow")
+def sm_flow():
+    return jsonify({"time": sm_feed.time, "flow": sm_feed.flow(),
+                    "bias": {k: _sm_bias(k) for k in ("NIFTY", "BANKNIFTY")},
+                    "errors": sm_feed.errors[-5:], "universe": len(sm_feed.universe)})
+
+
+@app.route("/api/sm/quote")
+def sm_quote():
+    sym = (flask_request.args.get("sym") or "").upper()
+    with sm_feed.lock:
+        r = sm_feed.indices.get(sym) or sm_feed.stocks.get(sym) or {}
+    ltp = r.get("ltp")
+    prev = ltp / (1 + r["pct"] / 100) if ltp and r.get("pct") is not None else None
+    return jsonify({"ltp": ltp, "prev": prev, "time": int(time.time())})
+
+
+@app.route("/api/sm/chart")
+def sm_chart():
+    sym = (flask_request.args.get("sym") or "").upper()
+    tf = flask_request.args.get("tf", "5m")
+    iv = {"1m": ("ONE_MINUTE", 3), "5m": ("FIVE_MINUTE", 12), "15m": ("FIFTEEN_MINUTE", 40),
+          "60m": ("ONE_HOUR", 150), "1d": ("ONE_DAY", 700)}.get(tf)
+    if not iv:
+        return jsonify({"error": "bad tf"}), 400
+    if sym in SM_INDICES:
+        exch, tok, _ = SM_INDICES[sym]
+    elif sym in sm_feed.universe:
+        exch, tok = "NSE", sm_feed.universe[sym]["eq_token"]
+    else:
+        return jsonify({"error": f"unknown symbol {sym}"}), 404
+    if not engine.client.ensure():
+        return jsonify({"error": "Not logged in"}), 401
+    df = engine.client.candles(tok, exch, iv[0], iv[1])
+    if df is None or df.empty:
+        return jsonify({"sym": sym, "tf": tf, "candles": [], "read": None})
+    ts = pd.to_datetime(df["timestamp"])
+    ts = ts.dt.tz_localize(IST) if ts.dt.tz is None else ts
+    d = pd.DataFrame({k: df[k].astype(float).values for k in ("open", "high", "low", "close", "volume")},
+                     index=pd.DatetimeIndex(ts).tz_convert("UTC"))
+    daily = sm_feed.daily_idx.get(sym) if tf != "1d" else None
+    try:
+        rd = _smc.read(d, 2 if tf in ("1m", "5m") else 3, daily) if len(d) >= 30 else None
+    except Exception as e:
+        log.warning(f"[SM] chart read {sym} {tf}: {e}")
+        rd = None
+    with sm_feed.lock:
+        live = sm_feed.indices.get(sym) or sm_feed.stocks.get(sym) or {}
+    _ltp = live.get("ltp") or float(d["close"].iloc[-1])
+    _prev = _ltp / (1 + live["pct"] / 100) if live.get("pct") is not None else None
+    return jsonify({"sym": sym, "tf": tf, "ltp": _ltp, "prev": _prev,
+                    "candles": [{"time": int(t.timestamp()), "open": r.open, "high": r.high, "low": r.low,
+                                 "close": r.close, "volume": r.volume} for t, r in d.iterrows()],
+                    "read": rd})
+
 @app.route("/")
 @app.route("/dashboard")
 def home():
@@ -9338,6 +9515,12 @@ def _startup():
                 engine.running = True
                 threading.Thread(target=engine._loop, daemon=True, name="ScanLoop").start()
                 log.info("▶ Auto-startup: scan engine running ✅")
+            # Smart Money tape (read-only market data, own thread)
+            try:
+                sm_feed.start()
+                log.info("▶ Auto-startup: smart money tape running ✅")
+            except Exception as e:
+                log.error(f"▶ Auto-startup: smart money tape failed: {e}")
             # Start swing engine after intraday engine is up
             if not swing_engine.running:
                 log.info("▶ Auto-startup: starting swing engine...")

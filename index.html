@@ -1129,6 +1129,9 @@ html,body{background:var(--bg-base)!important;color:var(--ink-1)!important;trans
             {!isLive && !isOff && <Ping kind="warn" dot label="ENGINE" value="IDLE"/>}
             {isOff  && <Ping kind="warn" dot label="ENGINE" value="OFF"/>}
             <Ping kind="info" dot label="STRAT" value={(strategy || '—').toUpperCase()}/>
+            <a href="/smart" style={{textDecoration:'none'}} title="Every F&O stock live: buying vs selling, structure, zones">
+              <Ping kind="info" dot label="TAPE" value="SMART MONEY ↗"/>
+            </a>
           </div>
 
           <div className="divide"/>

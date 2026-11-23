@@ -450,6 +450,24 @@
 .kpis.six .kpi .chgl{font-size:12px;font-weight:800;color:var(--tc);margin-top:2px;position:relative;z-index:1}
 /* Swing sheet */
 .tr.s4.open-able{cursor:pointer}
+/* Smart Money: who is buying, who is selling (engine /api/sm/live?lite=1). Links tokens only. */
+.kpis.six .kpi .smm{position:relative;z-index:1;height:8px;border-radius:99px;margin-top:auto;background:linear-gradient(90deg,var(--blush-i),var(--surface2) 50%,var(--mint-i))}
+.kpis.six .kpi .smm i{position:absolute;top:-4px;width:4px;height:16px;border-radius:2px;background:var(--ink);box-shadow:0 0 0 2px var(--surface)}
+.kpis.six .kpi .chgl.smc{margin-bottom:14px}
+.kpis.six .kpi .smn{position:relative;z-index:1;margin-top:auto;font-size:11.5px;font-weight:700;color:var(--tc);line-height:1.5;font-variant-numeric:tabular-nums}
+.kpis.six .kpi .smn span{display:flex;justify-content:space-between;gap:8px}
+.tb a.btn{order:2;text-decoration:none;display:inline-flex;align-items:center;gap:6px;flex:none}
+.smsec{display:flex;flex-wrap:wrap;gap:8px;padding:18px 20px}
+.smsec .chip{font-variant-numeric:tabular-nums}
+.smsec .chip.up{background:var(--mint);color:var(--mint-i)}.smsec .chip.dn{background:var(--blush);color:var(--blush-i)}
+.smmov{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));border-top:1px solid var(--line)}
+.smmov>div+div{border-left:1px solid var(--line)}
+.smmov h3{margin:0;padding:14px 20px 6px;font-size:13px;font-weight:800;color:var(--ink3);letter-spacing:.02em}
+.smr{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:10px;align-items:center;padding:9px 20px;border-top:1px solid var(--line);font-size:13px}
+.smr b{font-weight:800}.smr .meta{font-size:11px;color:var(--ink3);font-weight:600}
+.smr .num{font-weight:800;font-variant-numeric:tabular-nums}
+.smwhy{padding:0 20px 16px;font-size:12px;color:var(--ink3);font-weight:600;line-height:1.5}
+@media(max-width:880px){.smmov{grid-template-columns:1fr}.smmov>div+div{border-left:0}}
 .sh-sec{margin:22px 0 0}
 .sh-sec h4{margin:0 0 10px;font-size:13px;font-weight:800;color:var(--ink)}
 .steps{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
@@ -1130,6 +1148,35 @@
   }
 
   // ── render ───────────────────────────────────────────────────────────
+  // ── Smart Money: every F&O stock read live by the engine ─────────────
+  function smHtml() {
+    const d = S.sm, head = `<div class="tb rise" style="--i:8" id="go-sm"><h2>Smart money</h2><span class="stamp">who is buying, who is selling · every F&amp;O stock${d && d.time ? ' · ' + new Date(d.time).toLocaleTimeString('en-GB', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit' }) + ' IST' : ''}</span><a class="btn" href="${esc(server())}/smart" target="_blank" rel="noopener">Open full tape ↗</a></div>`;
+    if (!d || !d.stocks || !d.stocks.length) return head + `<div class="table glass"><div class="empty">${S.smErr ? esc(S.smErr) : 'The tape fills in about a minute after the engine starts, then updates every 30 seconds.'}</div></div>`;
+    const B = d.bias || {}, F = d.flow || {};
+    const ctl = (k, i) => {
+      const b = B[k], f = F[k.toLowerCase()] || {};
+      if (!b) return `<div class="kpi t-lav pop" style="--i:${i}"><div class="lab">${esc(NAMES[k] || k)} · control</div><div class="val">-</div><div class="sub">waiting for the tape</div></div>`;
+      const sc = b.score, t = sc >= .35 ? ['Buyers in control', 'mint'] : sc >= .15 ? ['Leaning buy', 'mint'] : sc <= -.35 ? ['Sellers in control', 'blush'] : sc <= -.15 ? ['Leaning sell', 'blush'] : ['No clear side', 'butter'];
+      const why = (b.why || []).filter(w => !/breadth/.test(w))[0] || '';
+      return `<div class="kpi t-${t[1]} pop" style="--i:${i}" title="${esc((b.why || []).join(' · '))}"><div class="lab">${esc(NAMES[k] || k)} · control</div><div class="val">${sc > 0 ? '+' : ''}${sc.toFixed(2)}</div><div class="chgl smc">${t[0]}${f.heavy_n ? ' · ' + f.heavy_up + '/' + f.heavy_n + ' heavyweights up' : ''}</div><div class="smm"><i style="left:calc(${((sc + 1) / 2 * 100).toFixed(1)}% - 2px)"></i></div></div>`;
+    };
+    const BU = [['long_buildup', 'Fresh buying', 'mint', 'price up, OI up'], ['short_covering', 'Short covering', 'sky', 'price up, OI down'], ['short_buildup', 'Fresh selling', 'blush', 'price down, OI up'], ['long_unwinding', 'Buyers exiting', 'peach', 'price down, OI down']];
+    const bu = ([k, l, tone, sub], i) => { const x = F[k] || {}; const top = (x.top || []).slice(0, 3);
+      return `<div class="kpi t-${tone} pop" style="--i:${i}" title="${esc(sub)}"><div class="lab">${l}</div><div class="val">${x.n ?? 0}</div><div class="smn">${top.length ? top.map(r => `<span><b>${esc(r.sym)}</b>${r.pct >= 0 ? '+' : ''}${num(r.pct, 1)}%</span>`).join('') : '<span>none yet</span>'}</div></div>`; };
+    const br = F.breadth || {};
+    const secs = (d.sectors || []).filter(x => x.n >= 3);
+    const tag = st => st ? `<span class="tag" style="background:var(--${st.dir === 'bull' ? 'mint' : 'blush'});color:var(--${st.dir === 'bull' ? 'mint' : 'blush'}-i)">${esc(st.type)} ${st.dir === 'bull' ? '↑' : '↓'}</span>` : '';
+    const row = r => `<div class="smr"><div><b>${esc(r.sym)}</b> ${tag(r.struct)}<div class="meta">${esc(r.sector)}${r.buildup ? ' · ' + esc(r.buildup.replace('_', ' ').toLowerCase()) : ''}</div></div><div class="num ${r.from_open >= 0 ? 'up' : 'dn'}">${r.from_open >= 0 ? '+' : ''}${num(r.from_open, 2)}%</div><div class="meta">from open</div></div>`;
+    const byFo = d.stocks.slice().sort((a, b) => b.from_open - a.from_open);
+    return head + `
+    <div class="kpis six">${ctl('NIFTY', 2)}${ctl('BANKNIFTY', 3)}${BU.map((x, i) => bu(x, i + 4)).join('')}</div>
+    <div class="table glass rise" style="--i:9;margin-top:16px">
+      <div class="smsec">${secs.map(x => `<span class="chip ${x.pct >= 0 ? 'up' : 'dn'}" title="${x.up} up, ${x.down} down">${esc(x.name)} ${x.pct >= 0 ? '+' : ''}${num(x.pct, 2)}%</span>`).join('')}</div>
+      <div class="smwhy">${br.up ?? 0} stocks up and ${br.down ?? 0} down since the open. The engine only sends a NIFTY signal when this tape agrees with it.</div>
+      <div class="smmov"><div><h3>Strongest since the open</h3>${byFo.slice(0, 5).map(row).join('')}</div><div><h3>Weakest since the open</h3>${byFo.slice(-5).reverse().map(row).join('')}</div></div>
+    </div>`;
+  }
+
   function render() {
     const st = S.status || {}, perf = S.perf || {}, prices = (S.ltp && S.ltp.prices) || {};
     const today = todayISO();
@@ -1243,7 +1290,7 @@
       <div class="kpi t-blush pop" style="--i:7"><div class="lab">Net per trade</div><div class="val">${inr(perTrade, true)}</div><div class="sub">${wins} W · ${losses} L · ${Math.max(0, total - wins - losses)} scratch</div></div>
     </div>
 
-    <div class="jump" aria-label="Jump to section">${[['live', 'Live price'], ['sig', 'Signals'], ['swing', 'Swing'], ['long', 'Long term']].map(([k, l]) => `<button data-go="go-${k}">${l}</button>`).join('')}</div>
+    <div class="jump" aria-label="Jump to section">${[['live', 'Live price'], ['sm', 'Smart money'], ['sig', 'Signals'], ['swing', 'Swing'], ['long', 'Long term']].map(([k, l]) => `<button data-go="go-${k}">${l}</button>`).join('')}</div>
     <div class="tb rise" style="--i:6" id="go-live"><h2>Live price</h2>
       <div class="seg" role="tablist">${['NIFTY', 'BANKNIFTY', 'FINNIFTY'].map(k => `<button role="tab" aria-selected="${k === sym}" class="${k === sym ? 'on' : ''}" data-sym="${k}">${NAMES[k]}</button>`).join('')}</div></div>
     <div class="table glass chartcard rise" style="--i:7">
@@ -1251,6 +1298,8 @@
       <div class="plot" id="plot">${chartSVG(sym)}</div>
       <div class="legend"><span><i style="background:var(--${p.pct >= 0 ? 'good' : 'bad'})"></i>price, 5-min + live ticks</span><span><i style="background:var(--accent)"></i>VWAP proxy (today)</span><span><i style="background:var(--bad);width:9px;height:9px;border-radius:50%"></i>engine signals</span></div>
     </div>
+
+    ${smHtml()}
 
     <div class="tb rise" style="--i:8" id="go-sig"><h2>Signals <span class="tag">${cards.length}</span></h2><span class="stamp">entry, SL, T1, T2 as the engine set them · sized for your ${inr(capital)}</span></div>
     ${sigHtml ? `<div class="sigs">${sigHtml}</div>` : '<div class="table glass"><div class="empty">No signals yet today. The engine fires only between 09:45 and 14:30 IST.</div></div>'}
@@ -1397,6 +1446,8 @@
   });
   poll('hist', () => '/api/history?limit=200&date=' + todayISO(), 20000);
   poll('perf', '/api/performance', 60000);
+  const loadSm = async () => { try { S.sm = await api('/api/sm/live?lite=1', 30000); S.smErr = null; } catch (e) { S.smErr = 'Smart money tape not reachable yet. Retrying.'; } render(); };
+  loadSm(); setInterval(loadSm, 30000);
   poll('swing', '/api/swing/positions', 120000);
   poll('screen', '/api/swing/screen', 120000, null, 40000);
   // Long-term analysis is a static file that the daily job commits to this site.
