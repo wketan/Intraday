@@ -465,8 +465,9 @@ class SmartMoneyFeed:
         if not stocks or not t:
             return None
         age = (datetime.now(timezone.utc) - datetime.fromisoformat(t)).total_seconds()
-        if age > 180:
-            return None
+        if age > 180 and market_status() == "open":
+            return None        # stale during the session: the engine must not act on it
+        # (outside the session the last read is still shown on the pages; no signals fire then anyway)
         fl = self.flow(stocks)
         h = fl.get("banknifty" if instrument == "BANKNIFTY" else "nifty", {})
         parts, why = [], []

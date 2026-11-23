@@ -451,23 +451,63 @@
 /* Swing sheet */
 .tr.s4.open-able{cursor:pointer}
 /* Smart Money: who is buying, who is selling (engine /api/sm/live?lite=1). Links tokens only. */
-.kpis.six .kpi .smm{position:relative;z-index:1;height:8px;border-radius:99px;margin-top:auto;background:linear-gradient(90deg,var(--blush-i),var(--surface2) 50%,var(--mint-i))}
-.kpis.six .kpi .smm i{position:absolute;top:-4px;width:4px;height:16px;border-radius:2px;background:var(--ink);box-shadow:0 0 0 2px var(--surface)}
-.kpis.six .kpi .chgl.smc{margin-bottom:14px}
-.kpis.six .kpi .smn{position:relative;z-index:1;margin-top:auto;font-size:11.5px;font-weight:700;color:var(--tc);line-height:1.5;font-variant-numeric:tabular-nums}
-.kpis.six .kpi .smn span{display:flex;justify-content:space-between;gap:8px}
+/* Smart money: a live component kept across re-renders, so values glide instead of redrawing. */
 .tb a.btn{order:2;text-decoration:none;display:inline-flex;align-items:center;gap:6px;flex:none}
-.smsec{display:flex;flex-wrap:wrap;gap:8px;padding:18px 20px}
-.smsec .chip{font-variant-numeric:tabular-nums}
-.smsec .chip.up{background:var(--mint);color:var(--mint-i)}.smsec .chip.dn{background:var(--blush);color:var(--blush-i)}
-.smmov{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));border-top:1px solid var(--line)}
+.tb .livep{order:2;display:inline-flex;align-items:center;gap:8px;height:34px;padding:0 14px;border-radius:99px;background:var(--surface2);font-size:12.5px;font-weight:700;color:var(--ink2)}
+.sm2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+.sm4{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px;margin-top:16px}
+.smk{min-height:0!important}
+.smk .val{transition:color .4s var(--ease)}
+.smk .vrow{display:flex;align-items:baseline;gap:14px;position:relative;z-index:1;margin-top:14px;flex-wrap:wrap}
+.smk .vrow .val{margin-top:0}
+.smk .vd{font-size:19px;font-weight:800;letter-spacing:-.03em;color:var(--tc)}
+.smm{position:relative;z-index:1;height:10px;border-radius:99px;margin:18px 0 6px;background:linear-gradient(90deg,var(--bad),var(--surface2) 50%,var(--good))}
+.smm i{position:absolute;top:-5px;width:6px;height:20px;border-radius:3px;background:var(--ink);box-shadow:0 0 0 2.5px var(--surface),var(--shadow);transition:left 1.4s var(--spring)}
+.smm::after{content:"";position:absolute;left:50%;top:-3px;width:1.5px;height:16px;background:var(--line2)}
+.smml{display:flex;justify-content:space-between;position:relative;z-index:1;font-size:11px;font-weight:700;color:var(--tc)}
+.hw{position:relative;z-index:1;display:flex;flex-wrap:wrap;gap:5px;margin-top:16px}
+#go-sm h2{flex:1 1 auto}
+.hw i{width:16px;height:16px;border-radius:6px;background:var(--ink3);
+  transition:background-color .6s var(--ease),transform .5s var(--spring)}
+.hw i.u{background:var(--good)}.hw i.d{background:var(--bad)}.hw i.x{display:none}
+.hwl{position:relative;z-index:1;margin-top:10px;font-size:12.5px;font-weight:800;color:var(--tc)}
+.hw i:hover{transform:translateY(-3px) scale(1.15)}
+.smwhy2{position:relative;z-index:1;margin-top:14px;font-size:12px;font-weight:600;color:var(--tc);line-height:1.55}
+.sm4 .kpi{min-height:0;padding:20px 22px}
+.sm4 .kpi .val{font-size:40px;--valh:46px;margin-top:10px}
+.shr{position:relative;z-index:1;height:8px;border-radius:99px;background:var(--orb);margin:12px 0 4px;overflow:hidden}
+.shl{position:relative;z-index:1;font-size:11.5px;font-weight:700;color:var(--tc);margin-bottom:10px}
+.shr b{position:absolute;left:0;top:0;bottom:0;border-radius:99px;background:var(--tc);opacity:.75;transition:width 1.2s var(--ease-out)}
+.smn{position:relative;z-index:1;font-size:12.5px;font-weight:700;color:var(--tc);line-height:1.6;font-variant-numeric:tabular-nums;min-height:60px}
+.smn span{display:flex;justify-content:space-between;gap:8px}.smn span b{color:var(--ink);font-weight:800}
+.smt{margin-top:16px;padding:22px 24px 12px}
+.brd{display:flex;height:16px;border-radius:99px;overflow:hidden;background:var(--surface2);gap:3px}
+.brd i{display:block;height:100%;border-radius:99px;transition:width 1.2s var(--ease-out)}
+.brd i.u{background:var(--good)}.brd i.d{background:var(--bad)}
+.brl{display:flex;justify-content:space-between;margin-top:8px;font-size:12.5px;font-weight:700;color:var(--ink2)}
+.brl b{font-size:15px;font-weight:800}
+.secs{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:4px 34px;margin-top:20px}
+.sr{display:grid;grid-template-columns:104px minmax(0,1fr) 62px;gap:12px;align-items:center;font-size:12.5px;font-weight:700;padding:4px 0}
+.sr .nm{color:var(--ink2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sr .tr2{position:relative;height:10px;border-radius:99px;background:var(--surface2)}
+.sr .tr2::after{content:"";position:absolute;left:50%;top:-3px;bottom:-3px;width:1.5px;background:var(--line2)}
+.sr .tr2 b{position:absolute;top:0;bottom:0;border-radius:99px;transition:width 1.2s var(--ease-out),left 1.2s var(--ease-out),background-color .4s}
+.sr .pc{text-align:right;font-variant-numeric:tabular-nums}
+.sr .pc.up,.brl b.up{color:var(--mint-i)}.sr .pc.dn,.brl b.dn{color:var(--blush-i)}
+.smnote{margin:18px 0 6px;font-size:12.5px;color:var(--ink3);font-weight:600;line-height:1.5}
+.smmov{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));border-top:1px solid var(--line);margin:8px -24px 0}
 .smmov>div+div{border-left:1px solid var(--line)}
-.smmov h3{margin:0;padding:14px 20px 6px;font-size:13px;font-weight:800;color:var(--ink3);letter-spacing:.02em}
-.smr{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:10px;align-items:center;padding:9px 20px;border-top:1px solid var(--line);font-size:13px}
-.smr b{font-weight:800}.smr .meta{font-size:11px;color:var(--ink3);font-weight:600}
-.smr .num{font-weight:800;font-variant-numeric:tabular-nums}
-.smwhy{padding:0 20px 16px;font-size:12px;color:var(--ink3);font-weight:600;line-height:1.5}
-@media(max-width:880px){.smmov{grid-template-columns:1fr}.smmov>div+div{border-left:0}}
+.smmov h3{margin:0;padding:16px 24px 6px;font-size:13px;font-weight:800;color:var(--ink3)}
+.smr{display:grid;grid-template-columns:minmax(0,1fr) 120px 70px;gap:14px;align-items:center;padding:10px 24px;border-top:1px solid var(--line);font-size:13px;transition:background-color .25s}
+.smr:hover{background:var(--hover)}
+.smr b{font-weight:800}.smr .meta{font-size:11px;color:var(--ink3);font-weight:600;margin-top:1px}
+.smr .mb{height:8px;border-radius:99px;background:var(--surface2);overflow:hidden}.smr .mb i{display:block;height:100%;border-radius:99px;transition:width 1.2s var(--ease-out)}
+.smr .num{font-weight:800;font-variant-numeric:tabular-nums;text-align:right}
+@keyframes smbump{40%{transform:scale(1.08)}}
+.bump{animation:smbump .6s var(--spring);transform-origin:left center}
+@media(max-width:1150px){.sm4{grid-template-columns:repeat(2,minmax(0,1fr))}.secs{grid-template-columns:1fr}}
+@media(max-width:880px){.sm2{grid-template-columns:1fr}.smmov{grid-template-columns:1fr}.smmov>div+div{border-left:0}.smr{grid-template-columns:minmax(0,1fr) 70px 64px}.sr{grid-template-columns:86px minmax(0,1fr) 58px;gap:8px}}
+@media(max-width:560px){.sm4 .kpi .val{font-size:32px;--valh:38px}.smk .vd{font-size:16px}.hw i{width:14px;height:14px}}
 .sh-sec{margin:22px 0 0}
 .sh-sec h4{margin:0 0 10px;font-size:13px;font-weight:800;color:var(--ink)}
 .steps{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
@@ -1149,32 +1189,116 @@
 
   // ── render ───────────────────────────────────────────────────────────
   // ── Smart Money: every F&O stock read live by the engine ─────────────
-  function smHtml() {
-    const d = S.sm, head = `<div class="tb rise" style="--i:8" id="go-sm"><h2>Smart money</h2><span class="stamp">who is buying, who is selling · every F&amp;O stock${d && d.time ? ' · ' + new Date(d.time).toLocaleTimeString('en-GB', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit' }) + ' IST' : ''}</span><a class="btn" href="${esc(server())}/smart" target="_blank" rel="noopener">Open full tape ↗</a></div>`;
-    if (!d || !d.stocks || !d.stocks.length) return head + `<div class="table glass"><div class="empty">${S.smErr ? esc(S.smErr) : 'The tape fills in about a minute after the engine starts, then updates every 30 seconds.'}</div></div>`;
-    const B = d.bias || {}, F = d.flow || {};
-    const ctl = (k, i) => {
-      const b = B[k], f = F[k.toLowerCase()] || {};
-      if (!b) return `<div class="kpi t-lav pop" style="--i:${i}"><div class="lab">${esc(NAMES[k] || k)} · control</div><div class="val">-</div><div class="sub">waiting for the tape</div></div>`;
-      const sc = b.score, t = sc >= .35 ? ['Buyers in control', 'mint'] : sc >= .15 ? ['Leaning buy', 'mint'] : sc <= -.35 ? ['Sellers in control', 'blush'] : sc <= -.15 ? ['Leaning sell', 'blush'] : ['No clear side', 'butter'];
-      const why = (b.why || []).filter(w => !/breadth/.test(w))[0] || '';
-      return `<div class="kpi t-${t[1]} pop" style="--i:${i}" title="${esc((b.why || []).join(' · '))}"><div class="lab">${esc(NAMES[k] || k)} · control</div><div class="val">${sc > 0 ? '+' : ''}${sc.toFixed(2)}</div><div class="chgl smc">${t[0]}${f.heavy_n ? ' · ' + f.heavy_up + '/' + f.heavy_n + ' heavyweights up' : ''}</div><div class="smm"><i style="left:calc(${((sc + 1) / 2 * 100).toFixed(1)}% - 2px)"></i></div></div>`;
-    };
-    const BU = [['long_buildup', 'Fresh buying', 'mint', 'price up, OI up'], ['short_covering', 'Short covering', 'sky', 'price up, OI down'], ['short_buildup', 'Fresh selling', 'blush', 'price down, OI up'], ['long_unwinding', 'Buyers exiting', 'peach', 'price down, OI down']];
-    const bu = ([k, l, tone, sub], i) => { const x = F[k] || {}; const top = (x.top || []).slice(0, 3);
-      return `<div class="kpi t-${tone} pop" style="--i:${i}" title="${esc(sub)}"><div class="lab">${l}</div><div class="val">${x.n ?? 0}</div><div class="smn">${top.length ? top.map(r => `<span><b>${esc(r.sym)}</b>${r.pct >= 0 ? '+' : ''}${num(r.pct, 1)}%</span>`).join('') : '<span>none yet</span>'}</div></div>`; };
-    const br = F.breadth || {};
-    const secs = (d.sectors || []).filter(x => x.n >= 3);
+  // Built once and moved back into place after every render, so bars and needles
+  // glide between readings (CSS transitions) and numbers count up instead of redrawing.
+  const SM_HEAVY = {
+    NIFTY: ['HDFCBANK', 'ICICIBANK', 'RELIANCE', 'INFY', 'BHARTIARTL', 'LT', 'ITC', 'TCS', 'AXISBANK', 'SBIN', 'KOTAKBANK', 'M&M', 'BAJFINANCE', 'HINDUNILVR',
+            'SUNPHARMA', 'HCLTECH', 'MARUTI', 'NTPC', 'TITAN', 'ULTRACEMCO', 'TATAMOTORS', 'ETERNAL', 'POWERGRID', 'TRENT', 'TATASTEEL', 'ASIANPAINT', 'BEL'],
+    BANKNIFTY: ['HDFCBANK', 'ICICIBANK', 'SBIN', 'KOTAKBANK', 'AXISBANK', 'INDUSINDBK', 'FEDERALBNK', 'BANKBARODA', 'IDFCFIRSTB', 'AUBANK', 'PNB', 'CANBK'] };
+  const SM_BU = [['long_buildup', 'Fresh buying', 'mint', 'price up, OI up'], ['short_covering', 'Short covering', 'sky', 'price up, OI down'],
+                 ['short_buildup', 'Fresh selling', 'blush', 'price down, OI up'], ['long_unwinding', 'Buyers exiting', 'peach', 'price down, OI down']];
+  let SMEL = null, SMSEEN = 0;
+  const SMTW = {};
+  function smTween(el, to, fmt) {
+    if (!el) return;
+    const from = SMTW[el.id]; SMTW[el.id] = to;
+    if (from == null) { el.textContent = fmt(to); return; }
+    if (from === to) return;
+    if (document.hidden) { el.textContent = fmt(to); return; }   // rAF is paused in background tabs
+    el.classList.remove('bump'); void el.offsetWidth; el.classList.add('bump');
+    const t0 = performance.now();
+    const step = now => { const k = Math.min(1, (now - t0) / 1000), e = 1 - Math.pow(1 - k, 3); el.textContent = fmt(from + (to - from) * e); if (k < 1) requestAnimationFrame(step); };
+    requestAnimationFrame(step);
+  }
+  const smVerdict = sc => sc >= .35 ? ['Buyers in control', 'mint'] : sc >= .15 ? ['Leaning buy', 'mint'] : sc <= -.35 ? ['Sellers in control', 'blush'] : sc <= -.15 ? ['Leaning sell', 'blush'] : ['No clear side', 'butter'];
+  function smBuild() {
+    const el = document.createElement('section'); el.id = 'smSec';
+    const ctl = (k, n) => `<div class="kpi smk t-lav pop" id="smc_${k}" style="--i:${n}" data-bub="1">
+        <div class="lab">${esc(NAMES[k])} · who is in control</div>
+        <div class="vrow"><div class="val" id="sms_${k}">-</div><div class="vd" id="smv_${k}">waiting for the tape</div></div>
+        <div class="smm"><i id="smn_${k}" style="left:calc(50% - 3px)"></i></div><div class="smml"><span>sellers</span><span>buyers</span></div>
+        <div class="hw" id="smh_${k}">${SM_HEAVY[k].map(x => `<i data-s="${esc(x)}" title="${esc(x)}"></i>`).join('')}</div><div class="hwl" id="smhl_${k}"></div>
+        <div class="smwhy2" id="smw_${k}"></div></div>`;
+    el.innerHTML = `
+      <div class="tb rise" style="--i:8" id="go-sm"><h2>Smart money</h2><span class="livep" id="smLive"><span class="dot off"></span>loading</span><a class="btn" id="smTape" target="_blank" rel="noopener">Open full tape ↗</a></div>
+      <div class="sm2">${ctl('NIFTY', 2)}${ctl('BANKNIFTY', 3)}</div>
+      <div class="sm4">${SM_BU.map(([k, l, t, sub], n) => `<div class="kpi t-${t} pop" style="--i:${n + 4}" title="${esc(sub)}" data-bub="1"><div class="lab">${l}</div><div class="val" id="smb_${k}">0</div><div class="shr"><b id="smr_${k}" style="width:0%"></b></div><div class="shl" id="smp_${k}"></div><div class="smn" id="sml_${k}"></div></div>`).join('')}</div>
+      <div class="table glass smt rise" style="--i:9">
+        <div class="brd"><i class="u" id="smbu" style="width:50%"></i><i class="d" id="smbd" style="width:50%"></i></div>
+        <div class="brl"><span><b class="up" id="smbun">-</b> stocks up since the open</span><span><b class="dn" id="smbdn">-</b> down</span></div>
+        <div class="secs" id="smSecs"></div>
+        <div class="smnote">The engine sends a NIFTY signal only when this tape agrees with it. Updates every 30 seconds.</div>
+        <div class="smmov"><div><h3>Strongest since the open</h3><div id="smTop"></div></div><div><h3>Weakest since the open</h3><div id="smBot"></div></div></div>
+      </div>`;
+    el.querySelectorAll('.kpi').forEach((card, n) => {
+      for (let b = 0; b < 6; b++) {
+        const h = (n * 7 + b * 13 + 5) % 17, bub = document.createElement('i');
+        bub.className = 'bub'; bub.setAttribute('aria-hidden', 'true');
+        bub.style.cssText = `--x:${(6 + (b * 16 + h * 3) % 86)}%;--s:${8 + (h % 5) * 5}px;--d:${10 + (h % 7)}s;--o:${(b * 2.9 + n * 1.7).toFixed(1)}s;--w:${(h % 2 ? 1 : -1) * (8 + h)}px`;
+        card.appendChild(bub);
+      }
+    });
+    return el;
+  }
+  function smUpdate() {
+    const d = S.sm, el = SMEL, q = id => el.querySelector('#' + id);
+    q('smTape').href = server() + '/smart';
+    if (!d || !d.stocks || !d.stocks.length) { q('smLive').innerHTML = `<span class="dot off"></span>${esc(S.smErr || 'tape fills about a minute after the engine starts')}`; return; }
+    const open = d.market === 'open';
+    q('smLive').innerHTML = `<span class="dot ${open ? '' : 'off'}"></span>${open ? 'live' : 'market closed'} · ${new Date(d.time).toLocaleTimeString('en-GB', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit' })} IST`;
+    const BY = Object.fromEntries(d.stocks.map(r => [r.sym, r]));
+    ['NIFTY', 'BANKNIFTY'].forEach(k => {
+      const b = (d.bias || {})[k], card = q('smc_' + k);
+      if (b) {
+        const v = smVerdict(b.score);
+        card.className = card.className.replace(/t-\w+/, 't-' + v[1]);
+        smTween(q('sms_' + k), b.score, x => (x > 0 ? '+' : '') + x.toFixed(2));
+        q('smv_' + k).textContent = v[0];
+        q('smn_' + k).style.left = `calc(${((b.score + 1) / 2 * 100).toFixed(1)}% - 3px)`;
+        q('smw_' + k).textContent = (b.why || []).filter(w => !/breadth|heavyweights/.test(w)).join(' · ');
+      }
+      let hu = 0, hn = 0;
+      q('smh_' + k).querySelectorAll('i').forEach(dot => { const r = BY[dot.dataset.s]; dot.className = r ? (r.from_open >= 0 ? 'u' : 'd') : 'x';
+        if (r) { hn++; if (r.from_open >= 0) hu++; dot.title = `${r.sym} ${r.from_open >= 0 ? '+' : ''}${num(r.from_open, 2)}% from open`; } });
+      q('smhl_' + k).textContent = `${hu} of ${hn} heavyweights up since the open`;
+    });
+    const F = d.flow || {}, tot = d.stocks.length || 1;
+    SM_BU.forEach(([k]) => {
+      const x = F[k] || {}, n = x.n || 0;
+      smTween(q('smb_' + k), n, v => Math.round(v));
+      q('smr_' + k).style.width = (n / tot * 100).toFixed(1) + '%';
+      q('smp_' + k).textContent = Math.round(n / tot * 100) + '% of F&O stocks';
+      q('sml_' + k).innerHTML = (x.top || []).slice(0, 3).map(r => `<span><b>${esc(r.sym)}</b>${r.pct >= 0 ? '+' : ''}${num(r.pct, 1)}%</span>`).join('') || '<span>none yet</span>';
+    });
+    const br = F.breadth || {}, up = br.up || 0, dn = br.down || 0, bt = up + dn || 1;
+    q('smbu').style.width = (up / bt * 100).toFixed(1) + '%'; q('smbd').style.width = (dn / bt * 100).toFixed(1) + '%';
+    smTween(q('smbun'), up, v => Math.round(v)); smTween(q('smbdn'), dn, v => Math.round(v));
+    const secs = (d.sectors || []).filter(x => x.n >= 3), mx = Math.max(.5, ...secs.map(x => Math.abs(x.pct)));
+    const host = q('smSecs');
+    const want = secs.map(x => x.name).join('|');
+    if (host.dataset.k !== want) { host.dataset.k = want; host.innerHTML = secs.map(x => `<div class="sr" data-n="${esc(x.name)}"><span class="nm">${esc(x.name)}</span><span class="tr2"><b style="left:50%;width:0"></b></span><span class="pc"></span></div>`).join(''); void host.offsetWidth; }
+    secs.forEach(x => {
+      const row = host.querySelector(`[data-n="${CSS.escape(x.name)}"]`); if (!row) return;
+      const w = Math.abs(x.pct) / mx * 50, bar = row.querySelector('b');
+      bar.style.left = x.pct >= 0 ? '50%' : (50 - w).toFixed(2) + '%'; bar.style.width = w.toFixed(2) + '%';
+      bar.style.background = x.pct >= 0 ? 'var(--good)' : 'var(--bad)';
+      const pc = row.querySelector('.pc'); pc.textContent = (x.pct >= 0 ? '+' : '') + num(x.pct, 2) + '%'; pc.className = 'pc ' + (x.pct >= 0 ? 'up' : 'dn');
+      row.title = `${x.up} up, ${x.down} down of ${x.n}`;
+    });
+    const byFo = d.stocks.slice().sort((a, b) => b.from_open - a.from_open), mxm = Math.max(.5, ...byFo.map(r => Math.abs(r.from_open)));
     const tag = st => st ? `<span class="tag" style="background:var(--${st.dir === 'bull' ? 'mint' : 'blush'});color:var(--${st.dir === 'bull' ? 'mint' : 'blush'}-i)">${esc(st.type)} ${st.dir === 'bull' ? '↑' : '↓'}</span>` : '';
-    const row = r => `<div class="smr"><div><b>${esc(r.sym)}</b> ${tag(r.struct)}<div class="meta">${esc(r.sector)}${r.buildup ? ' · ' + esc(r.buildup.replace('_', ' ').toLowerCase()) : ''}</div></div><div class="num ${r.from_open >= 0 ? 'up' : 'dn'}">${r.from_open >= 0 ? '+' : ''}${num(r.from_open, 2)}%</div><div class="meta">from open</div></div>`;
-    const byFo = d.stocks.slice().sort((a, b) => b.from_open - a.from_open);
-    return head + `
-    <div class="kpis six">${ctl('NIFTY', 2)}${ctl('BANKNIFTY', 3)}${BU.map((x, i) => bu(x, i + 4)).join('')}</div>
-    <div class="table glass rise" style="--i:9;margin-top:16px">
-      <div class="smsec">${secs.map(x => `<span class="chip ${x.pct >= 0 ? 'up' : 'dn'}" title="${x.up} up, ${x.down} down">${esc(x.name)} ${x.pct >= 0 ? '+' : ''}${num(x.pct, 2)}%</span>`).join('')}</div>
-      <div class="smwhy">${br.up ?? 0} stocks up and ${br.down ?? 0} down since the open. The engine only sends a NIFTY signal when this tape agrees with it.</div>
-      <div class="smmov"><div><h3>Strongest since the open</h3>${byFo.slice(0, 5).map(row).join('')}</div><div><h3>Weakest since the open</h3>${byFo.slice(-5).reverse().map(row).join('')}</div></div>
-    </div>`;
+    const row = r => `<div class="smr"><div><b>${esc(r.sym)}</b> ${tag(r.struct)}<div class="meta">${esc(r.sector)}${r.buildup ? ' · ' + esc(r.buildup.replace('_', ' ').toLowerCase()) : ''}</div></div>
+      <div class="mb"><i style="width:${(Math.abs(r.from_open) / mxm * 100).toFixed(1)}%;background:var(--${r.from_open >= 0 ? 'good' : 'bad'})"></i></div>
+      <div class="num ${r.from_open >= 0 ? 'up' : 'dn'}">${r.from_open >= 0 ? '+' : ''}${num(r.from_open, 2)}%</div></div>`;
+    q('smTop').innerHTML = byFo.slice(0, 5).map(row).join('');
+    q('smBot').innerHTML = byFo.slice(-5).reverse().map(row).join('');
+  }
+  function smMount() {
+    const slot = $('smSlot'); if (!slot) return;
+    const fresh = !SMEL; if (fresh) SMEL = smBuild();
+    slot.replaceWith(SMEL);
+    SMEL.getBoundingClientRect();              // settle styles so the next change transitions from here
+    if (fresh || S.smV !== SMSEEN) { SMSEEN = S.smV; smUpdate(); }
   }
 
   function render() {
@@ -1299,7 +1423,7 @@
       <div class="legend"><span><i style="background:var(--${p.pct >= 0 ? 'good' : 'bad'})"></i>price, 5-min + live ticks</span><span><i style="background:var(--accent)"></i>VWAP proxy (today)</span><span><i style="background:var(--bad);width:9px;height:9px;border-radius:50%"></i>engine signals</span></div>
     </div>
 
-    ${smHtml()}
+    <div id="smSlot"></div>
 
     <div class="tb rise" style="--i:8" id="go-sig"><h2>Signals <span class="tag">${cards.length}</span></h2><span class="stamp">entry, SL, T1, T2 as the engine set them · sized for your ${inr(capital)}</span></div>
     ${sigHtml ? `<div class="sigs">${sigHtml}</div>` : '<div class="table glass"><div class="empty">No signals yet today. The engine fires only between 09:45 and 14:30 IST.</div></div>'}
@@ -1385,7 +1509,8 @@
     <p class="foot">Read-only view of the engine at ${esc(server().replace(/^https?:\/\//, ''))}. Sizes use your capital, 1% risk at the premium stop, a 50% capital cap per trade, ₹115/lot brokerage and 50 bps slippage per side. Advisory only, never an order. Start/stop the engine from the <a href="console.html" style="color:var(--accent);font-weight:700">console</a>.</p>`;
 
     // Bubbles: fixed per card (seeded by position) so a re-render changes nothing.
-    document.querySelectorAll('.kpi').forEach((card, n) => {
+    smMount();
+    document.querySelectorAll('.kpi:not([data-bub])').forEach((card, n) => {
       for (let b = 0; b < 6; b++) {
         const h = (n * 7 + b * 13) % 17, el = document.createElement('i');
         el.className = 'bub'; el.setAttribute('aria-hidden', 'true');
@@ -1446,7 +1571,8 @@
   });
   poll('hist', () => '/api/history?limit=200&date=' + todayISO(), 20000);
   poll('perf', '/api/performance', 60000);
-  const loadSm = async () => { try { S.sm = await api('/api/sm/live?lite=1', 30000); S.smErr = null; } catch (e) { S.smErr = 'Smart money tape not reachable yet. Retrying.'; } render(); };
+  S.smV = 0;
+  const loadSm = async () => { try { S.sm = await api('/api/sm/live?lite=1', 30000); S.smErr = null; } catch (e) { S.smErr = 'tape not reachable yet, retrying'; } S.smV++; render(); };
   loadSm(); setInterval(loadSm, 30000);
   poll('swing', '/api/swing/positions', 120000);
   poll('screen', '/api/swing/screen', 120000, null, 40000);
