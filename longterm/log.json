@@ -307,7 +307,16 @@
 "stock": "OFSS",
 "joined": "2026-11-20",
 "join_px": 9766.0,
-"join_nifty": 25800.6
+"join_nifty": 25800.6,
+"left": "2026-11-23",
+"left_px": 9675.0,
+"left_nifty": 25349.65
+},
+{
+"stock": "GVT&D",
+"joined": "2026-11-23",
+"join_px": 4195.0,
+"join_nifty": 25349.65
 }
 ]
 }
