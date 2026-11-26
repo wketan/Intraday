@@ -168,7 +168,8 @@ def follow(d: pd.DataFrame, i: int, lv: dict, lot: int) -> dict:
             "pnl_per_lot": round((last - lv["entry"]) * lot), "max_seen": round(best, 2)}
 
 
-def replay(df: pd.DataFrame, lot: int, day: str | None = None, expiry_day: bool = False) -> dict:
+def replay(df: pd.DataFrame, lot: int, day: str | None = None, expiry_day: bool = False,
+           detail: bool = False) -> dict:
     """Run the setup over every closed bar (optionally one day) and follow each hit."""
     d = indicators(_norm(df))
     hits, near = [], []
@@ -186,7 +187,15 @@ def replay(df: pd.DataFrame, lot: int, day: str | None = None, expiry_day: bool 
             hits.append({**chk["ind"], **lv, "outcome": follow(d, i, lv, lot)})
         elif "no_cross" not in chk["fails"] and "warmup" not in chk["fails"]:
             near.append({"bar": chk["ind"].get("bar"), "missing": chk["fails"]})
-    return {"hits": hits, "near_misses": near[-12:]}
+    out = {"hits": hits, "near_misses": near[-12:]}
+    if detail:
+        dd = d if not day else d[d["timestamp"].dt.strftime("%Y-%m-%d") == day]
+        out["bars"] = [{"t": r.timestamp.strftime("%H:%M"), "o": round(r.open, 2), "h": round(r.high, 2),
+                        "l": round(r.low, 2), "c": round(r.close, 2), "v": int(r.volume),
+                        "e9": round(r.ema9, 2), "e21": round(r.ema21, 2), "hist": round(r.hist, 2),
+                        "vwap": round(r.vwap, 2), "vr": round(float(r.volume / r.vavg20), 2) if r.vavg20 == r.vavg20 and r.vavg20 else None}
+                       for r in dd.itertuples()]
+    return out
 
 
 def _norm(df: pd.DataFrame) -> pd.DataFrame:

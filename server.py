@@ -7939,7 +7939,8 @@ def pw_replay():
         return jsonify({"contract": row["symbol"], "error": "no candles"}), 200
     lot = int(row.get("lotsize") or info["lot_size"])
     out = _pw_replay(df, lot, day=flask_request.args.get("day") or None,
-                     expiry_day=flask_request.args.get("expiry_day") == "1")
+                     expiry_day=flask_request.args.get("expiry_day") == "1",
+                     detail=flask_request.args.get("detail") == "1")
     return jsonify({"contract": row["symbol"], "expiry": row["expiry"], "lot": lot,
                     "bars": len(df), **out})
 
