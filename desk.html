@@ -485,7 +485,7 @@
 .brd i{display:block;height:100%;border-radius:99px;transition:width 1.2s var(--ease-out)}
 .brd i.u{background:var(--good)}.brd i.d{background:var(--bad)}
 .brl{display:flex;justify-content:space-between;margin-top:8px;font-size:12.5px;font-weight:700;color:var(--ink2)}
-.brl b{font-size:15px;font-weight:800}
+.brl b,.smmore summary b{font-size:15px;font-weight:800}
 .secs{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:4px 34px;margin-top:20px}
 .sr{display:grid;grid-template-columns:104px minmax(0,1fr) 62px;gap:12px;align-items:center;font-size:12.5px;font-weight:700;padding:4px 0}
 .sr .nm{color:var(--ink2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -493,7 +493,7 @@
 .sr .tr2::after{content:"";position:absolute;left:50%;top:-3px;bottom:-3px;width:1.5px;background:var(--line2)}
 .sr .tr2 b{position:absolute;top:0;bottom:0;border-radius:99px;transition:width 1.2s var(--ease-out),left 1.2s var(--ease-out),background-color .4s}
 .sr .pc{text-align:right;font-variant-numeric:tabular-nums}
-.sr .pc.up,.brl b.up{color:var(--mint-i)}.sr .pc.dn,.brl b.dn{color:var(--blush-i)}
+.sr .pc.up,.brl b.up,.smmore b.up{color:var(--mint-i)}.sr .pc.dn,.brl b.dn,.smmore b.dn{color:var(--blush-i)}
 .smnote{margin:18px 0 6px;font-size:12.5px;color:var(--ink3);font-weight:600;line-height:1.5}
 .smmov{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));border-top:1px solid var(--line);margin:8px -24px 0}
 .smmov>div+div{border-left:1px solid var(--line)}
@@ -681,6 +681,50 @@
 .setup .f{display:flex;flex-direction:column;gap:6px;margin-bottom:14px}
 .setup label{font-size:12px;font-weight:800;color:var(--ink3);text-transform:uppercase;letter-spacing:.06em}
 .err{background:var(--blush);color:var(--blush-i);border-radius:16px;padding:10px 14px;font-weight:600;font-size:13px;margin-top:16px}
+/* Compact tiles (26 Nov): every section uses the top-card size, details open in the side sheet. */
+.kpis.six+.kpis.six{margin-top:14px}
+.kpis.six .kpi.tl{cursor:default;min-width:0}
+.kpis.six .kpi.tl[data-sw],.kpis.six .kpi.tl[data-tg]{cursor:pointer;outline:2px solid transparent;outline-offset:3px;transition:transform .5s var(--spring),box-shadow .4s var(--ease),outline-color .25s}
+.kpis.six .kpi.tl[data-sw]:hover,.kpis.six .kpi.tl[data-tg]:hover{transform:translateY(-2px)}
+.kpis.six .kpi.tl[data-sw]:focus-visible,.kpis.six .kpi.tl[data-tg]:focus-visible{outline-color:var(--accent)}
+.kpi.tl .nm{position:relative;z-index:1;font-size:14px;font-weight:800;letter-spacing:-.02em;color:var(--ink);margin-top:3px;display:flex;align-items:center;gap:6px;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.kpi.tl .nm .ot{font-size:10.5px;font-weight:800;border-radius:99px;padding:1px 7px;background:var(--surface);color:var(--tc)}
+.kpis.six .kpi.tl .val{font-size:23px;--valh:30px;margin-top:6px}
+.kpi.tl .sub{position:relative;z-index:1;line-height:1.4;white-space:normal}
+.kpi.tl .lab{display:flex;justify-content:space-between;gap:6px;white-space:nowrap}
+.kpi.tl .lab em{font-style:normal;opacity:.85}
+.kpi.tl .mtr{position:relative;z-index:1;height:6px;border-radius:99px;background:var(--orb);margin-top:auto;overflow:hidden}
+.kpi.tl .mtr b{position:absolute;top:0;bottom:0;left:0;border-radius:99px;background:var(--tc);opacity:.8;transition:width 1.2s var(--ease-out)}
+.kpi.tl .mtr i{position:absolute;top:-2px;bottom:-2px;width:2px;background:var(--ink);opacity:.5}
+.more{display:flex;justify-content:center;margin:12px 0 0}
+.lt-ctl{display:flex;flex-wrap:wrap;gap:10px 18px;align-items:center;margin-bottom:12px}
+.lt-ctl .gl{font-size:12px;font-weight:800;color:var(--ink3);margin-right:2px}
+.lt-ctl .pills{align-items:center}
+.lt-note{font-size:12.5px;color:var(--ink2);font-weight:600;line-height:1.5;margin:12px 2px 0}
+.lt-note b{color:var(--ink);font-weight:800}
+/* Smart money as six tiles */
+.kpi.smk .vrow{margin-top:6px;gap:8px}
+.kpis.six .kpi.smk .val{font-size:23px;--valh:30px}
+.kpi.smk .vd{font-size:12.5px}
+.kpi.smk .smm{margin:10px 0 4px;height:7px}.kpi.smk .smm i{top:-4px;height:15px;width:5px}
+.kpi.smk .smml{display:none}
+.kpi.smk .hw,.kpi.smk .smwhy2{display:none}
+.kpi.smk .hwl{margin-top:auto;font-size:11.5px;font-weight:700}
+.kpis.six .kpi.smb .val{font-size:23px;--valh:30px}
+.kpi.smb .shr{margin:8px 0 3px;height:6px}
+.kpi.smb .shl{margin-bottom:4px;font-size:11px}
+.kpi.smb .smn{min-height:0;font-size:11.5px;margin-top:auto}
+.kpi.smb .smn span:nth-child(n+2){display:none}
+.smmore{margin-top:14px}
+.smmore>summary{list-style:none;cursor:pointer;display:flex;align-items:center;gap:14px;border-radius:22px;padding:12px 18px;background:var(--surface);border:1px solid var(--line);box-shadow:var(--shadow);font-size:13px;font-weight:700;color:var(--ink2)}
+.smmore>summary::-webkit-details-marker{display:none}
+.smmore>summary .brd{flex:1;height:10px}
+.smmore>summary .sx{flex:none;font-weight:800;color:var(--accent)}
+.smmore[open]>summary .sx::after{content:" ▴"}.smmore:not([open])>summary .sx::after{content:" ▾"}
+.smmore>summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.smmore .smt{margin-top:10px}
+.sheet .scard{box-shadow:none;border:0;background:transparent;padding:0}
+@media(max-width:880px){.smmore>summary{flex-wrap:wrap}.smmore>summary .brd{flex-basis:100%;order:3}}
 /* Entrance animations play once; live re-renders must not replay them. */
 .wrap.ready .rise,.wrap.ready .pop,.wrap.ready .bars i,.wrap.ready .big div{animation:none}
 .foot{margin:34px 4px 0;color:var(--ink3);font-size:12.5px}
@@ -879,6 +923,49 @@
       ${sz && !sz.lots && lotCost <= capital ? `<div class="sc-note">You have the money. The 0 is only the safety rule: it allows a ${inr(capital * RISK_PCT)} loss per trade (1%), and this trade can lose ${inr((entry - sl) * (lotSize || 0))} (${((entry - sl) * (lotSize || 0) / capital * 100).toFixed(1)}% of your capital). Your call.</div>` : ''}
       ${note ? `<div class="sc-note">${note}</div>` : ''}
     </div>`;
+  }
+
+  // ── compact tiles (same size as the top cards) ──────────────────────
+  function sigTile(c, i) {
+    const { live, inst, strike, typ, entry, sl, t1, t2, cur, pnl, status, idea, tIn } = c;
+    const tone = idea ? 'lav' : pnl > 0 ? 'mint' : pnl < 0 ? 'blush' : 'butter';
+    const a = Math.min(sl || entry, entry, cur || entry), b = Math.max(t2 || t1 || entry, cur || entry), span = (b - a) || 1;
+    const P = x => Math.max(0, Math.min(100, (x - a) / span * 100));
+    const top = (live ? 'Live' : idea ? 'Idea' : 'Closed') + (tIn ? ' · ' + tIn : '');
+    return `<div class="kpi tl t-${tone} pop" style="--i:${i + 8}" data-sw="sig:${i}" role="button" tabindex="0" aria-label="Open ${esc(inst)} ${esc(Math.round(strike || 0))} ${esc(typ)} details">
+      <div class="lab"><span>${esc(top)}</span><em>${esc(status)}</em></div>
+      <div class="nm">${esc(inst)} ${esc(Math.round(strike || 0))}<span class="ot">${esc(typ)}</span></div>
+      <div class="val">${idea ? '₹' + num(entry, 1) : inr(pnl, true)}</div>
+      <div class="sub">${idea ? `SL ₹${num(sl, 0)} · T1 ₹${num(t1, 0)}` : `₹${num(entry, 0)} → ₹${num(cur || entry, 0)} · T1 ₹${num(t1, 0)}`}</div>
+      <div class="mtr"><b style="width:${P(cur || entry).toFixed(1)}%"></b><i style="left:${P(entry).toFixed(1)}%"></i></div></div>`;
+  }
+  const PW_NEED = { no_cross: 'blue over red', macd: 'MACD green', volume: 'volume', below_vwap: 'above VWAP', weak_bar: 'strong candle', extended: 'not stretched' };
+  function pwSection() {
+    const pw = S.pw, al = ((pw && pw.alerts) || []).slice().reverse();
+    const head = `<div class="tb rise" style="--i:8" id="go-pw"><h2>Crossover watch <span class="tag">${al.length}</span></h2><span class="stamp">5-min option chart: blue EMA crosses red, MACD turns green, volume jumps · NIFTY and BANK NIFTY, ATM ±2</span></div>`;
+    if (!pw) return head + `<div class="kpis six"><div class="kpi tl t-butter pop" style="--i:8"><div class="lab">Crossover watch</div><div class="nm">Waiting for the engine</div><div class="sub">${esc(S.pwErr || 'loading')}</div></div></div>`;
+    const td = pw.today || {}, scans = Object.values(pw.last_scan || {});
+    const lastBar = scans.map(x => x.bar).sort().slice(-1)[0];
+    const tiles = [`<div class="kpi tl t-lav pop" style="--i:8"><div class="lab"><span>Today</span><em>${lastBar ? 'bar ' + esc(lastBar) : 'idle'}</em></div><div class="nm">${al.length ? al.length + ' alert' + (al.length === 1 ? '' : 's') : 'No crossover yet'}</div>
+      <div class="val">${td.closed ? inr(td.pnl_per_lot, true) : '-'}</div><div class="sub">${td.closed ? `${td.wins} of ${td.closed} hit T1 · per lot` : 'Checks every 5 min, 09:30 to 14:45. Alerts go to Slack #trading.'}</div></div>`];
+    al.forEach((a, i) => {
+      const o = a.outcome || {}, r = o.result || 'OPEN';
+      const tone = r === 'T1' || r === 'T2' ? 'mint' : r === 'SL' ? 'blush' : r === 'TIME' ? 'butter' : 'sky';
+      const [, strike, typ] = a.contract.split(' ');
+      tiles.push(`<div class="kpi tl t-${tone} pop" style="--i:${i + 9}" title="${esc((a.extras || []).join(' · '))}"><div class="lab"><span>${esc(a.time)} · grade ${esc(a.grade)}</span><em>${r === 'OPEN' ? 'open' : esc(r)}</em></div>
+        <div class="nm">${esc(a.index)} ${esc(strike)}<span class="ot">${esc(typ)}</span></div>
+        <div class="val">${r === 'OPEN' ? '₹' + num(a.entry, 1) : inr(o.pnl_per_lot, true)}</div>
+        <div class="sub">${r === 'OPEN' ? `SL ₹${num(a.sl, 0)} · T1 ₹${num(a.t1, 0)} · exit by ${esc(a.exit_by)}` : `${esc(r)} at ${esc(o.at || '')} · best ₹${num(o.max_seen, 0)} · per lot`}</div></div>`);
+    });
+    const near = scans.flatMap(x => x.contracts || []).filter(c => c.missing && c.missing.length && c.missing.length <= 2 && !c.missing.includes('time') && !c.missing.includes('warmup'))
+      .sort((x, y) => x.missing.length - y.missing.length || (y.vol_ratio || 0) - (x.vol_ratio || 0));
+    near.slice(0, Math.max(0, 6 - tiles.length)).forEach((c, i) => {
+      const [ix, strike, typ] = c.contract.split(' ');
+      tiles.push(`<div class="kpi tl t-peach pop" style="--i:${i + 12}"><div class="lab"><span>Close to crossing</span><em>${c.missing.length} left</em></div>
+        <div class="nm">${esc(ix)} ${esc(strike)}<span class="ot">${esc(typ)}</span></div><div class="val">₹${num(c.ltp, 1)}</div>
+        <div class="sub">Needs ${c.missing.map(m => esc(PW_NEED[m] || m)).join(' + ')}</div></div>`);
+    });
+    return head + `<div class="kpis six">${tiles.join('')}</div>`;
   }
 
   // ── long-term picks ──────────────────────────────────────────────────
@@ -1109,6 +1196,15 @@
 
   function renderSheet() {
     const el = $('swSheet'), scrim = $('scrim');
+    if (String(S.openSw).startsWith('sig:')) {
+      const c = (S.sigCards || [])[+String(S.openSw).slice(4)];
+      if (c) {
+        const sc = el.querySelector('.sh-body') ? el.querySelector('.sh-body').scrollTop : 0;
+        el.innerHTML = `<div class="sh-head"><h3>${esc(c.inst)} ${esc(Math.round(c.strike || 0))} ${esc(c.typ)}</h3><button class="btn sm" data-close>Close <kbd>Esc</kbd></button></div><div class="sh-body">${signalCard(c, 0)}</div>`;
+        const b = el.querySelector('.sh-body'); if (b && sc) { b.scrollTop = sc; } b.querySelectorAll('.pop').forEach(n => n.style.animation = 'none');
+        el.classList.add('on'); scrim.classList.add('on'); el.setAttribute('aria-hidden', 'false'); return;
+      }
+    }
     if (String(S.openSw).startsWith('lt:')) {
       const lt = ((S.lt || {}).stocks || []).find(s => s.stock === String(S.openSw).slice(3));
       if (lt) return renderLtSheet(lt);
@@ -1213,23 +1309,21 @@
   const smVerdict = sc => sc >= .35 ? ['Buyers in control', 'mint'] : sc >= .15 ? ['Leaning buy', 'mint'] : sc <= -.35 ? ['Sellers in control', 'blush'] : sc <= -.15 ? ['Leaning sell', 'blush'] : ['No clear side', 'butter'];
   function smBuild() {
     const el = document.createElement('section'); el.id = 'smSec';
-    const ctl = (k, n) => `<div class="kpi smk t-lav pop" id="smc_${k}" style="--i:${n}" data-bub="1">
-        <div class="lab">${esc(NAMES[k])} · who is in control</div>
+    const ctl = (k, n) => `<div class="kpi tl smk t-lav pop" id="smc_${k}" style="--i:${n}" data-bub="1" title="Who is in control of ${esc(NAMES[k])}: -1 strong sellers, +1 strong buyers">
+        <div class="lab">${esc(NAMES[k])} · control</div>
         <div class="vrow"><div class="val" id="sms_${k}">-</div><div class="vd" id="smv_${k}">waiting for the tape</div></div>
         <div class="smm"><i id="smn_${k}" style="left:calc(50% - 3px)"></i></div><div class="smml"><span>sellers</span><span>buyers</span></div>
         <div class="hw" id="smh_${k}">${SM_HEAVY[k].map(x => `<i data-s="${esc(x)}" title="${esc(x)}"></i>`).join('')}</div><div class="hwl" id="smhl_${k}"></div>
         <div class="smwhy2" id="smw_${k}"></div></div>`;
     el.innerHTML = `
       <div class="tb rise" style="--i:8" id="go-sm"><h2>Smart money</h2><span class="livep" id="smLive"><span class="dot off"></span>loading</span><a class="btn" id="smTape" target="_blank" rel="noopener">Open full tape ↗</a></div>
-      <div class="sm2">${ctl('NIFTY', 2)}${ctl('BANKNIFTY', 3)}</div>
-      <div class="sm4">${SM_BU.map(([k, l, t, sub], n) => `<div class="kpi t-${t} pop" style="--i:${n + 4}" title="${esc(sub)}" data-bub="1"><div class="lab">${l}</div><div class="val" id="smb_${k}">0</div><div class="shr"><b id="smr_${k}" style="width:0%"></b></div><div class="shl" id="smp_${k}"></div><div class="smn" id="sml_${k}"></div></div>`).join('')}</div>
-      <div class="table glass smt rise" style="--i:9">
-        <div class="brd"><i class="u" id="smbu" style="width:50%"></i><i class="d" id="smbd" style="width:50%"></i></div>
-        <div class="brl"><span><b class="up" id="smbun">-</b> stocks up since the open</span><span><b class="dn" id="smbdn">-</b> down</span></div>
+      <div class="kpis six">${ctl('NIFTY', 2)}${ctl('BANKNIFTY', 3)}${SM_BU.map(([k, l, t, sub], n) => `<div class="kpi tl smb t-${t} pop" style="--i:${n + 4}" title="${esc(sub)}" data-bub="1"><div class="lab">${l}</div><div class="val" id="smb_${k}">0</div><div class="shr"><b id="smr_${k}" style="width:0%"></b></div><div class="shl" id="smp_${k}"></div><div class="smn" id="sml_${k}"></div></div>`).join('')}</div>
+      <details class="smmore"><summary><span><b class="up" id="smbun">-</b> up · <b class="dn" id="smbdn">-</b> down</span><div class="brd"><i class="u" id="smbu" style="width:50%"></i><i class="d" id="smbd" style="width:50%"></i></div><span class="sx">Sectors and movers</span></summary>
+      <div class="table glass smt">
         <div class="secs" id="smSecs"></div>
         <div class="smnote">The engine sends a NIFTY signal only when this tape agrees with it. Updates every 30 seconds.</div>
         <div class="smmov"><div><h3>Strongest since the open</h3><div id="smTop"></div></div><div><h3>Weakest since the open</h3><div id="smBot"></div></div></div>
-      </div>`;
+      </div></details>`;
     el.querySelectorAll('.kpi').forEach((card, n) => {
       for (let b = 0; b < 6; b++) {
         const h = (n * 7 + b * 13 + 5) % 17, bub = document.createElement('i');
@@ -1260,7 +1354,7 @@
       let hu = 0, hn = 0;
       q('smh_' + k).querySelectorAll('i').forEach(dot => { const r = BY[dot.dataset.s]; dot.className = r ? (r.from_open >= 0 ? 'u' : 'd') : 'x';
         if (r) { hn++; if (r.from_open >= 0) hu++; dot.title = `${r.sym} ${r.from_open >= 0 ? '+' : ''}${num(r.from_open, 2)}% from open`; } });
-      q('smhl_' + k).textContent = `${hu} of ${hn} heavyweights up since the open`;
+      q('smhl_' + k).textContent = `${hu} of ${hn} heavyweights up`;
     });
     const F = d.flow || {}, tot = d.stocks.length || 1;
     SM_BU.forEach(([k]) => {
@@ -1362,7 +1456,8 @@
         entry: +o.entry, sl: +o.sl, t1: +o.target1, t2: +o.target2, cur: 0, curLabel: 'Not taken', pnl: ((+o.target1 || 0) - (+o.entry || 0)) * (o.lot_size || 0), idea: true,
         status: ai.verdict ? 'AI ' + ai.verdict.toLowerCase() : 'idea', statusPal: 'lav', note: esc(ai.reasoning || '') });
     }
-    const sigHtml = cards.map((c, i) => signalCard(c, i)).join('');
+    S.sigCards = cards;
+    const sigHtml = cards.map((c, i) => sigTile(c, i)).join('');
 
     // Swing.
     const sw = (S.swing && S.swing.positions) || [];
@@ -1375,19 +1470,18 @@
     const swOpen = sw.filter(x => x.status === 'OPEN' || x.status === 'PENDING');
     const swClosed = sw.filter(x => x.status === 'CLOSED').sort((a, b) => (b.exit_date || '').localeCompare(a.exit_date || '')).slice(0, 8);
     const swNet = sw.filter(x => x.status === 'CLOSED').reduce((a, x) => a + (+x.pnl_rupees || 0), 0);
-    const swList = swOpen.concat(S.swAll ? sw.filter(x => x.status === 'CLOSED').sort((a, b) => (b.exit_date || '').localeCompare(a.exit_date || '')) : swClosed);
+    const swList = swOpen.concat(S.swAll ? sw.filter(x => x.status === 'CLOSED').sort((a, b) => (b.exit_date || '').localeCompare(a.exit_date || '')) : swClosed.slice(0, Math.max(0, 6 - swOpen.length)));
     const swHtml = swList.map((x, i) => {
       const isOpen = x.status !== 'CLOSED';
       const r = ret(x);
       const pnl = r != null ? slot * r : 0;
-      const resPal = isOpen ? 'sky' : WIN(x.result) ? 'mint' : x.result === 'LOSS' ? 'blush' : 'butter';
-      return `<div class="tr s4 open-able rise" style="--i:${i + 20}" data-sw="${esc(x.id)}" role="button" tabindex="0" aria-label="Open ${esc(x.instrument)} holding guide">
-        <div class="who">${av((x.instrument || '?')[0], palOf(x.instrument || ''))}<div style="min-width:0">
-          <div class="short">/${esc(x.instrument)}<span class="dot ${isOpen ? '' : 'off'}"></span><span class="tag" style="background:var(--${resPal});color:var(--${PAL[resPal]})">${esc(isOpen ? x.status.toLowerCase() : (x.exit_reason || x.result || '').toLowerCase())}</span>${(parseJ(x.indicators) || {}).pilot ? '<span class="tag" style="background:var(--butter);color:var(--butter-i)">pilot</span>' : ''}</div>
-          <div class="meta"><span class="own">${esc(x.entry_date)}${x.exit_date ? ' → ' + esc(x.exit_date) : ''}</span><span class="chip">${esc(x.option_strike ? Math.round(x.option_strike) + ' ' + (x.option_type || '') : '')}</span>${x.hold_days != null ? `<span class="chip">${esc(x.hold_days)}d</span>` : ''}</div></div></div>
-        <div class="dest wrap2">Started ${fmtDate(x.entry_date)} at ₹${num(x.option_entry)}${isOpen ? ` · open, day ${daysBetween(x.entry_date, today)}` : ` · closed ${fmtDate(x.exit_date)} at ₹${num(x.option_exit)}`}<span class="why">1 lot = ${esc(x.lot_size)} units = ${inr((+x.option_entry || 0) * (+x.lot_size || 0))} · ${isOpen ? 'open now' : (+x.pnl_rupees >= 0 ? 'made ' : 'lost ') + inr(Math.abs(+x.pnl_rupees || 0))} · tap for details</span></div>
-        <div class="num ${r > 0 ? 'up' : r < 0 ? 'dn' : ''}">${r != null ? (r >= 0 ? '+' : '') + (r * 100).toFixed(1) + '%' : '-'}</div>
-        <div class="num ${pnl > 0 ? 'up' : pnl < 0 ? 'dn' : ''}">${isOpen || r == null ? '-' : inr(pnl, true)}</div></div>`;
+      const tone = isOpen ? 'sky' : WIN(x.result) ? 'mint' : x.result === 'LOSS' ? 'blush' : 'butter';
+      const dm = iso => iso ? new Date(iso + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) : '';
+      return `<div class="kpi tl t-${tone} pop" style="--i:${i + 20}" data-sw="${esc(x.id)}" role="button" tabindex="0" aria-label="Open ${esc(x.instrument)} holding guide">
+        <div class="lab"><span>${esc(dm(x.entry_date))}${x.exit_date ? ' → ' + esc(dm(x.exit_date)) : ''}</span><em>${esc(isOpen ? x.status.toLowerCase() : (x.exit_reason || x.result || '').toLowerCase().replace(/_/g, ' '))}</em></div>
+        <div class="nm">${esc(x.instrument)}${x.option_strike ? `<span class="ot">${esc(Math.round(x.option_strike) + ' ' + (x.option_type || ''))}</span>` : ''}</div>
+        <div class="val">${r != null ? (r >= 0 ? '+' : '') + (r * 100).toFixed(1) + '%' : 'open'}</div>
+        <div class="sub">${isOpen ? `bought ₹${num(x.option_entry)} · day ${daysBetween(x.entry_date, today)}` : `your ${inr(slot)}: ${inr(pnl, true)}`}</div></div>`;
     }).join('');
     const reg = (S.swingRes && S.swingRes.regime) || null;
 
@@ -1414,7 +1508,7 @@
       <div class="kpi t-blush pop" style="--i:7"><div class="lab">Net per trade</div><div class="val">${inr(perTrade, true)}</div><div class="sub">${wins} W · ${losses} L · ${Math.max(0, total - wins - losses)} scratch</div></div>
     </div>
 
-    <div class="jump" aria-label="Jump to section">${[['live', 'Live price'], ['sm', 'Smart money'], ['sig', 'Signals'], ['swing', 'Swing'], ['long', 'Long term']].map(([k, l]) => `<button data-go="go-${k}">${l}</button>`).join('')}</div>
+    <div class="jump" aria-label="Jump to section">${[['live', 'Live price'], ['sm', 'Smart money'], ['pw', 'Crossover'], ['sig', 'Signals'], ['swing', 'Swing'], ['long', 'Long term']].map(([k, l]) => `<button data-go="go-${k}">${l}</button>`).join('')}</div>
     <div class="tb rise" style="--i:6" id="go-live"><h2>Live price</h2>
       <div class="seg" role="tablist">${['NIFTY', 'BANKNIFTY', 'FINNIFTY'].map(k => `<button role="tab" aria-selected="${k === sym}" class="${k === sym ? 'on' : ''}" data-sym="${k}">${NAMES[k]}</button>`).join('')}</div></div>
     <div class="table glass chartcard rise" style="--i:7">
@@ -1425,8 +1519,10 @@
 
     <div id="smSlot"></div>
 
-    <div class="tb rise" style="--i:8" id="go-sig"><h2>Signals <span class="tag">${cards.length}</span></h2><span class="stamp">entry, SL, T1, T2 as the engine set them · sized for your ${inr(capital)}</span></div>
-    ${sigHtml ? `<div class="sigs">${sigHtml}</div>` : '<div class="table glass"><div class="empty">No signals yet today. The engine fires only between 09:45 and 14:30 IST.</div></div>'}
+    ${pwSection()}
+
+    <div class="tb rise" style="--i:8" id="go-sig"><h2>Signals <span class="tag">${cards.length}</span></h2><span class="stamp">tap a card for entry, SL, targets and lot sizing for your ${inr(capital)}</span></div>
+    ${sigHtml ? `<div class="kpis six">${sigHtml}</div>` : '<div class="table glass"><div class="empty">No signals yet today. The engine fires only between 09:45 and 14:30 IST.</div></div>'}
 
     ${(() => {
       const sc = S.screen || {};
@@ -1435,16 +1531,16 @@
       const steps = [['scanned', sc.scanned], ['in an uptrend', sc.uptrend], ['beat NIFTY', sc.beats_nifty], ['near their high', sc.near_high], ['dipped enough', sc.washout]];
       const plans = (sc.signals || []).map(x => { const q = Math.floor(slot / x.limit_entry); return `<div class="plan ${x.pilot ? 'pilot' : ''}"><b>${esc(x.stock)}${x.pilot ? ' · PILOT, paper record only, not a recommendation' : ' · signal'}</b><br>Buy only if it falls to <b>₹${num(x.limit_entry)}</b> by the end of the next session. ${q ? `${inr(slot)} buys <b>${q} shares</b> (${inr(q * x.limit_entry)}).` : `One share costs more than your ${inr(slot)} slot.`} Sell at the first close above the 5-day average, or at ₹${num(x.t1)} / ₹${num(x.t2)}, within 10 sessions.</div>`; }).join('');
       const ltHas = n => ((S.lt || {}).stocks || []).some(y => y.stock === n);
-      const rows = (sc.watchlist || []).map((w, i) => `<div class="tr s6 ${ltHas(w.stock) ? 'open-able' : 'static'} rise" style="--i:${i + 18}" ${ltHas(w.stock) ? `data-sw="lt:${esc(w.stock)}" role="button" tabindex="0"` : ''}>
-        <div class="who">${av(w.stock[0], palOf(w.stock))}<div style="min-width:0"><div class="short">/${esc(w.stock)}${w.washout ? '<span class="tag" style="background:var(--mint);color:var(--mint-i)">dipped</span>' : ''}</div><div class="meta"><span class="sub2">last close ₹${num(w.close)}</span></div></div></div>
-        <div><div class="num">${num(w.dip_score, 0)} <span class="dim" style="font-weight:600;color:var(--ink3);font-size:12px">/ under 10</span></div><div class="dipbar"><i style="width:${Math.max(3, 100 - Math.min(100, w.dip_score / 2))}%"></i></div></div>
-        <div class="num opt6 dim">+${num(w.beats_nifty_pct, 0)}%</div><div class="num opt6 dim">${num(w.from_high_pct, 1)}%</div>
-        <div class="num opt6 dim">${Math.floor(slot / w.close)} shares</div></div>`).join('');
+      const wl = sc.watchlist || [];
+      const rows = (S.scrAll ? wl : wl.slice(0, 6)).map((w, i) => `<div class="kpi tl t-${w.washout ? 'mint' : palOf(w.stock)} pop" style="--i:${i + 18}" ${ltHas(w.stock) ? `data-sw="lt:${esc(w.stock)}" role="button" tabindex="0" aria-label="Open ${esc(w.stock)}"` : ''} title="Dip score must fall under 10 for a buy signal">
+        <div class="lab"><span>Dip ${num(w.dip_score, 0)}</span><em>${w.washout ? 'dipped' : 'needs under 10'}</em></div>
+        <div class="nm">${esc(w.stock)}</div><div class="val">₹${num(w.close)}</div>
+        <div class="sub">+${num(w.beats_nifty_pct, 0)}% vs NIFTY · ${num(w.from_high_pct, 1)}% from high · ${inr(slot)} buys ${Math.floor(slot / w.close)}</div>
+        <div class="mtr"><b style="width:${Math.max(3, 100 - Math.min(100, w.dip_score / 2))}%"></b></div></div>`).join('');
       return `<div class="tb rise" style="--i:17" id="go-swing"><h2>Swing screen</h2><span class="stamp">last scan ${esc(sc.time)} IST · prices through ${esc(fmtDate(sc.bars_through))}</span></div>
       <div class="funnel">${steps.map(([k, v], i) => `${i ? '<span class="ar">→</span>' : ''}<span class="st ${i === 4 && v ? 'hot' : ''}"><b>${esc(v)}</b>${k}</span>`).join('')}</div>
-      <div class="table glass rise" style="--i:17;margin-bottom:8px">${plans ? `<div style="height:12px"></div>${plans}` : ''}
-        <div class="thead s6"><div>Strong stocks waiting for a dip</div><div class="num">Dip score</div><div class="num opt6">Beats NIFTY, 6m</div><div class="num opt6">From 52w high</div><div class="num opt6">${inr(slot)} buys</div></div>
-        ${rows || '<div class="empty">No stock passes the first three filters today.</div>'}</div>`;
+      ${plans ? `<div class="table glass rise" style="--i:17;margin-bottom:14px"><div style="height:12px"></div>${plans}</div>` : ''}
+      ${rows ? `<div class="kpis six">${rows}</div>${wl.length > 6 ? `<div class="more"><button class="btn sm" data-tg="scrAll">${S.scrAll ? 'Show fewer' : 'Show all ' + wl.length + ' stocks'}</button></div>` : ''}` : '<div class="table glass"><div class="empty">No stock passes the first three filters today.</div></div>'}`;
     })()}
 
     <div class="tb rise" style="--i:18"><h2>Swing record <span class="tag">${swOpen.length} open · ${chron.length} closed</span></h2><span class="stamp">${reg ? `regime tier ${esc(reg.tier)}${reg.tier === 'C' ? ' (no new entries)' : ''} · ` : ''}if you had put ${inr(slot)} into each</span></div>
@@ -1466,36 +1562,54 @@
       <div class="kpi t-peach pop" style="--i:21"><div class="lab">Best</div><div class="val">${best ? '+' + (ret(best) * 100).toFixed(0) + '%' : '-'}</div><div class="sub">${best ? esc(best.instrument) + ' · ' + fmtDate(best.entry_date) : ''}</div></div>
       <div class="kpi t-blush pop" style="--i:22"><div class="lab">Worst</div><div class="val">${worst ? (ret(worst) * 100).toFixed(0) + '%' : '-'}</div><div class="sub">${worst ? esc(worst.instrument) + ' · ' + fmtDate(worst.entry_date) : ''}</div></div>
     </div>
-    <div class="table glass rise" style="--i:23">
-      <div class="thead s4"><div>Trade</div><div>Started → now</div><div class="num">Return</div><div class="num">Your ${inr(slot)}</div></div>
-      ${swHtml || '<div class="empty">No swing trades yet.</div>'}
-      ${sw.filter(x => x.status === 'CLOSED').length > swClosed.length ? `<div style="padding:8px 24px 14px;display:flex;justify-content:center"><button class="btn sm" data-swall>${S.swAll ? 'Show recent only' : 'Show all ' + sw.filter(x => x.status === 'CLOSED').length + ' trades'}</button></div>` : ''}
-    </div>
+    ${swHtml ? `<div class="kpis six">${swHtml}</div>` : '<div class="table glass"><div class="empty">No swing trades yet.</div></div>'}
+    ${sw.filter(x => x.status === 'CLOSED').length > 6 ? `<div class="more"><button class="btn sm" data-swall>${S.swAll ? 'Show recent only' : 'Show all ' + sw.filter(x => x.status === 'CLOSED').length + ' trades'}</button></div>` : ''}
     <p class="foot" style="margin-top:12px">Return is the option premium's change from entry to exit. "Your ${inr(slot)}" scales that return to your amount per trade, ignoring lot sizes, so it shows how the strategy did, not what a broker would have filled. Open trades show "-" until the engine closes them: the swing feed has no live quote for stock options.</p>
 
     ${(() => {
-      const lt = S.lt, amt = tradeAmt();
+      const lt = S.lt;
       if (!lt || !lt.stocks) return '<div class="tb" id="go-long"><h2>Long-term picks</h2></div><div class="table glass"><div class="empty">Loading the daily analysis.</div></div>';
-      const q = (S.ltq || '').trim().toLowerCase();
-      const list = q ? lt.stocks.filter(x => (x.stock + ' ' + x.name + ' ' + x.sector).toLowerCase().includes(q)).slice(0, 20) : lt.stocks.filter(x => x.pick);
+      const amt = S.ltAmt || capital, N = S.ltN || 5, per = amt / N;
+      const picks = lt.stocks.filter(x => x.pick && x.ranges && x.ranges['1y']).sort((a, b) => a.rank - b.rank);
+      // Buy the strongest picks your per-stock amount can actually buy (whole shares only).
+      const basket = [], skipped = [];
+      for (const x of picks) { if (basket.length >= N) break; if (x.price <= per) basket.push(x); else skipped.push(x); }
+      const rows = basket.map(x => { const sh = Math.floor(per / x.price), spend = sh * x.price, r = x.ranges['1y']; return { x, sh, spend, typ: spend * r.typical, low: spend * r.low, high: spend * r.high, loss: r.loss_pct }; });
+      const spent = rows.reduce((a, r) => a + r.spend, 0), cash = amt - spent;
+      const typ = rows.reduce((a, r) => a + r.typ, 0) + cash, low = rows.reduce((a, r) => a + r.low, 0) + cash, high = rows.reduce((a, r) => a + r.high, 0) + cash;
+      const lossAvg = rows.length ? Math.round(rows.reduce((a, r) => a + r.loss, 0) / rows.length) : 0;
       const age = daysBetween(lt.prices_through, today);
       const tr = (lt.tracked || []).filter(p => p.ret != null && p.joined !== lt.prices_through);
       const avg = k => tr.reduce((a, p) => a + p[k], 0) / tr.length;
-      return `<div class="tb rise" style="--i:20" id="go-long"><h2>Long-term picks <span class="tag">${lt.stocks.filter(x => x.pick).length}</span></h2><span class="stamp">analysed ${esc(fmtDate(lt.updated.slice(0, 10)))} ${esc(lt.updated.slice(11))} IST · ${esc(lt.scanned)} of ${esc(lt.universe)} NIFTY 200 stocks · prices through ${esc(fmtDate(lt.prices_through))}</span></div>
+      const q = (S.ltq || '').trim().toLowerCase();
+      const found = q ? lt.stocks.filter(x => (x.stock + ' ' + x.name + ' ' + x.sector).toLowerCase().includes(q)).slice(0, 12) : [];
+      const pickTile = (x, i, sh) => { const flags = ((x.fin || {}).flags || []).concat(x.very_volatile ? ['Very volatile'] : []), r = (x.ranges || {})['1y'];
+        const spend = sh != null ? sh * x.price : 0;
+        return `<div class="kpi tl t-${flags.length ? 'peach' : palOf(x.stock)} pop" style="--i:${Math.min(i, 12) + 20}" data-sw="lt:${esc(x.stock)}" role="button" tabindex="0" aria-label="Open ${esc(x.name)}" title="${esc(reasonsFor(x).main)}">
+          <div class="lab"><span>${x.pick ? '#' + x.rank : x.rank ? 'rank ' + x.rank : 'new'} · ${esc(SECTOR[x.sector] || x.sector)}</span>${flags.length ? `<em>${flags.length} warning${flags.length > 1 ? 's' : ''}</em>` : ''}</div>
+          <div class="nm">${esc(x.stock)}</div>
+          <div class="val">${sh != null ? sh + ' share' + (sh === 1 ? '' : 's') : '₹' + num(x.price)}</div>
+          <div class="sub">${sh != null ? `${inr(spend)} now · ${r ? 'about ' + short(spend * r.typical) + ' in 1 year' : ''}` : r ? `1 share ₹${num(x.price, 0)} · typical +${Math.round((r.typical - 1) * 100)}% in 1 year` : 'too new for an estimate'}</div></div>`; };
+      return `<div class="tb rise" style="--i:20" id="go-long"><h2>Long-term picks <span class="tag">${picks.length}</span></h2><span class="stamp">${esc(lt.scanned)} NIFTY 200 stocks ranked by their past-year strength · prices through ${esc(fmtDate(lt.prices_through))}</span></div>
       ${age > 4 ? `<div class="stale"><b>This analysis is ${age} days old.</b> The daily job hasn't updated it.</div>` : ''}
-      <div class="trust">
-        <div style="--b:var(--mint);--f:var(--mint-i)"><b>3 months, 1 year</b>Top picks beat an equal basket of the same stocks by about 5-10% a year in tests.</div>
-        <div style="--b:var(--sky);--f:var(--sky-i)"><b>3 years</b>A small edge, about 4% a year.</div>
-        <div style="--b:var(--butter);--f:var(--butter-i)"><b>5 years</b>No reliable edge. Expect about what the market does.</div>
-        <div style="--b:var(--blush);--f:var(--blush-i)"><b>20 years</b>Nobody can test this for one stock. Treat it as a rough guide.</div>
+      <div class="lt-ctl"><span class="gl">I want to invest</span><div class="pills">${[[25000, '₹25k'], [50000, '₹50k'], [100000, '₹1L'], [250000, '₹2.5L'], [500000, '₹5L']].map(([v, l]) => `<button data-ltamt="${v}" class="${v === amt ? 'on' : ''}">${l}</button>`).join('')}</div>
+        <span class="gl">in</span><div class="pills">${[3, 5, 10].map(n => `<button data-ltn="${n}" class="${n === N ? 'on' : ''}">${n} stocks</button>`).join('')}</div></div>
+      <div class="kpis six">
+        <div class="kpi tl t-lav pop" style="--i:20"><div class="lab">You invest</div><div class="val">${inr(amt)}</div><div class="sub">${inr(per)} in each of ${rows.length} stocks${cash >= 1 ? ` · ${inr(cash)} stays as cash` : ''}</div></div>
+        <div class="kpi tl t-sky pop" style="--i:21"><div class="lab">Hold for</div><div class="val">1 year</div><div class="sub">then sell and buy that day's top ${N}. Over 12 months is taxed less.</div></div>
+        <div class="kpi tl t-mint pop" style="--i:22"><div class="lab">Typical after 1 year</div><div class="val">${inr(typ)}</div><div class="sub">${inr(typ - amt, true)} profit, about ${((typ / amt - 1) * 100).toFixed(0)}% before tax</div></div>
+        <div class="kpi tl t-peach pop" style="--i:23"><div class="lab">Extra over NIFTY</div><div class="val">${short(spent * 0.05)} to ${short(spent * 0.10)}</div><div class="sub">more than the same money in NIFTY would make. Tested edge: 5 to 10% a year.</div></div>
+        <div class="kpi tl t-blush pop" style="--i:24"><div class="lab">Bad year</div><div class="val">${inr(low)}</div><div class="sub">${inr(low - amt, true)} if every pick has a bad year. Each has a ${lossAvg}% chance to lose.</div></div>
+        <div class="kpi tl t-butter pop" style="--i:25"><div class="lab">Good year</div><div class="val">${inr(high)}</div><div class="sub">${inr(high - amt, true)} if every pick has a good year</div></div>
       </div>
-      <div class="ltbar"><input id="ltq" placeholder="Calculate any NIFTY 200 stock" value="${esc(S.ltq || '')}" autocomplete="off" aria-label="Find a NIFTY 200 stock">
-        <span class="chg2">${(lt.added_today || []).length || (lt.removed_today || []).length ? `Latest change: ${lt.added_today.length ? 'joined ' + lt.added_today.map(esc).join(', ') : ''}${lt.added_today.length && lt.removed_today.length ? ' · ' : ''}${lt.removed_today.length ? 'left ' + lt.removed_today.map(esc).join(', ') : ''}` : 'No change to the list in the latest run'}${tr.length ? ` · Since tracking: picks ${avg('ret') >= 0 ? '+' : ''}${avg('ret').toFixed(1)}%, NIFTY ${avg('nifty_ret') >= 0 ? '+' : ''}${avg('nifty_ret').toFixed(1)}%` : ' · Results tracking starts now'}</span></div>
-      <div class="table glass rise" style="--i:21">
-        <div class="thead s7"><div>${inr(amt)} could become</div>${HZ.map(([k, l]) => `<div class="num hz${k}">${esc(l)}</div>`).join('')}</div>
-        ${list.map((x, i) => ltRow(x, i, amt)).join('') || '<div class="empty">No NIFTY 200 stock matches that.</div>'}
-      </div>
-      <p class="foot" style="margin-top:12px">Bold is the typical result, the same for every pick; small is the bad to good case, wider for jumpier stocks. Stocks under 3 years old are left out. Tested from 2003 to 2026 on today's NIFTY 200, which flatters results because companies that collapsed aren't on the list. Taxes and costs not included. A guide for your own research, not financial advice.</p>`;
+      <div class="tb" style="margin-top:18px"><h2 style="font-size:17px">Buy these ${rows.length}</h2><span class="stamp">tap one for its full calculator</span></div>
+      <div class="kpis six">${rows.map((r, i) => pickTile(r.x, i, r.sh)).join('')}</div>
+      ${skipped.length ? `<p class="lt-note">Skipped ${skipped.map(x => `<b>${esc(x.stock)}</b> (₹${num(x.price, 0)} a share)`).join(', ')}: one share costs more than your ${inr(per)} per stock, so the next strongest pick takes its place.</p>` : ''}
+      <div class="ltbar" style="margin-top:16px"><input id="ltq" placeholder="Check any NIFTY 200 stock" value="${esc(S.ltq || '')}" autocomplete="off" aria-label="Find a NIFTY 200 stock">
+        <span class="chg2">${(lt.added_today || []).length || (lt.removed_today || []).length ? `Latest change: ${lt.added_today.length ? 'joined ' + lt.added_today.map(esc).join(', ') : ''}${lt.added_today.length && lt.removed_today.length ? ' · ' : ''}${lt.removed_today.length ? 'left ' + lt.removed_today.map(esc).join(', ') : ''}` : 'No change to the list in the latest run'}${tr.length ? ` · Since tracking: picks ${avg('ret') >= 0 ? '+' : ''}${avg('ret').toFixed(1)}%, NIFTY ${avg('nifty_ret') >= 0 ? '+' : ''}${avg('nifty_ret').toFixed(1)}%` : ''}</span>
+        <button class="btn sm" data-tg="ltAll">${S.ltAll ? 'Hide the full list' : 'All ' + picks.length + ' picks'}</button></div>
+      ${q ? `<div class="kpis six">${found.map((x, i) => pickTile(x, i, null)).join('') || '<div class="empty">No NIFTY 200 stock matches that.</div>'}</div>` : S.ltAll ? `<div class="kpis six">${picks.map((x, i) => pickTile(x, i, null)).join('')}</div>` : ''}
+      <p class="foot" style="margin-top:12px">How it works: the 20 stocks that rose most over the past year, among NIFTY 200, make the list. In tests from 2003 to 2026 such stocks kept beating the rest for about a year, so the plan is to hold 1 year and refresh. The typical result is the same for every pick; bad and good cases are the 1-in-10 ends, wider for jumpier stocks. Past 3 years the edge fades, past 5 there is none. Taxes and costs not included. A guide for your own research, not financial advice.</p>`;
     })()}
 
     <div class="tb rise" style="--i:28"><h2>All-time</h2><span class="stamp">intraday engine since 4 Sep 2026</span></div>
@@ -1537,6 +1651,9 @@
     if (e.target.closest('[data-close]') || e.target.id === 'scrim') { closeSw(); return; }
     const go = e.target.closest('[data-go]'); if (go) { const t = $(go.dataset.go); t && t.scrollIntoView({ behavior: 'smooth', block: 'start' }); return; }
     if (e.target.closest('[data-swall]')) { S.swAll = !S.swAll; render(); return; }
+    const tg = e.target.closest('[data-tg]'); if (tg) { S[tg.dataset.tg] = !S[tg.dataset.tg]; render(); return; }
+    const la = e.target.closest('[data-ltamt]'); if (la) { S.ltAmt = +la.dataset.ltamt; ls.set('desk-lt-amt', String(S.ltAmt)); render(); return; }
+    const ln = e.target.closest('[data-ltn]'); if (ln) { S.ltN = +ln.dataset.ltn; ls.set('desk-lt-n', String(S.ltN)); render(); return; }
     const r = e.target.closest('[data-sw]'); if (r) { openSw(r.dataset.sw); return; }
     const b = e.target.closest('[data-sym]');
     if (b) { S.sym = b.dataset.sym; ls.set('desk-sym', S.sym); if (!S.candles[S.sym]) loadCandles(S.sym); render(); return; }
@@ -1574,6 +1691,9 @@
   S.smV = 0;
   const loadSm = async () => { try { S.sm = await api('/api/sm/live?lite=1', 30000); S.smErr = null; } catch (e) { S.smErr = 'tape not reachable yet, retrying'; } S.smV++; render(); };
   loadSm(); setInterval(loadSm, 30000);
+  S.ltAmt = +ls.get('desk-lt-amt', '0') || 0; S.ltN = +ls.get('desk-lt-n', '5') || 5;
+  const loadPw = async () => { try { S.pw = await api('/api/pw/live', 20000); S.pwErr = null; } catch (e) { S.pw = null; S.pwErr = 'The watch starts with the engine. If this stays, the engine has not been updated yet.'; } render(); };
+  loadPw(); setInterval(loadPw, 30000);
   poll('swing', '/api/swing/positions', 120000);
   poll('screen', '/api/swing/screen', 120000, null, 40000);
   // Long-term analysis is a static file that the daily job commits to this site.
