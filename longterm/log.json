@@ -76,7 +76,10 @@
 "stock": "HINDCOPPER",
 "joined": "2026-10-30",
 "join_px": 400.85,
-"join_nifty": 23053.1
+"join_nifty": 23053.1,
+"left": "2026-11-25",
+"left_px": 398.9,
+"left_nifty": 25819.25
 },
 {
 "stock": "IDEA",
@@ -187,7 +190,10 @@
 "stock": "NYKAA",
 "joined": "2026-11-09",
 "join_px": 359.7,
-"join_nifty": 25030.35
+"join_nifty": 25030.35,
+"left": "2026-11-25",
+"left_px": 358.0,
+"left_nifty": 25819.25
 },
 {
 "stock": "TORNTPHARM",
@@ -226,7 +232,10 @@
 "stock": "ADANIENSOL",
 "joined": "2026-11-16",
 "join_px": 1452.6,
-"join_nifty": 25291.1
+"join_nifty": 25291.1,
+"left": "2026-11-25",
+"left_px": 1408.0,
+"left_nifty": 25819.25
 },
 {
 "stock": "OFSS",
@@ -317,6 +326,24 @@
 "joined": "2026-11-23",
 "join_px": 4195.0,
 "join_nifty": 25349.65
+},
+{
+"stock": "ZYDUSLIFE",
+"joined": "2026-11-25",
+"join_px": 1236.0,
+"join_nifty": 25819.25
+},
+{
+"stock": "OFSS",
+"joined": "2026-11-25",
+"join_px": 9275.0,
+"join_nifty": 25819.25
+},
+{
+"stock": "TORNTPHARM",
+"joined": "2026-11-25",
+"join_px": 4895.5,
+"join_nifty": 25819.25
 }
 ]
 }
