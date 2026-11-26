@@ -942,7 +942,7 @@
   const PW_NEED = { no_cross: 'blue over red', macd: 'MACD green', volume: 'volume', below_vwap: 'above VWAP', weak_bar: 'strong candle', extended: 'not stretched' };
   function pwSection() {
     const pw = S.pw, al = ((pw && pw.alerts) || []).slice().reverse();
-    const head = `<div class="tb rise" style="--i:8" id="go-pw"><h2>Crossover watch <span class="tag">${al.length}</span></h2><span class="stamp">5-min option chart: blue EMA crosses red, MACD turns green, volume jumps · NIFTY, ATM ±2 strikes</span></div>`;
+    const head = `<div class="tb rise" style="--i:8" id="go-pw"><h2>Crossover watch <span class="tag">${al.length}</span></h2><span class="stamp">5-min option chart: forming (about to cross) and crossed, with OI and a 30-min estimate · NIFTY, ATM ±2 strikes</span></div>`;
     if (!pw) return head + `<div class="kpis six"><div class="kpi tl t-butter pop" style="--i:8"><div class="lab">Crossover watch</div><div class="nm">Waiting for the engine</div><div class="sub">${esc(S.pwErr || 'loading')}</div></div></div>`;
     const td = pw.today || {}, scans = Object.values(pw.last_scan || {});
     const lastBar = scans.map(x => x.bar).sort().slice(-1)[0];
@@ -955,7 +955,16 @@
       tiles.push(`<div class="kpi tl t-${tone} pop" style="--i:${i + 9}" title="${esc((a.extras || []).join(' · '))}"><div class="lab"><span>${esc(a.time)} · grade ${esc(a.grade)}</span><em>${r === 'OPEN' ? 'open' : esc(r)}</em></div>
         <div class="nm">${esc(a.index)} ${esc(strike)}<span class="ot">${esc(typ)}</span></div>
         <div class="val">${r === 'OPEN' ? '₹' + num(a.entry, 1) : inr(o.pnl_per_lot, true)}</div>
-        <div class="sub">${r === 'OPEN' ? `SL ₹${num(a.sl, 0)} · T1 ₹${num(a.t1, 0)} · exit by ${esc(a.exit_by)}` : `${esc(r)} at ${esc(o.at || '')} · best ₹${num(o.max_seen, 0)} · per lot`}</div></div>`);
+        <div class="sub">${r === 'OPEN' ? `SL ₹${num(a.sl, 0)} · T1 ₹${num(a.t1, 0)}${a.pot ? ` · could reach ₹${num(a.pot.target, 0)} by ${esc(a.pot.by)}` : ` · exit by ${esc(a.exit_by)}`}` : `${esc(r)} at ${esc(o.at || '')} · best ₹${num(o.max_seen, 0)} · per lot`}</div></div>`);
+    });
+    // About to cross, with the engine's 30-minute estimate (ATR reach capped by the OI wall).
+    scans.flatMap(x => x.forming || []).filter(f => f.show).sort((x, y) => y.potential - x.potential).slice(0, Math.max(0, 6 - tiles.length)).forEach((f, i) => {
+      const [ix, strike, typ] = f.contract.split(' ');
+      const tone = f.flow === 'against' ? 'butter' : 'mint';
+      tiles.push(`<div class="kpi tl t-${tone} pop" style="--i:${i + 11}" title="${esc(((S.pw.last_scan || {}).NIFTY || {}).odds || '')}"><div class="lab"><span>Forming · ${esc(f.gap_pct)}% to cross</span><em>by ${esc(f.by)}</em></div>
+        <div class="nm">${esc(ix)} ${esc(strike)}<span class="ot">${esc(typ)}</span></div>
+        <div class="val">₹${num(f.ltp, 0)} → ₹${num(f.target, 0)}</div>
+        <div class="sub">+${num(f.potential, 0)} pts, ${inr(f.per_lot, true)}/lot${f.wall ? ` · OI wall ${esc(Math.round(f.wall))}` : ''}${f.flow_note ? ` · ${esc(f.flow_note)}` : ''}</div></div>`);
     });
     const all = scans.flatMap(x => x.contracts || []);
     const near = all.filter(c => c.missing && c.missing.length && c.missing.length <= 2 && !['time', 'warmup', 'crossed_earlier'].some(m => c.missing.includes(m)))

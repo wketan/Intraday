@@ -60,6 +60,16 @@ START_HM, END_HM, EXPIRY_END_HM = "09:30", "14:45", "13:30"
 STRIKES_EACH_SIDE = int(os.environ.get("PW_STRIKES", "2"))   # ATM +/- 2
 MIN_PREMIUM = float(os.environ.get("PW_MIN_PREMIUM", "20"))
 CONTRACT_COOLDOWN_MIN = 45
+# "Forming" = crossover about to happen. Replay of NIFTY weekly options, 9-26 Nov 2026
+# (292 forming bars, 12 contracts): on its own no better than any bar (23% rose 20+ pts
+# in 30 min). With premium above VWAP, volume >= 1.2x and MACD green, before 14:00:
+# 37 cases, 62% rose 20+ pts, typical reach 1.7x the premium's 5-min ATR. Small sample.
+FORM_GAP = 0.03
+FORM_VOL = 1.2
+FORM_END_HM = "13:59"
+FORM_REACH_ATR = float(os.environ.get("PW_REACH_ATR", "1.5"))
+MIN_POTENTIAL = float(os.environ.get("PW_MIN_POTENTIAL", "20"))     # premium points
+FORM_ODDS = "In past NIFTY setups like this, about 6 in 10 rose 20+ points within 30 min (37 cases)"
 INDEX_COOLDOWN_MIN = 15
 
 
@@ -153,6 +163,64 @@ def check_bar(d: pd.DataFrame, i: int, expiry_day: bool = False) -> dict:
     return {"ok": not fails, "fails": fails, "ind": ind}
 
 
+def check_forming(d: pd.DataFrame, i: int) -> dict | None:
+    """Crossover about to happen on bar i: blue under red but closing in for 2 bars, MACD
+    green and rising, price already over the blue line, above VWAP, volume up. Returns
+    {"atr", "gap_pct", "vol_ratio"} or None."""
+    if i < 30:
+        return None
+    r = d.iloc[i]
+    hm = r["timestamp"].strftime("%H:%M")
+    if not (START_HM <= hm <= FORM_END_HM):
+        return None
+    e9, e21, h = d["ema9"], d["ema21"], d["hist"]
+    gap = [e21.iloc[i - k] - e9.iloc[i - k] for k in (0, 1, 2)]
+    if not (0 < gap[0] <= e21.iloc[i] * FORM_GAP and gap[0] < gap[1] < gap[2]):
+        return None
+    if not (h.iloc[i] > 0 and h.iloc[i] > h.iloc[i - 1] > h.iloc[i - 2]):
+        return None
+    vr = float(r["volume"] / r["vavg20"]) if r["vavg20"] == r["vavg20"] and r["vavg20"] else 0.0
+    if not (r["close"] > e9.iloc[i] and r["close"] > r["vwap"] and vr >= FORM_VOL):
+        return None
+    tr = pd.concat([d["high"] - d["low"], (d["high"] - d["close"].shift()).abs(),
+                    (d["low"] - d["close"].shift()).abs()], axis=1).max(axis=1)
+    atr = float(tr.ewm(com=13, adjust=False).mean().iloc[i])
+    return {"atr": round(atr, 2), "gap_pct": round(gap[0] / e21.iloc[i] * 100, 2), "vol_ratio": round(vr, 2)}
+
+
+def oi_read(chain: list, an: dict, spot: float, strike: float, otype: str, gap: float) -> dict:
+    """Where the option writers sit, from the live chain. For a CE the biggest call-OI strike
+    above spot is the ceiling; for a PE the biggest put-OI strike below spot is the floor.
+    Returns room in index points, a rough delta, and whether OI flow helps or hurts."""
+    out = {"room": None, "wall": None, "delta": None, "flow": "neutral", "note": ""}
+    if not chain:
+        return out
+    if otype == "CE":
+        side = [o for o in chain if o.get("type") == "CE" and (o.get("strike") or 0) > spot]
+    else:
+        side = [o for o in chain if o.get("type") == "PE" and 0 < (o.get("strike") or 0) < spot]
+    side = [o for o in side if (o.get("oi") or 0) > 0]
+    if side:
+        w = max(side, key=lambda o: o.get("oi") or 0)
+        out["wall"] = w["strike"]
+        out["room"] = round(abs(w["strike"] - spot), 1)
+    # Rough delta from moneyness (chain greeks are often missing): ATM ~0.5, ~0.1 per strike step.
+    steps = (spot - strike) / gap if otype == "CE" else (strike - spot) / gap
+    out["delta"] = round(min(0.85, max(0.15, 0.5 + 0.1 * steps)), 2)
+    near = lambda lst: [x for x in (an.get(lst) or []) if abs((x.get("strike") or 0) - spot) <= 2 * gap]
+    if otype == "CE":
+        good, bad = near("unwinding_ce") + near("building_pe"), near("building_ce")
+        gtxt, btxt = "call writers leaving / put writers adding", "call writers adding near spot"
+    else:
+        good, bad = near("unwinding_pe") + near("building_ce"), near("building_pe")
+        gtxt, btxt = "put writers leaving / call writers adding", "put writers adding near spot"
+    if bad and not good:
+        out["flow"], out["note"] = "against", btxt
+    elif good and not bad:
+        out["flow"], out["note"] = "with", gtxt
+    return out
+
+
 def levels(d: pd.DataFrame, i: int, lot: int) -> dict:
     entry = float(d["close"].iloc[i])
     swing = float(d["low"].iloc[max(0, i - 2):i + 1].min())
@@ -235,9 +303,11 @@ class PremiumWatch:
     """Own thread. Scans once per 5-minute bar, ~25 s after it closes."""
 
     def __init__(self, client, master, instruments: dict, send_slack, bias_fn=None, log=None,
-                 tz=None):
+                 tz=None, chain_fn=None):
         self.client, self.master, self.instruments = client, master, instruments
         self.send_slack, self.bias_fn, self.log, self.tz = send_slack, bias_fn, log, tz
+        self.chain_fn = chain_fn
+        self._form_last: dict = {}
         self.watch_list = [s.strip().upper() for s in
                            os.environ.get("PW_INSTRUMENTS", "NIFTY").split(",") if s.strip()]
         self.enabled = os.environ.get("PW_ENABLED", "1") != "0"
@@ -360,7 +430,14 @@ class PremiumWatch:
         if self.bias_fn:
             b = self.bias_fn(name)
             bias = b.get("score") if isinstance(b, dict) else None
-        cands, rows = [], []
+        cands, rows, forming = [], [], []
+        ch = None
+        if self.chain_fn:
+            try:
+                ch = self.chain_fn(name)
+            except Exception as e:
+                self._warn(f"{name} chain read: {e}")
+        gap_pts = self.instruments[name]["strike_gap"]
         for row in contracts:
             df = self.client.candles(row["token"], "NFO", "FIVE_MINUTE", 3, force_refresh=True)
             if df is None or df.empty or len(df) < 35:
@@ -396,6 +473,25 @@ class PremiumWatch:
                          "macd_green_since": chk["ind"].get("macd_green_since"),
                          "vwap": chk["ind"].get("vwap"),
                          "skip": sk if sk and sk["day"] == self._now().strftime("%Y-%m-%d") else None})
+            fm = check_forming(d, i) if not chk["ok"] else None
+            if fm and chk["ind"]["close"] >= MIN_PREMIUM:
+                oi = oi_read((ch or {}).get("chain") or [], (ch or {}).get("an") or {}, spot,
+                             row["strike"], row["type"], gap_pts)
+                reach = FORM_REACH_ATR * fm["atr"]
+                cap = oi["delta"] * oi["room"] if oi["room"] else None
+                pot = min(reach, cap) if cap else reach
+                if oi["flow"] == "against":
+                    pot *= 0.5
+                lot = int(row.get("lotsize") or self.instruments[name]["lot_size"])
+                ltp = chk["ind"]["close"]
+                forming.append({"contract": label, "ltp": ltp, "potential": round(pot, 1),
+                                "target": round(ltp + pot, 1), "per_lot": round(pot * lot),
+                                "by": (self._now() + timedelta(minutes=30)).strftime("%H:%M"),
+                                "reach_atr": round(reach, 1), "oi_cap": round(cap, 1) if cap else None,
+                                "wall": oi["wall"], "room": oi["room"], "flow": oi["flow"],
+                                "flow_note": oi["note"], "gap_pct": fm["gap_pct"],
+                                "vol_ratio": fm["vol_ratio"], "show": pot >= MIN_POTENTIAL,
+                                "chain_age_s": int((ch or {}).get("age") or 0) if ch else None})
             if not chk["ok"] or chk["ind"]["close"] < MIN_PREMIUM:
                 continue
             lot = int(row.get("lotsize") or self.instruments[name]["lot_size"])
@@ -410,13 +506,20 @@ class PremiumWatch:
                 score += 1; extras.append(f"RSI {chk['ind']['rsi']:.0f}")
             if chk["ind"]["vol_ratio"] >= 2:
                 score += 1; extras.append(f"volume {chk['ind']['vol_ratio']:.1f}x")
-            cands.append({"row": row, "d": d, "i": i, "lot": lot, "score": score,
+            pt = self._potential(d, i, ch, spot, row, gap_pts, chk["ind"]["close"])
+            if pt["flow"] == "with":
+                score += 1; extras.append(f"OI: {pt['flow_note']}")
+            elif pt["flow"] == "against":
+                extras.append(f"OI against: {pt['flow_note']}")
+            cands.append({"row": row, "d": d, "i": i, "lot": lot, "score": score, "pot": pt,
                           "extras": extras, "ind": chk["ind"], "label": label})
         with self.lock:
             self.last_scan[name] = {"bar": (bar_close - timedelta(minutes=5)).strftime("%H:%M"),
                                     "spot": spot, "index_trend": idx_trend, "bias": bias,
                                     "expiry": exp_date.isoformat() if exp_date else None,
-                                    "contracts": rows}
+                                    "contracts": rows, "forming": forming,
+                                    "odds": FORM_ODDS}
+        self._post_forming(name, forming)
         if not cands:
             return
         now = self._now()
@@ -437,13 +540,56 @@ class PremiumWatch:
                  "expiry": best["row"]["expiry"], "lot": best["lot"], "grade": grade,
                  "score": best["score"], "extras": best["extras"], "ind": best["ind"],
                  **lv, "exit_by": (now + timedelta(minutes=HOLD_MIN)).strftime("%H:%M"),
-                 "outcome": {"result": "OPEN"}, "others": len(cands) - 1}
+                 "outcome": {"result": "OPEN"}, "others": len(cands) - 1, "pot": best["pot"]}
         with self.lock:
             self.alerts.append(alert)
         self._contract_last[best["label"]] = now
         self._index_last[name] = now
         self._info(f"WATCH {best['label']} grade {grade} entry {lv['entry']}")
         self._post(alert)
+
+    def _potential(self, d, i, ch, spot, row, gap_pts, ltp):
+        tr = pd.concat([d["high"] - d["low"], (d["high"] - d["close"].shift()).abs(),
+                        (d["low"] - d["close"].shift()).abs()], axis=1).max(axis=1)
+        atr = float(tr.ewm(com=13, adjust=False).mean().iloc[i])
+        oi = oi_read((ch or {}).get("chain") or [], (ch or {}).get("an") or {}, spot,
+                     row["strike"], row["type"], gap_pts)
+        reach = FORM_REACH_ATR * atr
+        cap = oi["delta"] * oi["room"] if oi["room"] else None
+        pot = min(reach, cap) if cap else reach
+        if oi["flow"] == "against":
+            pot *= 0.5
+        return {"potential": round(pot, 1), "target": round(ltp + pot, 1), "wall": oi["wall"],
+                "room": oi["room"], "flow": oi["flow"], "flow_note": oi["note"],
+                "by": (self._now() + timedelta(minutes=30)).strftime("%H:%M")}
+
+    def _post_forming(self, name, forming):
+        """Heads-up before the cross: best forming contract with real potential, 30-min cooldown
+        per contract and 10 min per index so Slack stays readable."""
+        now = self._now()
+        ok = [f for f in forming if f["show"] and f["flow"] != "against"]
+        if not ok:
+            return
+        li = self._form_last.get(name)
+        if li and now - li < timedelta(minutes=10):
+            return
+        ok = [f for f in ok if not (self._form_last.get(f["contract"]) and
+                                    now - self._form_last[f["contract"]] < timedelta(minutes=30))]
+        if not ok:
+            return
+        f = max(ok, key=lambda x: x["potential"])
+        self._form_last[name] = self._form_last[f["contract"]] = now
+        wall = (f"next {'call' if f['contract'].endswith('CE') else 'put'} OI wall {int(f['wall'])} "
+                f"({f['room']:.0f} pts away)") if f["wall"] else "no OI wall data"
+        flow = f" · OI: {f['flow_note']}" if f["flow_note"] else ""
+        try:
+            self.send_slack(f"🟡 *FORMING {f['contract']}*: blue is {f['gap_pct']}% under red and closing in, "
+                            f"MACD green, volume {f['vol_ratio']:.1f}x\n"
+                            f"Now ₹{f['ltp']:.1f} · *could reach ₹{f['target']:.1f} (+{f['potential']:.0f} pts, "
+                            f"+₹{f['per_lot']:,}/lot) by {f['by']}*\n"
+                            f"_{wall}{flow}. {FORM_ODDS}. Wait for the cross alert or your own read of the chart._")
+        except Exception as e:
+            self._warn(f"slack forming: {e}")
 
     def _post(self, a):
         ind = a["ind"]
@@ -456,6 +602,9 @@ class PremiumWatch:
                f"*Buy near* ₹{a['entry']:.1f} · *SL* ₹{a['sl']:.1f} (₹{a['risk_per_lot']:,}/lot) · "
                f"*T1* ₹{a['t1']:.1f} (+₹{int(T1_RS):,}/lot) · *T2* ₹{a['t2']:.1f} (+₹{int(T2_RS):,}/lot)\n"
                f"Exit by {a['exit_by']} if T1 is not hit · lot {lot}\n"
+               f"Could reach ₹{a['pot']['target']:.1f} (+{a['pot']['potential']:.0f} pts) by {a['pot']['by']}"
+               f"{' · OI wall ' + str(int(a['pot']['wall'])) + ' (' + str(int(a['pot']['room'])) + ' pts away)' if a['pot'].get('wall') else ''}"
+               f"{' · short of T1, think about booking near ₹' + format(a['pot']['target'], '.0f') if a['pot']['target'] < a['t1'] else ''}\n"
                f"_{extras}. Look at the chart first: this is a watch alert, not an engine trade._")
         try:
             self.send_slack(msg)

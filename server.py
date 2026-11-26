@@ -7901,8 +7901,20 @@ def _sm_bias(name):
 
 # ── Premium Crossover Watch (Ketan's 5m premium-chart scalp, alert only) ──
 from premium_watch import PremiumWatch, replay as _pw_replay
+def _pw_chain(name):
+    """Live option chain the scanner already prefetches (about every 2 min) plus OI velocity."""
+    cc = engine._chain_cache.get(name) or {}
+    if not cc.get("chain"):
+        return None
+    try:
+        an = OptPicker.chain_analytics(cc["chain"], cc.get("atm"), oi_delta=engine._compute_oi_delta(name))
+    except Exception:
+        an = {}
+    return {"chain": cc["chain"], "an": an or {}, "age": time.time() - cc.get("ts", 0)}
+
+
 pw_watch = PremiumWatch(engine.client, _master, INSTRUMENTS, SlackAlert.send,
-                        bias_fn=_sm_bias, log=log, tz=IST)
+                        bias_fn=_sm_bias, log=log, tz=IST, chain_fn=_pw_chain)
 
 
 @app.route("/api/pw/live")
