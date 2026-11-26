@@ -957,7 +957,8 @@
         <div class="val">${r === 'OPEN' ? '₹' + num(a.entry, 1) : inr(o.pnl_per_lot, true)}</div>
         <div class="sub">${r === 'OPEN' ? `SL ₹${num(a.sl, 0)} · T1 ₹${num(a.t1, 0)} · exit by ${esc(a.exit_by)}` : `${esc(r)} at ${esc(o.at || '')} · best ₹${num(o.max_seen, 0)} · per lot`}</div></div>`);
     });
-    const near = scans.flatMap(x => x.contracts || []).filter(c => c.missing && c.missing.length && c.missing.length <= 2 && !c.missing.includes('time') && !c.missing.includes('warmup'))
+    const all = scans.flatMap(x => x.contracts || []);
+    const near = all.filter(c => c.missing && c.missing.length && c.missing.length <= 2 && !['time', 'warmup', 'crossed_earlier'].some(m => c.missing.includes(m)))
       .sort((x, y) => x.missing.length - y.missing.length || (y.vol_ratio || 0) - (x.vol_ratio || 0));
     near.slice(0, Math.max(0, 6 - tiles.length)).forEach((c, i) => {
       const [ix, strike, typ] = c.contract.split(' ');
@@ -965,6 +966,16 @@
         <div class="nm">${esc(ix)} ${esc(strike)}<span class="ot">${esc(typ)}</span></div><div class="val">₹${num(c.ltp, 1)}</div>
         <div class="sub">Needs ${c.missing.map(m => esc(PW_NEED[m] || m)).join(' + ')}</div></div>`);
     });
+    // Crossed today but no alert: say when, and why the engine stayed quiet.
+    const WHY = (k, sk) => ({ macd: `MACD already green since ${sk.macd_green_since || 'earlier'}, not a fresh turn`, below_vwap: `premium under today's VWAP ₹${num(sk.vwap, 0)}`,
+      volume: `volume only ${num(sk.vol_ratio, 1)}x`, extended: 'already ran too far', weak_bar: 'weak candle' })[k] || k;
+    all.filter(c => c.crossed_at).sort((x, y) => (y.crossed_at || '').localeCompare(x.crossed_at || ''))
+      .slice(0, Math.max(0, 6 - tiles.length)).forEach((c, i) => {
+        const [ix, strike, typ] = c.contract.split(' '), sk = c.skip;
+        tiles.push(`<div class="kpi tl t-butter pop" style="--i:${i + 14}"><div class="lab"><span>Crossed at ${esc(sk ? sk.bar : c.crossed_at)}</span><em>no alert</em></div>
+          <div class="nm">${esc(ix)} ${esc(strike)}<span class="ot">${esc(typ)}</span></div><div class="val">₹${num(c.ltp, 1)}</div>
+          <div class="sub">${sk ? 'Skipped: ' + sk.why.map(k => esc(WHY(k, sk))).join(', ') : 'Too late to enter now. Waits for a fresh cross.'}</div></div>`);
+      });
     return head + `<div class="kpis six">${tiles.join('')}</div>`;
   }
 

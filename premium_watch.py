@@ -111,13 +111,28 @@ def check_bar(d: pd.DataFrame, i: int, expiry_day: bool = False) -> dict:
     # On 26 Nov this is the 10:20 bar of NIFTY 26050 CE, one bar before the real cross.
     gap = [e21.iloc[i - k] - e9.iloc[i - k] for k in (0, 1, 2)]
     starting = 0 < gap[0] <= e21.iloc[i] * NEAR_GAP and gap[0] < gap[1] < gap[2]
+    crossed_at = None
     if not (crossed or starting):
-        fails.append("no_cross")
+        if e9.iloc[i] > e21.iloc[i]:
+            # Blue went over red earlier than 2 bars ago: the entry is gone, not coming.
+            j = i
+            while j > 0 and e9.iloc[j - 1] > e21.iloc[j - 1]:
+                j -= 1
+            crossed_at = d["timestamp"].iloc[j].strftime("%H:%M")
+            fails.append("crossed_earlier")
+        else:
+            fails.append("no_cross")
     h = d["hist"]
     flip = h.iloc[i] > 0 and h.iloc[i] > h.iloc[i - 1] and any(
         h.iloc[i - k] <= 0 for k in range(1, MACD_LOOKBACK + 1))
     if not flip:
         fails.append("macd")
+    green_since = None
+    if h.iloc[i] > 0:
+        j = i
+        while j > 0 and h.iloc[j - 1] > 0:
+            j -= 1
+        green_since = d["timestamp"].iloc[j].strftime("%H:%M")
     vavg = r["vavg20"]
     vr = float(r["volume"] / vavg) if vavg and vavg == vavg and vavg > 0 else 0.0
     if vr < VOL_MULT:
@@ -133,7 +148,8 @@ def check_bar(d: pd.DataFrame, i: int, expiry_day: bool = False) -> dict:
            "hist": round(r["hist"], 2), "hist_prev": round(h.iloc[i - 1], 2),
            "rsi": round(float(r["rsi"]), 1) if r["rsi"] == r["rsi"] else None,
            "vwap": round(r["vwap"], 2), "vol": int(r["volume"]), "vol_ratio": round(vr, 2),
-           "bar": r["timestamp"].strftime("%Y-%m-%d %H:%M"), "stage": "crossed" if crossed else "starting"}
+           "bar": r["timestamp"].strftime("%Y-%m-%d %H:%M"), "stage": "crossed" if crossed else "starting",
+           "crossed_at": crossed_at, "macd_green_since": green_since}
     return {"ok": not fails, "fails": fails, "ind": ind}
 
 
@@ -191,7 +207,7 @@ def replay(df: pd.DataFrame, lot: int, day: str | None = None, expiry_day: bool 
             last_hit = t
             lv = levels(d, i, lot)
             hits.append({**chk["ind"], **lv, "outcome": follow(d, i, lv, lot)})
-        elif "no_cross" not in chk["fails"] and "warmup" not in chk["fails"]:
+        elif not {"no_cross", "crossed_earlier", "warmup"} & set(chk["fails"]):
             near.append({"bar": chk["ind"].get("bar"), "missing": chk["fails"]})
     out = {"hits": hits, "near_misses": near[-12:]}
     if detail:
@@ -233,6 +249,7 @@ class PremiumWatch:
         self._index_last: dict = {}
         self.running = False
         self._last_follow = 0.0
+        self.skips: dict = {}                 # contract -> last fresh cross that failed a check
 
     # helpers
     def _now(self):
@@ -354,8 +371,31 @@ class PremiumWatch:
                 continue
             chk = check_bar(d, i, expiry_day)
             label = f"{name} {int(row['strike'])} {row['type']}"
+            fr = set(chk["fails"])
+            if fr and not fr & {"no_cross", "crossed_earlier", "warmup", "time"}:
+                # A real crossover happened on this bar but a check stopped the alert: keep why.
+                self.skips[label] = {"day": self._now().strftime("%Y-%m-%d"), "bar": chk["ind"]["bar"][-5:],
+                                     "why": chk["fails"], "ltp": chk["ind"]["close"],
+                                     "macd_green_since": chk["ind"].get("macd_green_since"),
+                                     "vwap": chk["ind"].get("vwap"), "vol_ratio": chk["ind"].get("vol_ratio")}
+            if "crossed_earlier" in fr and label not in self.skips:
+                # After a restart: look back at the cross bar itself to say why it was skipped.
+                today_s = self._now().strftime("%Y-%m-%d")
+                js = d.index[(d["timestamp"].dt.strftime("%Y-%m-%d") == today_s) &
+                             (d["timestamp"].dt.strftime("%H:%M") == chk["ind"].get("crossed_at"))]
+                if len(js):
+                    c2 = check_bar(d, int(js[-1]), expiry_day)
+                    if c2["fails"] and c2["ind"]:
+                        self.skips[label] = {"day": today_s, "bar": c2["ind"]["bar"][-5:], "why": c2["fails"],
+                                             "ltp": c2["ind"]["close"], "macd_green_since": c2["ind"].get("macd_green_since"),
+                                             "vwap": c2["ind"].get("vwap"), "vol_ratio": c2["ind"].get("vol_ratio")}
+            sk = self.skips.get(label)
             rows.append({"contract": label, "ltp": chk["ind"].get("close"),
-                         "missing": chk["fails"], "vol_ratio": chk["ind"].get("vol_ratio")})
+                         "missing": chk["fails"], "vol_ratio": chk["ind"].get("vol_ratio"),
+                         "crossed_at": chk["ind"].get("crossed_at"),
+                         "macd_green_since": chk["ind"].get("macd_green_since"),
+                         "vwap": chk["ind"].get("vwap"),
+                         "skip": sk if sk and sk["day"] == self._now().strftime("%Y-%m-%d") else None})
             if not chk["ok"] or chk["ind"]["close"] < MIN_PREMIUM:
                 continue
             lot = int(row.get("lotsize") or self.instruments[name]["lot_size"])
