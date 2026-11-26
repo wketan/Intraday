@@ -7899,6 +7899,51 @@ def _sm_bias(name):
         return None
 
 
+# ── Premium Crossover Watch (Ketan's 5m premium-chart scalp, alert only) ──
+from premium_watch import PremiumWatch, replay as _pw_replay
+pw_watch = PremiumWatch(engine.client, _master, INSTRUMENTS, SlackAlert.send,
+                        bias_fn=_sm_bias, log=log, tz=IST)
+
+
+@app.route("/api/pw/live")
+def pw_live():
+    return jsonify(pw_watch.snapshot())
+
+
+@app.route("/api/pw/replay")
+def pw_replay():
+    """Replay the crossover setup on one option contract's 5m premium chart.
+    /api/pw/replay?inst=NIFTY&strike=26050&type=CE[&expiry=01DEC2026][&day=2026-11-26][&days=5]"""
+    name = (flask_request.args.get("inst") or "NIFTY").upper()
+    info = INSTRUMENTS.get(name)
+    if not info:
+        return jsonify({"error": f"unknown inst {name}"}), 400
+    try:
+        strike = float(flask_request.args.get("strike"))
+    except Exception:
+        return jsonify({"error": "strike needed"}), 400
+    ot = (flask_request.args.get("type") or "CE").upper()
+    exp = (flask_request.args.get("expiry") or "").upper()
+    if not engine.client.ensure() or not _master.ensure():
+        return jsonify({"error": "Not logged in"}), 401
+    rows = [r for (nm, st, t, e), r in _master.nfo.items()
+            if nm == info["expiry_prefix"] and st == strike and t == ot and (not exp or e == exp)]
+    if not rows:
+        return jsonify({"error": "contract not found"}), 404
+    rows.sort(key=lambda r: datetime.strptime(r["expiry"], "%d%b%Y"))
+    today = datetime.now(IST).date()
+    row = next((r for r in rows if datetime.strptime(r["expiry"], "%d%b%Y").date() >= today), rows[-1])
+    df = engine.client.candles(row["token"], "NFO", "FIVE_MINUTE",
+                               int(flask_request.args.get("days", 5)), force_refresh=True)
+    if df is None or df.empty:
+        return jsonify({"contract": row["symbol"], "error": "no candles"}), 200
+    lot = int(row.get("lotsize") or info["lot_size"])
+    out = _pw_replay(df, lot, day=flask_request.args.get("day") or None,
+                     expiry_day=flask_request.args.get("expiry_day") == "1")
+    return jsonify({"contract": row["symbol"], "expiry": row["expiry"], "lot": lot,
+                    "bars": len(df), **out})
+
+
 @app.route("/smart")
 def smart_page():
     return send_file(os.path.join(os.path.dirname(os.path.abspath(__file__)), "smart.html"))
@@ -9515,6 +9560,12 @@ def _startup():
                 engine.running = True
                 threading.Thread(target=engine._loop, daemon=True, name="ScanLoop").start()
                 log.info("▶ Auto-startup: scan engine running ✅")
+            # Premium crossover watch (alert-only, own thread)
+            try:
+                pw_watch.start()
+                log.info("▶ Auto-startup: premium crossover watch running ✅")
+            except Exception as e:
+                log.error(f"▶ Auto-startup: premium watch failed: {e}")
             # Smart Money tape (read-only market data, own thread)
             try:
                 sm_feed.start()

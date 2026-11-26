@@ -27,6 +27,7 @@ COPY signal_v2.py .
 COPY signal_orb.py .
 COPY signal_gamma.py .
 COPY signal_scalper.py .
+COPY premium_watch.py .
 COPY signal_scalper_v3.py .
 COPY signal_reverter.py .
 COPY signal_nifty_regime.py .
