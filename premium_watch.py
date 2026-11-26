@@ -48,7 +48,9 @@ import pandas as pd
 
 EMA_FAST, EMA_SLOW = 9, 21
 VOL_MULT = float(os.environ.get("PW_VOL_MULT", "1.3"))
-MAX_EXT = float(os.environ.get("PW_MAX_EXT", "0.12"))        # close <= EMA9 * 1.12
+MAX_EXT = float(os.environ.get("PW_MAX_EXT", "0.20"))        # close <= EMA9 * 1.20 (premiums move fast)
+NEAR_GAP = float(os.environ.get("PW_NEAR_GAP", "0.01"))      # blue within 1% under red and closing in
+MACD_LOOKBACK = 6                                             # histogram turned green within 30 min
 T1_RS = float(os.environ.get("PW_T1_RS", "2000"))            # per lot
 T2_RS = float(os.environ.get("PW_T2_RS", "3000"))
 SL_RS_CAP = float(os.environ.get("PW_SL_RS", "1500"))
@@ -105,11 +107,15 @@ def check_bar(d: pd.DataFrame, i: int, expiry_day: bool = False) -> dict:
     e9, e21 = d["ema9"], d["ema21"]
     crossed = e9.iloc[i] > e21.iloc[i] and any(
         e9.iloc[i - k] <= e21.iloc[i - k] for k in (1, 2))
-    if not crossed:
+    # "Crossover starting": blue still just under red but closing in fast for 2 bars.
+    # On 26 Nov this is the 10:20 bar of NIFTY 26050 CE, one bar before the real cross.
+    gap = [e21.iloc[i - k] - e9.iloc[i - k] for k in (0, 1, 2)]
+    starting = 0 < gap[0] <= e21.iloc[i] * NEAR_GAP and gap[0] < gap[1] < gap[2]
+    if not (crossed or starting):
         fails.append("no_cross")
     h = d["hist"]
     flip = h.iloc[i] > 0 and h.iloc[i] > h.iloc[i - 1] and any(
-        h.iloc[i - k] <= 0 for k in (1, 2, 3))
+        h.iloc[i - k] <= 0 for k in range(1, MACD_LOOKBACK + 1))
     if not flip:
         fails.append("macd")
     vavg = r["vavg20"]
@@ -127,7 +133,7 @@ def check_bar(d: pd.DataFrame, i: int, expiry_day: bool = False) -> dict:
            "hist": round(r["hist"], 2), "hist_prev": round(h.iloc[i - 1], 2),
            "rsi": round(float(r["rsi"]), 1) if r["rsi"] == r["rsi"] else None,
            "vwap": round(r["vwap"], 2), "vol": int(r["volume"]), "vol_ratio": round(vr, 2),
-           "bar": r["timestamp"].strftime("%Y-%m-%d %H:%M")}
+           "bar": r["timestamp"].strftime("%Y-%m-%d %H:%M"), "stage": "crossed" if crossed else "starting"}
     return {"ok": not fails, "fails": fails, "ind": ind}
 
 
@@ -404,7 +410,7 @@ class PremiumWatch:
         lot = a["lot"]
         extras = " · ".join(a["extras"]) if a["extras"] else "index trend not confirming yet"
         msg = (f"👀 *WATCH {a['contract']}* ({a['expiry']}) · grade {a['grade']}\n"
-               f"5m crossover on the premium chart: EMA9 over EMA21, MACD turned green "
+               f"5m crossover {'done' if ind.get('stage') == 'crossed' else 'starting (blue meeting red)'} on the premium chart, MACD green "
                f"({ind['hist_prev']:+.1f} → {ind['hist']:+.1f}), volume {ind['vol_ratio']:.1f}x, "
                f"above VWAP {ind['vwap']:.1f}\n"
                f"*Buy near* ₹{a['entry']:.1f} · *SL* ₹{a['sl']:.1f} (₹{a['risk_per_lot']:,}/lot) · "
