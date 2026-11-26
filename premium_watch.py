@@ -223,7 +223,7 @@ class PremiumWatch:
         self.client, self.master, self.instruments = client, master, instruments
         self.send_slack, self.bias_fn, self.log, self.tz = send_slack, bias_fn, log, tz
         self.watch_list = [s.strip().upper() for s in
-                           os.environ.get("PW_INSTRUMENTS", "NIFTY,BANKNIFTY").split(",") if s.strip()]
+                           os.environ.get("PW_INSTRUMENTS", "NIFTY").split(",") if s.strip()]
         self.enabled = os.environ.get("PW_ENABLED", "1") != "0"
         self.lock = threading.Lock()
         self.alerts: list[dict] = []          # today's alerts, newest last

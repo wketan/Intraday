@@ -942,7 +942,7 @@
   const PW_NEED = { no_cross: 'blue over red', macd: 'MACD green', volume: 'volume', below_vwap: 'above VWAP', weak_bar: 'strong candle', extended: 'not stretched' };
   function pwSection() {
     const pw = S.pw, al = ((pw && pw.alerts) || []).slice().reverse();
-    const head = `<div class="tb rise" style="--i:8" id="go-pw"><h2>Crossover watch <span class="tag">${al.length}</span></h2><span class="stamp">5-min option chart: blue EMA crosses red, MACD turns green, volume jumps · NIFTY and BANK NIFTY, ATM ±2</span></div>`;
+    const head = `<div class="tb rise" style="--i:8" id="go-pw"><h2>Crossover watch <span class="tag">${al.length}</span></h2><span class="stamp">5-min option chart: blue EMA crosses red, MACD turns green, volume jumps · NIFTY, ATM ±2 strikes</span></div>`;
     if (!pw) return head + `<div class="kpis six"><div class="kpi tl t-butter pop" style="--i:8"><div class="lab">Crossover watch</div><div class="nm">Waiting for the engine</div><div class="sub">${esc(S.pwErr || 'loading')}</div></div></div>`;
     const td = pw.today || {}, scans = Object.values(pw.last_scan || {});
     const lastBar = scans.map(x => x.bar).sort().slice(-1)[0];
