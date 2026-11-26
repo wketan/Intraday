@@ -38,7 +38,9 @@ Levels per lot (Ketan's ask: Rs 2,000 to 3,000 per lot is enough):
 
 from __future__ import annotations
 
+import json
 import os
+import sqlite3
 import threading
 import time
 from datetime import datetime, timedelta
@@ -297,16 +299,112 @@ def _norm(df: pd.DataFrame) -> pd.DataFrame:
     return d.sort_values("timestamp").reset_index(drop=True)
 
 
+def follow_forming(d: pd.DataFrame, i: int, entry: float, target: float, lot: int) -> dict:
+    """Did the premium reach the forecast price within HOLD_MIN after forming bar i?"""
+    t0 = d["timestamp"].iloc[i]
+    after = d[(d["timestamp"] > t0) & (d["timestamp"] <= t0 + timedelta(minutes=HOLD_MIN))]
+    after = after[after["timestamp"].dt.date == t0.date()]
+    if not len(after):
+        return {"result": "OPEN"}
+    hi, lo = float(after["high"].max()), float(after["low"].min())
+    if hi >= target:
+        at = after[after["high"] >= target]["timestamp"].iloc[0].strftime("%H:%M")
+        return {"result": "HIT", "at": at, "max_seen": round(hi, 2), "min_seen": round(lo, 2),
+                "gain_pts": round(hi - entry, 1), "pnl_per_lot": round((target - entry) * lot)}
+    if len(after) < HOLD_MIN // 5:
+        return {"result": "OPEN", "max_seen": round(hi, 2)}
+    last = float(after["close"].iloc[-1])
+    return {"result": "MISS", "at": after["timestamp"].iloc[-1].strftime("%H:%M"), "max_seen": round(hi, 2),
+            "min_seen": round(lo, 2), "gain_pts": round(hi - entry, 1), "pnl_per_lot": round((last - entry) * lot)}
+
+
+class EventStore:
+    """Every crossover alert, forming forecast and skipped cross, with its outcome, so the
+    success rate can be counted across days. One SQLite table; payload kept as JSON."""
+
+    def __init__(self, path):
+        self.path = path
+        try:
+            with sqlite3.connect(self.path) as c:
+                c.execute("""CREATE TABLE IF NOT EXISTS pw_events (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT, day TEXT, time TEXT, kind TEXT,
+                    contract TEXT, bar TEXT, result TEXT DEFAULT 'OPEN', payload TEXT,
+                    UNIQUE(kind, contract, day, bar))""")
+        except Exception:
+            self.path = None
+
+    def add(self, kind, ev):
+        if not self.path:
+            return
+        with sqlite3.connect(self.path) as c:
+            c.execute("INSERT OR IGNORE INTO pw_events (day, time, kind, contract, bar, result, payload) "
+                      "VALUES (?,?,?,?,?,?,?)", (ev["day"], ev["time"], kind, ev["contract"], ev["bar"],
+                                                 (ev.get("outcome") or {}).get("result", "OPEN"),
+                                                 json.dumps(ev, default=str)))
+
+    def update(self, kind, ev):
+        if not self.path:
+            return
+        with sqlite3.connect(self.path) as c:
+            c.execute("UPDATE pw_events SET result=?, payload=? WHERE kind=? AND contract=? AND day=? AND bar=?",
+                      ((ev.get("outcome") or {}).get("result", "OPEN"), json.dumps(ev, default=str),
+                       kind, ev["contract"], ev["day"], ev["bar"]))
+
+    def rows(self, where="1=1", args=()):
+        if not self.path:
+            return []
+        with sqlite3.connect(self.path) as c:
+            out = []
+            for kind, payload in c.execute(f"SELECT kind, payload FROM pw_events WHERE {where} ORDER BY day, time", args):
+                ev = json.loads(payload); ev["kind"] = kind; out.append(ev)
+            return out
+
+    def restore(self, path):
+        """Re-seed from pw_backfill.json after a deploy wiped the DB (only when empty)."""
+        if not self.path or not os.path.exists(path):
+            return 0
+        with sqlite3.connect(self.path) as c:
+            if c.execute("SELECT COUNT(*) FROM pw_events").fetchone()[0]:
+                return 0
+        n = 0
+        for ev in json.load(open(path)):
+            k = ev.pop("kind", None)
+            if k and (ev.get("outcome") or {}).get("result", "OPEN") != "OPEN":
+                self.add(k, ev); n += 1
+        return n
+
+
+def score(rows) -> dict:
+    """Success rates per kind. watch: T1/T2 = success. forming: reached the forecast.
+    skipped: the filter was right when the what-if trade would NOT have hit T1."""
+    out = {}
+    for kind in ("watch", "forming", "skipped"):
+        rs = [r for r in rows if r["kind"] == kind and (r.get("outcome") or {}).get("result") not in (None, "OPEN")]
+        if kind == "watch":
+            ok = [r for r in rs if r["outcome"]["result"] in ("T1", "T2")]
+        elif kind == "forming":
+            ok = [r for r in rs if r["outcome"]["result"] == "HIT"]
+        else:
+            ok = [r for r in rs if r["outcome"]["result"] not in ("T1", "T2")]
+        out[kind] = {"closed": len(rs), "success": len(ok),
+                     "pct": round(len(ok) / len(rs) * 100) if rs else None,
+                     "pnl_per_lot": sum((r["outcome"].get("pnl_per_lot") or 0) for r in rs),
+                     "open": sum(1 for r in rows if r["kind"] == kind and (r.get("outcome") or {}).get("result", "OPEN") == "OPEN")}
+    return out
+
+
 # ── live scanner ────────────────────────────────────────────────────────────
 
 class PremiumWatch:
     """Own thread. Scans once per 5-minute bar, ~25 s after it closes."""
 
     def __init__(self, client, master, instruments: dict, send_slack, bias_fn=None, log=None,
-                 tz=None, chain_fn=None):
+                 tz=None, chain_fn=None, db_path=None):
         self.client, self.master, self.instruments = client, master, instruments
         self.send_slack, self.bias_fn, self.log, self.tz = send_slack, bias_fn, log, tz
         self.chain_fn = chain_fn
+        self.store = EventStore(db_path) if db_path else None
+        self._scorecard_day = None
         self._form_last: dict = {}
         self.watch_list = [s.strip().upper() for s in
                            os.environ.get("PW_INSTRUMENTS", "NIFTY").split(",") if s.strip()]
@@ -337,6 +435,17 @@ class PremiumWatch:
         if self.running or not self.enabled:
             return
         self.running = True
+        if self.store:
+            try:
+                n = self.store.restore(os.path.join(os.path.dirname(os.path.abspath(__file__)), "pw_backfill.json"))
+                if n:
+                    self._info(f"restored {n} scored events from pw_backfill.json")
+                today = self._now().strftime("%Y-%m-%d")
+                self.alerts = [r for r in self.store.rows("kind='watch' AND day=?", (today,))]
+                for a in self.alerts:
+                    self._contract_last[a["contract"]] = self._now()
+            except Exception as e:
+                self._warn(f"event store load: {e}")
         threading.Thread(target=self._loop, daemon=True, name="PremiumWatch").start()
         self._info(f"running for {', '.join(self.watch_list)}")
 
@@ -455,6 +564,16 @@ class PremiumWatch:
                                      "why": chk["fails"], "ltp": chk["ind"]["close"],
                                      "macd_green_since": chk["ind"].get("macd_green_since"),
                                      "vwap": chk["ind"].get("vwap"), "vol_ratio": chk["ind"].get("vol_ratio")}
+                nw = self._now()
+                recent = [self._contract_last.get(label), self._form_last.get("skip:" + label)]
+                if self.store and chk["ind"]["close"] >= MIN_PREMIUM and \
+                        not any(x and nw - x < timedelta(minutes=CONTRACT_COOLDOWN_MIN) for x in recent):
+                    self._form_last["skip:" + label] = nw
+                    lot0 = int(row.get("lotsize") or self.instruments[name]["lot_size"])
+                    self.store.add("skipped", {"day": self._now().strftime("%Y-%m-%d"), "time": self._now().strftime("%H:%M"),
+                                               "contract": label, "token": row["token"], "bar": chk["ind"]["bar"][-5:],
+                                               "lot": lot0, "why": chk["fails"], **levels(d, i, lot0),
+                                               "outcome": {"result": "OPEN"}})
             if "crossed_earlier" in fr and label not in self.skips:
                 # After a restart: look back at the cross bar itself to say why it was skipped.
                 today_s = self._now().strftime("%Y-%m-%d")
@@ -484,7 +603,8 @@ class PremiumWatch:
                     pot *= 0.5
                 lot = int(row.get("lotsize") or self.instruments[name]["lot_size"])
                 ltp = chk["ind"]["close"]
-                forming.append({"contract": label, "ltp": ltp, "potential": round(pot, 1),
+                forming.append({"contract": label, "token": row["token"], "bar": chk["ind"]["bar"][-5:],
+                                "lot": lot, "ltp": ltp, "potential": round(pot, 1),
                                 "target": round(ltp + pot, 1), "per_lot": round(pot * lot),
                                 "by": (self._now() + timedelta(minutes=30)).strftime("%H:%M"),
                                 "reach_atr": round(reach, 1), "oi_cap": round(cap, 1) if cap else None,
@@ -520,6 +640,17 @@ class PremiumWatch:
                                     "contracts": rows, "forming": forming,
                                     "odds": FORM_ODDS}
         self._post_forming(name, forming)
+        if self.store:
+            now = self._now()
+            for f in forming:
+                if not f["show"]:
+                    continue
+                last = self._form_last.get("rec:" + f["contract"])
+                if last and now - last < timedelta(minutes=HOLD_MIN):
+                    continue
+                self._form_last["rec:" + f["contract"]] = now
+                self.store.add("forming", {**f, "day": now.strftime("%Y-%m-%d"), "time": now.strftime("%H:%M"),
+                                           "entry": f["ltp"], "outcome": {"result": "OPEN"}})
         if not cands:
             return
         now = self._now()
@@ -543,6 +674,8 @@ class PremiumWatch:
                  "outcome": {"result": "OPEN"}, "others": len(cands) - 1, "pot": best["pot"]}
         with self.lock:
             self.alerts.append(alert)
+        if self.store:
+            self.store.add("watch", {**alert, "bar": alert["bar"]})
         self._contract_last[best["label"]] = now
         self._index_last[name] = now
         self._info(f"WATCH {best['label']} grade {grade} entry {lv['entry']}")
@@ -579,6 +712,7 @@ class PremiumWatch:
             return
         f = max(ok, key=lambda x: x["potential"])
         self._form_last[name] = self._form_last[f["contract"]] = now
+        f["slack"] = True
         wall = (f"next {'call' if f['contract'].endswith('CE') else 'put'} OI wall {int(f['wall'])} "
                 f"({f['room']:.0f} pts away)") if f["wall"] else "no OI wall data"
         flow = f" · OI: {f['flow_note']}" if f["flow_note"] else ""
@@ -612,28 +746,76 @@ class PremiumWatch:
             self._warn(f"slack failed: {e}")
 
     def _update_outcomes(self):
-        with self.lock:
-            open_ = [a for a in self.alerts if a["outcome"].get("result") == "OPEN"]
-        for a in open_:
+        """Score every open event (any kind, any day still in the candle window)."""
+        if self.store:
+            evs = self.store.rows("result='OPEN'")
+        else:
+            with self.lock:
+                evs = [dict(a, kind="watch") for a in self.alerts if a["outcome"].get("result") == "OPEN"]
+        for a in evs:
             try:
-                df = self.client.candles(a["token"], "NFO", "FIVE_MINUTE", 1)
+                kind = a.pop("kind")
+                df = self.client.candles(a["token"], "NFO", "FIVE_MINUTE", 4)
                 if df is None or df.empty:
                     continue
                 d = _norm(df)
-                hit = d.index[d["timestamp"].dt.strftime("%H:%M") == a["bar"]]
-                hit = [j for j in hit if d["timestamp"].iloc[j].strftime("%Y-%m-%d") == a["day"]]
+                hit = [j for j in d.index[d["timestamp"].dt.strftime("%H:%M") == a["bar"]]
+                       if d["timestamp"].iloc[j].strftime("%Y-%m-%d") == a["day"]]
                 if not hit:
                     continue
-                res = follow(d, hit[-1], {k: a[k] for k in ("entry", "sl", "t1", "t2")}, a["lot"])
-                if res["result"] != "OPEN":
+                if kind == "forming":
+                    res = follow_forming(d, hit[-1], a["entry"], a["target"], a["lot"])
+                else:
+                    res = follow(d, hit[-1], {k: a[k] for k in ("entry", "sl", "t1", "t2")}, a["lot"])
+                if res["result"] == "OPEN":
+                    continue
+                a["outcome"] = res
+                if self.store:
+                    self.store.update(kind, a)
+                if kind == "watch":
                     with self.lock:
-                        a["outcome"] = res
+                        for m in self.alerts:
+                            if m["contract"] == a["contract"] and m["bar"] == a["bar"]:
+                                m["outcome"] = res
                     icon = {"T1": "✅", "T2": "✅", "SL": "❌", "TIME": "⏱"}.get(res["result"], "")
                     self.send_slack(f"{icon} WATCH result {a['contract']} ({a['time']}): {res['result']} "
                                     f"at {res.get('at')} · {'+' if res['pnl_per_lot'] >= 0 else ''}"
                                     f"₹{res['pnl_per_lot']:,}/lot · best ₹{res['max_seen']:.1f}")
+                elif kind == "forming" and a.get("slack"):
+                    self.send_slack(f"{'✅' if res['result'] == 'HIT' else '❌'} FORMING result {a['contract']} ({a['time']}): "
+                                    f"{'reached' if res['result'] == 'HIT' else 'did not reach'} ₹{a['target']:.1f} "
+                                    f"(best ₹{res['max_seen']:.1f}, {res['gain_pts']:+.0f} pts)")
             except Exception as e:
                 self._warn(f"outcome {a.get('contract')}: {e}")
+        self._maybe_scorecard()
+
+    def _maybe_scorecard(self):
+        """Once a day after 15:35 IST: today's and all-time success rates to Slack."""
+        now = self._now()
+        if not self.store or now.strftime("%H:%M") < "15:35" or self._scorecard_day == now.strftime("%Y-%m-%d"):
+            return
+        self._scorecard_day = now.strftime("%Y-%m-%d")
+        today = score(self.store.rows("day=?", (self._scorecard_day,)))
+        if not any(v["closed"] for v in today.values()):
+            return
+        allt = score(self.store.rows())
+        def line(lbl, k, what):
+            t, a = today[k], allt[k]
+            return (f"*{lbl}*: today {t['success']} of {t['closed']}{' (' + str(t['pct']) + '%)' if t['closed'] else ''} {what}"
+                    f" · all-time {a['success']} of {a['closed']}{' (' + str(a['pct']) + '%)' if a['closed'] else ''}")
+        self.send_slack("📊 *Crossover watch scorecard*\n"
+                        + line("Crossover alerts", "watch", f"hit T1 · {'+' if today['watch']['pnl_per_lot'] >= 0 else ''}₹{today['watch']['pnl_per_lot']:,}/lot") + "\n"
+                        + line("Forming forecasts", "forming", "reached the forecast price") + "\n"
+                        + line("Skipped crosses", "skipped", "were right to skip"))
+
+    def stats(self):
+        if not self.store:
+            return {"error": "no store"}
+        rows = self.store.rows()
+        days = sorted({r["day"] for r in rows})
+        return {"all_time": score(rows), "today": score([r for r in rows if r["day"] == self._now().strftime("%Y-%m-%d")]),
+                "days": len(days), "since": days[0] if days else None,
+                "events": [{k: v for k, v in r.items() if k != "token"} for r in rows[-200:]]}
 
     def snapshot(self):
         with self.lock:
@@ -645,4 +827,5 @@ class PremiumWatch:
                     "alerts": [{k: v for k, v in a.items() if k != "token"} for a in self.alerts],
                     "today": {"alerts": len(self.alerts), "closed": len(done), "wins": len(wins),
                               "pnl_per_lot": sum(a["outcome"]["pnl_per_lot"] for a in done)},
-                    "last_scan": self.last_scan}
+                    "last_scan": self.last_scan,
+                    "score": ({k: v for k, v in self.stats().items() if k != "events"} if self.store else None)}

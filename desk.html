@@ -946,8 +946,12 @@
     if (!pw) return head + `<div class="kpis six"><div class="kpi tl t-butter pop" style="--i:8"><div class="lab">Crossover watch</div><div class="nm">Waiting for the engine</div><div class="sub">${esc(S.pwErr || 'loading')}</div></div></div>`;
     const td = pw.today || {}, scans = Object.values(pw.last_scan || {});
     const lastBar = scans.map(x => x.bar).sort().slice(-1)[0];
-    const tiles = [`<div class="kpi tl t-lav pop" style="--i:8"><div class="lab"><span>Today</span><em>${lastBar ? 'bar ' + esc(lastBar) : 'idle'}</em></div><div class="nm">${al.length ? al.length + ' alert' + (al.length === 1 ? '' : 's') : 'No crossover yet'}</div>
-      <div class="val">${td.closed ? inr(td.pnl_per_lot, true) : '-'}</div><div class="sub">${td.closed ? `${td.wins} of ${td.closed} hit T1 · per lot` : 'Checks every 5 min, 09:30 to 14:45. Alerts go to Slack #trading.'}</div></div>`];
+    const sc = (pw.score || {}).all_time || {}, w = sc.watch || {}, fo = sc.forming || {}, sk = sc.skipped || {};
+    const frac = x => x && x.closed ? `${x.success} of ${x.closed} (${x.pct}%)` : 'none yet';
+    const tiles = [`<div class="kpi tl t-lav pop" style="--i:8" title="Every alert is scored automatically 30 minutes later. Kept across days since ${esc((pw.score || {}).since || 'today')}."><div class="lab"><span>Success so far</span><em>${lastBar ? 'bar ' + esc(lastBar) : 'idle'}</em></div>
+      <div class="nm">${al.length ? al.length + ' alert' + (al.length === 1 ? '' : 's') + ' today' : 'No crossover alert today'}</div>
+      <div class="val">${w.closed ? w.pct + '%' : fo.closed ? fo.pct + '%' : '-'}</div>
+      <div class="sub">${w.closed || fo.closed || sk.closed ? `Alerts hit T1: ${frac(w)} · forecasts reached: ${frac(fo)} · right to skip: ${frac(sk)}` : 'Every alert is scored 30 min later. The rate builds from here.'}</div></div>`];
     al.forEach((a, i) => {
       const o = a.outcome || {}, r = o.result || 'OPEN';
       const tone = r === 'T1' || r === 'T2' ? 'mint' : r === 'SL' ? 'blush' : r === 'TIME' ? 'butter' : 'sky';

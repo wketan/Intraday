@@ -7914,7 +7914,13 @@ def _pw_chain(name):
 
 
 pw_watch = PremiumWatch(engine.client, _master, INSTRUMENTS, SlackAlert.send,
-                        bias_fn=_sm_bias, log=log, tz=IST, chain_fn=_pw_chain)
+                        bias_fn=_sm_bias, log=log, tz=IST, chain_fn=_pw_chain, db_path=DB_PATH)
+
+
+@app.route("/api/pw/stats")
+def pw_stats():
+    """Success rate of crossover alerts, forming forecasts and skipped crosses (all days kept)."""
+    return jsonify(pw_watch.stats())
 
 
 @app.route("/api/pw/live")
