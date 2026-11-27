@@ -551,16 +551,18 @@ class PremiumWatch:
         b = bars.get(start)
         if b is None:
             full = bool(prev and (t - prev[0]).total_seconds() <= 15 and (prev[0] >= start - timedelta(minutes=5)))
-            b = bars[start] = {"o": px, "h": px, "l": px, "c": px, "full": full and prev[1] is not None and vcum is not None,
+            # Open = last price before the bar started (what Angel's candle shows), when known.
+            o = prev[2] if full and len(prev) > 2 else px
+            b = bars[start] = {"o": o, "h": max(o, px), "l": min(o, px), "c": px, "full": full and prev[1] is not None and vcum is not None,
                                "v0": prev[1] if prev else None, "v1": vcum}
             for k in [k for k in bars if k < start - timedelta(hours=8)]:
                 bars.pop(k, None)
         b["h"], b["l"], b["c"] = max(b["h"], px), min(b["l"], px), px
         if vcum is not None:
             b["v1"] = vcum
-        self._tlast[tok] = (t, vcum)
+        self._tlast[tok] = (t, vcum, px)
 
-    def _bars_for(self, tok, label, bar_close):
+    def _bars_for(self, tok, label, bar_close, lot=1):
         """Candles for one contract up to the bar that just closed. Uses Angel's history once
         (and again only if the live-quote bars have a gap), then the bars built from quotes."""
         tok = str(tok)
@@ -577,7 +579,8 @@ class PremiumWatch:
             if all(t in tb and tb[t]["full"] for t in need):
                 if need:
                     add = pd.DataFrame([{"timestamp": t, "open": tb[t]["o"], "high": tb[t]["h"], "low": tb[t]["l"],
-                                         "close": tb[t]["c"], "volume": max(0.0, (tb[t]["v1"] or 0) - (tb[t]["v0"] or 0))}
+                                         # quotes count units, Angel candles count lots (checked 27 Nov: ratio 64-65)
+                                         "close": tb[t]["c"], "volume": max(0.0, (tb[t]["v1"] or 0) - (tb[t]["v0"] or 0)) / max(1, lot)}
                                         for t in need])
                     self._base[tok] = base = pd.concat([base, add], ignore_index=True)
                 self.bar_source[label] = "live quotes"
@@ -719,7 +722,8 @@ class PremiumWatch:
         for row in contracts:
             label = f"{name} {int(row['strike'])} {row['type']}"
             self.step = f"{self._now().strftime('%H:%M:%S')} {name}: bars {label}"
-            df = self._bars_for(row["token"], label, bar_close)
+            df = self._bars_for(row["token"], label, bar_close,
+                                int(row.get("lotsize") or self.instruments[name]["lot_size"]))
             if df is None or df.empty or len(df) < 35:
                 continue
             d = indicators(_norm(df))

@@ -166,5 +166,50 @@
    "below_vwap",
    "weak_bar"
   ]
+ },
+ {
+  "bar": "10:25",
+  "contract": "NIFTY 25700 PE",
+  "day": "2026-11-27",
+  "entry": 122.1,
+  "kind": "skipped",
+  "lot": 65,
+  "outcome": {
+   "result": "OPEN"
+  },
+  "risk_per_lot": 1500,
+  "sl": 99.02,
+  "t1": 152.87,
+  "t2": 168.25,
+  "time": "10:34",
+  "why": [
+   "macd"
+  ]
+ },
+ {
+  "atr": 15.31,
+  "bar": "10:20",
+  "contract": "NIFTY 25700 PE",
+  "day": "2026-11-27",
+  "entry": 118.65,
+  "flow": "neutral",
+  "flow_note": "",
+  "kind": "cross",
+  "lot": 65,
+  "outcome": {
+   "at": "10:35",
+   "gain_pts": 26.2,
+   "max_seen": 144.9,
+   "min_seen": 110.05,
+   "pnl_per_lot": 1492,
+   "result": "HIT"
+  },
+  "potential": 23.0,
+  "reach_factor": 1.5,
+  "room": 270.2,
+  "target": 141.6,
+  "time": "10:34",
+  "vol_ratio": 1.6,
+  "wall": 25500.0
  }
 ]
