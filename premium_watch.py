@@ -433,6 +433,9 @@ class PremiumWatch:
         self._tlast: dict = {}                # token -> (time, cumulative volume) of the last quote
         self._base: dict = {}                 # token -> candle history from Angel (fetched once)
         self.bar_source: dict = {}            # contract -> "live quotes" / "Angel candles"
+        self.errors: list = []                # last 15 warnings, shown in /api/pw/live
+        self.step = "idle"                    # what the scan is doing right now
+        self._seeded_this_scan = 0
         self.learned: dict = {}
         self._form_last: dict = {}
         self.watch_list = [s.strip().upper() for s in
@@ -457,6 +460,8 @@ class PremiumWatch:
             self.log.info(f"[PW] {msg}")
 
     def _warn(self, msg):
+        self.errors.append(f"{self._now().strftime('%H:%M:%S')} {msg}")
+        del self.errors[:-15]
         if self.log:
             self.log.warning(f"[PW] {msg}")
 
@@ -492,6 +497,7 @@ class PremiumWatch:
                     if (now - bar_close).total_seconds() >= 25 and self._last_bar != bar_close:
                         self._last_bar = bar_close
                         self.scan(bar_close)
+                        self.step = f"{self._now().strftime('%H:%M:%S')} scan done for bar {(bar_close - timedelta(minutes=5)).strftime('%H:%M')}"
                 elif now.strftime("%H:%M") < "09:00" and self.alerts and \
                         self.alerts[0].get("day") != now.strftime("%Y-%m-%d"):
                     with self.lock:
@@ -576,8 +582,12 @@ class PremiumWatch:
                     self._base[tok] = base = pd.concat([base, add], ignore_index=True)
                 self.bar_source[label] = "live quotes"
                 return base
+        if self._seeded_this_scan >= int(os.environ.get("PW_SEED_PER_SCAN", "4")):
+            return None          # the rest next scan; live quotes keep building bars meanwhile
+        self._seeded_this_scan += 1
         df = self.client.candles(tok, "NFO", "FIVE_MINUTE", 3, force_refresh=True)
         if df is None or df.empty:
+            self._warn(f"{label}: Angel returned no candles")
             return df
         d = _norm(df)[["timestamp", "open", "high", "low", "close", "volume"]]
         # Keep only closed bars; the bar still forming would be counted twice later.
@@ -636,7 +646,7 @@ class PremiumWatch:
         exp = exps[pick]
         atm = round(spot / gap) * gap
         out = []
-        for k in range(-STRIKES_EACH_SIDE, STRIKES_EACH_SIDE + 1):
+        for k in sorted(range(-STRIKES_EACH_SIDE, STRIKES_EACH_SIDE + 1), key=abs):   # ATM first
             for ot in ("CE", "PE"):
                 row = self.master.nfo.get((prefix, float(atm + k * gap), ot, exp))
                 if row:
@@ -682,10 +692,16 @@ class PremiumWatch:
 
     def _scan_index(self, name, bar_close):
         t_start = time.time()
+        self._seeded_this_scan = 0
+        self.step = f"{self._now().strftime('%H:%M:%S')} {name}: spot"
         spot, idx_trend = self._spot_and_trend(name)
         if not spot:
+            self._warn(f"{name}: no spot price, scan skipped")
             return
+        self.step = f"{self._now().strftime('%H:%M:%S')} {name}: contracts (spot {spot})"
         contracts, exp_date = self._contracts(name, spot)
+        if not contracts:
+            self._warn(f"{name}: no contracts found in the scrip master (spot {spot})")
         self._live_tokens[name] = {str(r["token"]): f"{name} {int(r['strike'])} {r['type']}" for r in contracts}
         expiry_day = exp_date == self._now().date()
         bias = None
@@ -702,6 +718,7 @@ class PremiumWatch:
         gap_pts = self.instruments[name]["strike_gap"]
         for row in contracts:
             label = f"{name} {int(row['strike'])} {row['type']}"
+            self.step = f"{self._now().strftime('%H:%M:%S')} {name}: bars {label}"
             df = self._bars_for(row["token"], label, bar_close)
             if df is None or df.empty or len(df) < 35:
                 continue
@@ -1104,6 +1121,7 @@ class PremiumWatch:
                                          "v": (b["v1"] or 0) - (b["v0"] or 0) if b["v0"] is not None else None, "full": b["full"]}
                                         for k, b in sorted(bars.items())[-4:]]
                                   for tok, bars in list(self._tbars.items())[:2]},
+                    "step": self.step, "errors": self.errors[-15:],
                     "live_prices": {"every_s": float(os.environ.get("PW_TICK_S", "5")),
                                     "last": max((v[1] for v in self.ltp_now.values()), default=None)},
                     "score": ({k: v for k, v in self.stats().items() if k != "events"} if self.store else None)}
