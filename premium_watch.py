@@ -127,10 +127,8 @@ def check_bar(d: pd.DataFrame, i: int, expiry_day: bool = False) -> dict:
     if not (crossed or starting):
         if e9.iloc[i] > e21.iloc[i]:
             # Blue went over red earlier than 2 bars ago: the entry is gone, not coming.
-            j = i
-            while j > 0 and e9.iloc[j - 1] > e21.iloc[j - 1]:
-                j -= 1
-            crossed_at = d["timestamp"].iloc[j].strftime("%H:%M")
+            j = cross_index(d, i)
+            crossed_at = d["timestamp"].iloc[j].strftime("%H:%M") if j is not None else None
             fails.append("crossed_earlier")
         else:
             fails.append("no_cross")
@@ -163,6 +161,27 @@ def check_bar(d: pd.DataFrame, i: int, expiry_day: bool = False) -> dict:
            "bar": r["timestamp"].strftime("%Y-%m-%d %H:%M"), "stage": "crossed" if crossed else "starting",
            "crossed_at": crossed_at, "macd_green_since": green_since}
     return {"ok": not fails, "fails": fails, "ind": ind}
+
+
+def cross_index(d: pd.DataFrame, i: int):
+    """Bar where blue last went over red, today only. None if blue is under red now, or it
+    went over on an earlier day (that cross is history, not a live setup)."""
+    e9, e21 = d["ema9"], d["ema21"]
+    if not e9.iloc[i] > e21.iloc[i]:
+        return None
+    day = d["timestamp"].iloc[i].date()
+    j = i
+    while j > 0 and e9.iloc[j - 1] > e21.iloc[j - 1]:
+        j -= 1
+        if d["timestamp"].iloc[j].date() != day:
+            return None
+    return j if j > 0 else None
+
+
+def atr_at(d: pd.DataFrame, i: int) -> float:
+    tr = pd.concat([d["high"] - d["low"], (d["high"] - d["close"].shift()).abs(),
+                    (d["low"] - d["close"].shift()).abs()], axis=1).max(axis=1)
+    return float(tr.ewm(com=13, adjust=False).mean().iloc[i])
 
 
 def check_forming(d: pd.DataFrame, i: int) -> dict | None:
@@ -378,11 +397,11 @@ def score(rows) -> dict:
     """Success rates per kind. watch: T1/T2 = success. forming: reached the forecast.
     skipped: the filter was right when the what-if trade would NOT have hit T1."""
     out = {}
-    for kind in ("watch", "forming", "skipped"):
+    for kind in ("watch", "forming", "cross", "skipped"):
         rs = [r for r in rows if r["kind"] == kind and (r.get("outcome") or {}).get("result") not in (None, "OPEN")]
         if kind == "watch":
             ok = [r for r in rs if r["outcome"]["result"] in ("T1", "T2")]
-        elif kind == "forming":
+        elif kind in ("forming", "cross"):
             ok = [r for r in rs if r["outcome"]["result"] == "HIT"]
         else:
             ok = [r for r in rs if r["outcome"]["result"] not in ("T1", "T2")]
@@ -405,6 +424,8 @@ class PremiumWatch:
         self.chain_fn = chain_fn
         self.store = EventStore(db_path) if db_path else None
         self._scorecard_day = None
+        self.reach_factor = FORM_REACH_ATR
+        self.learned: dict = {}
         self._form_last: dict = {}
         self.watch_list = [s.strip().upper() for s in
                            os.environ.get("PW_INSTRUMENTS", "NIFTY").split(",") if s.strip()]
@@ -446,6 +467,7 @@ class PremiumWatch:
                     self._contract_last[a["contract"]] = self._now()
             except Exception as e:
                 self._warn(f"event store load: {e}")
+            self._learn()
         threading.Thread(target=self._loop, daemon=True, name="PremiumWatch").start()
         self._info(f"running for {', '.join(self.watch_list)}")
 
@@ -539,7 +561,7 @@ class PremiumWatch:
         if self.bias_fn:
             b = self.bias_fn(name)
             bias = b.get("score") if isinstance(b, dict) else None
-        cands, rows, forming = [], [], []
+        cands, rows, forming, live = [], [], [], []
         ch = None
         if self.chain_fn:
             try:
@@ -594,24 +616,45 @@ class PremiumWatch:
                          "skip": sk if sk and sk["day"] == self._now().strftime("%Y-%m-%d") else None})
             fm = check_forming(d, i) if not chk["ok"] else None
             if fm and chk["ind"]["close"] >= MIN_PREMIUM:
-                oi = oi_read((ch or {}).get("chain") or [], (ch or {}).get("an") or {}, spot,
-                             row["strike"], row["type"], gap_pts)
-                reach = FORM_REACH_ATR * fm["atr"]
-                cap = oi["delta"] * oi["room"] if oi["room"] else None
-                pot = min(reach, cap) if cap else reach
-                if oi["flow"] == "against":
-                    pot *= 0.5
                 lot = int(row.get("lotsize") or self.instruments[name]["lot_size"])
                 ltp = chk["ind"]["close"]
-                forming.append({"contract": label, "token": row["token"], "bar": chk["ind"]["bar"][-5:],
-                                "lot": lot, "ltp": ltp, "potential": round(pot, 1),
-                                "target": round(ltp + pot, 1), "per_lot": round(pot * lot),
-                                "by": (self._now() + timedelta(minutes=30)).strftime("%H:%M"),
-                                "reach_atr": round(reach, 1), "oi_cap": round(cap, 1) if cap else None,
-                                "wall": oi["wall"], "room": oi["room"], "flow": oi["flow"],
-                                "flow_note": oi["note"], "gap_pct": fm["gap_pct"],
-                                "vol_ratio": fm["vol_ratio"], "show": pot >= MIN_POTENTIAL,
+                pt = self._potential(d, i, ch, spot, row, gap_pts, ltp)
+                forming.append({"stage": "forming", "contract": label, "token": row["token"],
+                                "bar": chk["ind"]["bar"][-5:], "lot": lot, "ltp": ltp,
+                                **pt, "per_lot": round(pt["potential"] * lot),
+                                "gap_pct": fm["gap_pct"], "vol_ratio": fm["vol_ratio"],
+                                "show": pt["potential"] >= MIN_POTENTIAL,
                                 "chain_age_s": int((ch or {}).get("age") or 0) if ch else None})
+            # Live crossover: blue went over red today, under 30 min ago. Older ones are history.
+            j = cross_index(d, i)
+            if j is not None and (i - j) * 5 < HOLD_MIN and d["close"].iloc[j] >= MIN_PREMIUM:
+                lot = int(row.get("lotsize") or self.instruments[name]["lot_size"])
+                cp, ltp = float(d["close"].iloc[j]), float(chk["ind"]["close"])
+                c_at = d["timestamp"].iloc[j].strftime("%H:%M")
+                pt = self._potential(d, j, ch, spot, row, gap_pts, cp,
+                                     start=d["timestamp"].iloc[j] + timedelta(minutes=5))
+                vr_j = d["volume"].iloc[j] / d["vavg20"].iloc[j] if d["vavg20"].iloc[j] == d["vavg20"].iloc[j] and d["vavg20"].iloc[j] else 0
+                sk = self.skips.get(label)
+                lv = {"stage": "just" if i - j <= 1 else "running", "contract": label,
+                      "crossed_at": c_at, "cross_price": round(cp, 2), "ltp": round(ltp, 2),
+                      "lot": lot, **pt, "per_lot": round(pt["potential"] * lot),
+                      "left": round(pt["target"] - ltp, 1), "mins": (i - j) * 5 + 5,
+                      "done_pct": round((ltp - cp) / pt["potential"] * 100) if pt["potential"] else None,
+                      "vol_ratio": round(float(vr_j), 2),
+                      "alerted": any(a["contract"] == label and a["day"] == self._now().strftime("%Y-%m-%d") and
+                                     a["bar"] >= (d["timestamp"].iloc[j] - timedelta(minutes=10)).strftime("%H:%M")
+                                     for a in self.alerts),
+                      "skip_why": sk["why"] if sk and sk["day"] == self._now().strftime("%Y-%m-%d") and sk["bar"] >= c_at else None,
+                      "skip": sk if sk and sk["day"] == self._now().strftime("%Y-%m-%d") else None}
+                live.append(lv)
+                if self.store and START_HM <= c_at <= END_HM:
+                    self.store.add("cross", {"day": self._now().strftime("%Y-%m-%d"), "time": self._now().strftime("%H:%M"),
+                                             "contract": label, "token": row["token"], "bar": c_at, "lot": lot,
+                                             "entry": round(cp, 2), "target": pt["target"], "potential": pt["potential"],
+                                             "atr": pt["atr"], "reach_factor": pt["reach_factor"],
+                                             "flow": pt["flow"], "flow_note": pt["flow_note"], "wall": pt["wall"],
+                                             "room": pt["room"], "vol_ratio": lv["vol_ratio"],
+                                             "outcome": {"result": "OPEN"}})
             if not chk["ok"] or chk["ind"]["close"] < MIN_PREMIUM:
                 continue
             lot = int(row.get("lotsize") or self.instruments[name]["lot_size"])
@@ -637,7 +680,8 @@ class PremiumWatch:
             self.last_scan[name] = {"bar": (bar_close - timedelta(minutes=5)).strftime("%H:%M"),
                                     "spot": spot, "index_trend": idx_trend, "bias": bias,
                                     "expiry": exp_date.isoformat() if exp_date else None,
-                                    "contracts": rows, "forming": forming,
+                                    "contracts": rows, "forming": forming, "live": live,
+                                    "reach_factor": self.reach_factor, "learn": self.learned,
                                     "odds": FORM_ODDS}
         self._post_forming(name, forming)
         if self.store:
@@ -681,20 +725,23 @@ class PremiumWatch:
         self._info(f"WATCH {best['label']} grade {grade} entry {lv['entry']}")
         self._post(alert)
 
-    def _potential(self, d, i, ch, spot, row, gap_pts, ltp):
-        tr = pd.concat([d["high"] - d["low"], (d["high"] - d["close"].shift()).abs(),
-                        (d["low"] - d["close"].shift()).abs()], axis=1).max(axis=1)
-        atr = float(tr.ewm(com=13, adjust=False).mean().iloc[i])
+    def _potential(self, d, i, ch, spot, row, gap_pts, base, start=None):
+        """How far the premium can run in the next 30 min from `base`: the premium's normal
+        5-min swing (ATR x the factor learned from past crosses), capped by the room to the
+        nearest big OI wall (index points x delta), halved when OI flow is against it."""
+        atr = atr_at(d, i)
         oi = oi_read((ch or {}).get("chain") or [], (ch or {}).get("an") or {}, spot,
                      row["strike"], row["type"], gap_pts)
-        reach = FORM_REACH_ATR * atr
+        reach = self.reach_factor * atr
         cap = oi["delta"] * oi["room"] if oi["room"] else None
         pot = min(reach, cap) if cap else reach
         if oi["flow"] == "against":
             pot *= 0.5
-        return {"potential": round(pot, 1), "target": round(ltp + pot, 1), "wall": oi["wall"],
+        return {"potential": round(pot, 1), "target": round(base + pot, 1), "wall": oi["wall"],
                 "room": oi["room"], "flow": oi["flow"], "flow_note": oi["note"],
-                "by": (self._now() + timedelta(minutes=30)).strftime("%H:%M")}
+                "atr": round(atr, 2), "reach_factor": self.reach_factor,
+                "oi_cap": round(cap, 1) if cap else None,
+                "by": ((start or self._now()) + timedelta(minutes=HOLD_MIN)).strftime("%H:%M")}
 
     def _post_forming(self, name, forming):
         """Heads-up before the cross: best forming contract with real potential, 30-min cooldown
@@ -763,7 +810,7 @@ class PremiumWatch:
                        if d["timestamp"].iloc[j].strftime("%Y-%m-%d") == a["day"]]
                 if not hit:
                     continue
-                if kind == "forming":
+                if kind in ("forming", "cross"):
                     res = follow_forming(d, hit[-1], a["entry"], a["target"], a["lot"])
                 else:
                     res = follow(d, hit[-1], {k: a[k] for k in ("entry", "sl", "t1", "t2")}, a["lot"])
@@ -789,12 +836,56 @@ class PremiumWatch:
                 self._warn(f"outcome {a.get('contract')}: {e}")
         self._maybe_scorecard()
 
+    def _learn(self):
+        """Learn from every scored crossover and forecast so the estimates get better daily.
+        1) Reach factor: how many premium ATRs a setup really ran in 30 min. Set to the 40th
+           percentile of past runs, so about 6 in 10 targets should be reached (once 15+ cases).
+        2) Hit rate by condition (OI flow, time of day, volume, alert sent or not), so the
+           scorecard shows which conditions are working and which are not."""
+        if not self.store:
+            return
+        try:
+            rows = self.store.rows("kind IN ('forming','cross') AND result!='OPEN'")
+            runs = []
+            for r in rows:
+                o = r.get("outcome") or {}
+                atr = r.get("atr") or ((r.get("reach_atr") or 0) / FORM_REACH_ATR)
+                if atr and o.get("max_seen") is not None:
+                    runs.append((o["max_seen"] - r["entry"]) / atr)
+            if len(runs) >= 15:
+                self.reach_factor = round(min(3.0, max(0.8, float(np.percentile(runs, 40)))), 2)
+            alerted = {(w["contract"], w["day"]) for w in self.store.rows("kind='watch'")}
+            groups = {
+                "OI with": lambda r: r.get("flow") == "with",
+                "OI neutral": lambda r: r.get("flow") == "neutral",
+                "OI against": lambda r: r.get("flow") == "against",
+                "before 11:00": lambda r: r.get("bar", "") < "11:00",
+                "11:00 to 13:00": lambda r: "11:00" <= r.get("bar", "") < "13:00",
+                "after 13:00": lambda r: r.get("bar", "") >= "13:00",
+                "volume 2x+": lambda r: (r.get("vol_ratio") or 0) >= 2,
+                "volume under 2x": lambda r: (r.get("vol_ratio") or 0) < 2,
+                "cross with alert": lambda r: r["kind"] == "cross" and (r["contract"], r["day"]) in alerted,
+                "cross, no alert": lambda r: r["kind"] == "cross" and (r["contract"], r["day"]) not in alerted,
+            }
+            out = {}
+            for g, fn in groups.items():
+                rs = [r for r in rows if fn(r)]
+                if rs:
+                    h = sum(1 for r in rs if r["outcome"]["result"] == "HIT")
+                    out[g] = {"n": len(rs), "hit": h, "pct": round(h / len(rs) * 100)}
+            self.learned = {"cases": len(runs), "reach_factor": self.reach_factor,
+                            "default": FORM_REACH_ATR, "active": len(runs) >= 15, "groups": out,
+                            "median_run_atr": round(float(np.median(runs)), 2) if runs else None}
+        except Exception as e:
+            self._warn(f"learn: {e}")
+
     def _maybe_scorecard(self):
         """Once a day after 15:35 IST: today's and all-time success rates to Slack."""
         now = self._now()
         if not self.store or now.strftime("%H:%M") < "15:35" or self._scorecard_day == now.strftime("%Y-%m-%d"):
             return
         self._scorecard_day = now.strftime("%Y-%m-%d")
+        self._learn()
         today = score(self.store.rows("day=?", (self._scorecard_day,)))
         if not any(v["closed"] for v in today.values()):
             return
@@ -805,8 +896,25 @@ class PremiumWatch:
                     f" · all-time {a['success']} of {a['closed']}{' (' + str(a['pct']) + '%)' if a['closed'] else ''}")
         self.send_slack("📊 *Crossover watch scorecard*\n"
                         + line("Crossover alerts", "watch", f"hit T1 · {'+' if today['watch']['pnl_per_lot'] >= 0 else ''}₹{today['watch']['pnl_per_lot']:,}/lot") + "\n"
+                        + line("Every crossover", "cross", "reached the expected price") + "\n"
                         + line("Forming forecasts", "forming", "reached the forecast price") + "\n"
-                        + line("Skipped crosses", "skipped", "were right to skip"))
+                        + line("Skipped crosses", "skipped", "were right to skip")
+                        + self._learn_line())
+
+    def _learn_line(self):
+        L = self.learned or {}
+        if not L.get("cases"):
+            return ""
+        g = [(k, v) for k, v in (L.get("groups") or {}).items() if v["n"] >= 3]
+        best = max(g, key=lambda x: x[1]["pct"]) if g else None
+        worst = min(g, key=lambda x: x[1]["pct"]) if g else None
+        txt = (f"\n🧠 *Learning*: {L['cases']} scored setups, typical 30-min run {L['median_run_atr']}x the premium's 5-min swing. "
+               + (f"Estimates now use {L['reach_factor']}x (was {L['default']}x)." if L["active"]
+                  else f"Estimates keep {L['default']}x until 15 cases."))
+        if best and worst and best[0] != worst[0]:
+            txt += (f" Working best: {best[0]} {best[1]['pct']}% ({best[1]['n']}). "
+                    f"Weakest: {worst[0]} {worst[1]['pct']}% ({worst[1]['n']}).")
+        return txt
 
     def stats(self):
         if not self.store:
@@ -814,7 +922,7 @@ class PremiumWatch:
         rows = self.store.rows()
         days = sorted({r["day"] for r in rows})
         return {"all_time": score(rows), "today": score([r for r in rows if r["day"] == self._now().strftime("%Y-%m-%d")]),
-                "days": len(days), "since": days[0] if days else None,
+                "days": len(days), "since": days[0] if days else None, "learn": self.learned,
                 "events": [{k: v for k, v in r.items() if k != "token"} for r in rows[-200:]]}
 
     def snapshot(self):

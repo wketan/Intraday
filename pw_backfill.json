@@ -1,1 +1,147 @@
-[]
+[
+ {
+  "bar": "14:40",
+  "contract": "NIFTY 25850 CE",
+  "day": "2026-11-26",
+  "entry": 224.35,
+  "exit_by": "15:17",
+  "expiry": "01DEC2026",
+  "extras": [
+   "NIFTY 5m trend agrees",
+   "Smart Money +0.19 agrees",
+   "RSI 59",
+   "volume 2.2x",
+   "OI: call writers leaving / put writers adding"
+  ],
+  "grade": "A",
+  "ind": {
+   "bar": "2026-11-26 14:40",
+   "close": 224.35,
+   "crossed_at": null,
+   "ema21": 193.18,
+   "ema9": 191.66,
+   "hist": 6.3,
+   "hist_prev": 3.91,
+   "macd_green_since": "14:25",
+   "rsi": 58.6,
+   "stage": "starting",
+   "vol": 48204,
+   "vol_ratio": 2.16,
+   "vwap": 204.43
+  },
+  "index": "NIFTY",
+  "kind": "watch",
+  "lot": 65,
+  "others": 1,
+  "outcome": {
+   "at": "15:10",
+   "max_seen": 246.0,
+   "pnl_per_lot": -559,
+   "result": "TIME"
+  },
+  "pot": {
+   "by": "15:16",
+   "flow": "with",
+   "flow_note": "call writers leaving / put writers adding",
+   "potential": 31.8,
+   "room": 96.7,
+   "target": 256.1,
+   "wall": 26000.0
+  },
+  "risk_per_lot": 1500,
+  "score": 6,
+  "sl": 201.27,
+  "symbol": "NIFTY01DEC2625850CE",
+  "t1": 255.12,
+  "t2": 270.5,
+  "time": "14:47"
+ },
+ {
+  "bar": "14:45",
+  "contract": "NIFTY 25900 CE",
+  "day": "2026-11-26",
+  "entry": 212.15,
+  "kind": "skipped",
+  "lot": 65,
+  "outcome": {
+   "at": "14:50",
+   "max_seen": 213.6,
+   "pnl_per_lot": -1500,
+   "result": "SL"
+  },
+  "risk_per_lot": 1500,
+  "sl": 189.07,
+  "t1": 242.92,
+  "t2": 258.3,
+  "time": "14:51",
+  "why": [
+   "extended"
+  ]
+ },
+ {
+  "bar": "14:45",
+  "contract": "NIFTY 25950 CE",
+  "day": "2026-11-26",
+  "entry": 184.85,
+  "kind": "skipped",
+  "lot": 65,
+  "outcome": {
+   "at": "14:50",
+   "max_seen": 186.15,
+   "pnl_per_lot": -1500,
+   "result": "SL"
+  },
+  "risk_per_lot": 1500,
+  "sl": 161.77,
+  "t1": 215.62,
+  "t2": 231.0,
+  "time": "14:51",
+  "why": [
+   "extended"
+  ]
+ },
+ {
+  "bar": "14:45",
+  "contract": "NIFTY 26000 CE",
+  "day": "2026-11-26",
+  "entry": 160.05,
+  "kind": "skipped",
+  "lot": 65,
+  "outcome": {
+   "at": "15:15",
+   "max_seen": 161.0,
+   "pnl_per_lot": -1076,
+   "result": "TIME"
+  },
+  "risk_per_lot": 1500,
+  "sl": 136.97,
+  "t1": 190.82,
+  "t2": 206.2,
+  "time": "14:51",
+  "why": [
+   "extended"
+  ]
+ },
+ {
+  "bar": "14:45",
+  "contract": "NIFTY 26050 CE",
+  "day": "2026-11-26",
+  "entry": 137.2,
+  "kind": "skipped",
+  "lot": 65,
+  "outcome": {
+   "at": "15:15",
+   "max_seen": 137.9,
+   "pnl_per_lot": -1007,
+   "result": "TIME"
+  },
+  "risk_per_lot": 1500,
+  "sl": 114.12,
+  "t1": 167.97,
+  "t2": 183.35,
+  "time": "14:51",
+  "why": [
+   "extended"
+  ]
+ }
+]

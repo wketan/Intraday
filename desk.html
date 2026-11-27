@@ -939,57 +939,67 @@
       <div class="sub">${idea ? `SL ₹${num(sl, 0)} · T1 ₹${num(t1, 0)}` : `₹${num(entry, 0)} → ₹${num(cur || entry, 0)} · T1 ₹${num(t1, 0)}`}</div>
       <div class="mtr"><b style="width:${P(cur || entry).toFixed(1)}%"></b><i style="left:${P(entry).toFixed(1)}%"></i></div></div>`;
   }
-  const PW_NEED = { no_cross: 'blue over red', macd: 'MACD green', volume: 'volume', below_vwap: 'above VWAP', weak_bar: 'strong candle', extended: 'not stretched' };
+  // Crossover watch shows LIVE setups only: about to cross, just crossed, crossed under 30 min ago.
+  // Anything older drops off; its result lives in the success tile.
+  const PW_WHY = (k, sk) => ({ macd: `MACD already green since ${(sk || {}).macd_green_since || 'earlier'}`, below_vwap: `under today's VWAP ₹${num((sk || {}).vwap, 0)}`,
+    volume: `volume only ${num((sk || {}).vol_ratio, 1)}x`, extended: 'already ran too far', weak_bar: 'weak candle' })[k] || k;
+  const pwOI = x => [x.wall ? `OI wall ${Math.round(x.wall)} (${num(x.room, 0)} pts away)` : '', x.flow_note ? (x.flow === 'against' ? 'OI against: ' : 'OI: ') + x.flow_note : ''].filter(Boolean).map(esc).join(' · ');
   function pwSection() {
-    const pw = S.pw, al = ((pw && pw.alerts) || []).slice().reverse();
-    const head = `<div class="tb rise" style="--i:8" id="go-pw"><h2>Crossover watch <span class="tag">${al.length}</span></h2><span class="stamp">5-min option chart: forming (about to cross) and crossed, with OI and a 30-min estimate · NIFTY, ATM ±2 strikes</span></div>`;
-    if (!pw) return head + `<div class="kpis six"><div class="kpi tl t-butter pop" style="--i:8"><div class="lab">Crossover watch</div><div class="nm">Waiting for the engine</div><div class="sub">${esc(S.pwErr || 'loading')}</div></div></div>`;
-    const td = pw.today || {}, scans = Object.values(pw.last_scan || {});
+    const pw = S.pw;
+    const head = `<div class="tb rise" style="--i:8" id="go-pw"><h2>Crossover watch <span class="tag">%LIVE%</span></h2><span class="stamp">Live only: about to cross, just crossed, crossed under 30 min ago · price targets from the premium's swing and OI · NIFTY, ATM ±2 strikes</span></div>`;
+    if (!pw) return head.replace('%LIVE%', '0') + `<div class="kpis six"><div class="kpi tl t-butter pop" style="--i:8"><div class="lab">Crossover watch</div><div class="nm">Waiting for the engine</div><div class="sub">${esc(S.pwErr || 'loading')}</div></div></div>`;
+    const scans = Object.values(pw.last_scan || {});
     const lastBar = scans.map(x => x.bar).sort().slice(-1)[0];
-    const sc = (pw.score || {}).all_time || {}, w = sc.watch || {}, fo = sc.forming || {}, sk = sc.skipped || {};
+    const sco = pw.score || {}, sc = sco.all_time || {}, w = sc.watch || {}, cr = sc.cross || {}, fo = sc.forming || {}, sk = sc.skipped || {};
+    const L = sco.learn || {};
     const frac = x => x && x.closed ? `${x.success} of ${x.closed} (${x.pct}%)` : 'none yet';
-    const tiles = [`<div class="kpi tl t-lav pop" style="--i:8" title="Every alert is scored automatically 30 minutes later. Kept across days since ${esc((pw.score || {}).since || 'today')}."><div class="lab"><span>Success so far</span><em>${lastBar ? 'bar ' + esc(lastBar) : 'idle'}</em></div>
-      <div class="nm">${al.length ? al.length + ' alert' + (al.length === 1 ? '' : 's') + ' today' : 'No crossover alert today'}</div>
-      <div class="val">${w.closed ? w.pct + '%' : fo.closed ? fo.pct + '%' : '-'}</div>
-      <div class="sub">${w.closed || fo.closed || sk.closed ? `Alerts hit T1: ${frac(w)} · forecasts reached: ${frac(fo)} · right to skip: ${frac(sk)}` : 'Every alert is scored 30 min later. The rate builds from here.'}</div></div>`];
-    al.forEach((a, i) => {
-      const o = a.outcome || {}, r = o.result || 'OPEN';
-      const tone = r === 'T1' || r === 'T2' ? 'mint' : r === 'SL' ? 'blush' : r === 'TIME' ? 'butter' : 'sky';
-      const [, strike, typ] = a.contract.split(' ');
-      tiles.push(`<div class="kpi tl t-${tone} pop" style="--i:${i + 9}" title="${esc((a.extras || []).join(' · '))}"><div class="lab"><span>${esc(a.time)} · grade ${esc(a.grade)}</span><em>${r === 'OPEN' ? 'open' : esc(r)}</em></div>
-        <div class="nm">${esc(a.index)} ${esc(strike)}<span class="ot">${esc(typ)}</span></div>
-        <div class="val">${r === 'OPEN' ? '₹' + num(a.entry, 1) : inr(o.pnl_per_lot, true)}</div>
-        <div class="sub">${r === 'OPEN' ? `SL ₹${num(a.sl, 0)} · T1 ₹${num(a.t1, 0)}${a.pot ? ` · could reach ₹${num(a.pot.target, 0)} by ${esc(a.pot.by)}` : ` · exit by ${esc(a.exit_by)}`}` : `${esc(r)} at ${esc(o.at || '')} · best ₹${num(o.max_seen, 0)} · per lot`}</div></div>`);
+    const tiles = [];
+    const T = (tone, i, lab, em, nm, val, sub, title) => `<div class="kpi tl t-${tone} pop" style="--i:${i + 9}"${title ? ` title="${esc(title)}"` : ''}><div class="lab"><span>${lab}</span><em>${em}</em></div>
+      <div class="nm">${nm}</div><div class="val">${val}</div><div class="sub">${sub}</div></div>`;
+    const NM = c => { const [ix, strike, typ] = c.split(' '); return `${esc(ix)} ${esc(strike)}<span class="ot">${esc(typ)}</span>`; };
+    // Open alerts (closed ones are history: counted in the success tile).
+    (pw.alerts || []).filter(a => ((a.outcome || {}).result || 'OPEN') === 'OPEN').reverse().forEach(a => {
+      tiles.push(T('mint', tiles.length, `Alert ${esc(a.time)} · grade ${esc(a.grade)}`, `exit by ${esc(a.exit_by)}`, NM(a.contract),
+        `₹${num(a.entry, 0)} → ₹${num(a.t1, 0)}`,
+        `Buy near ₹${num(a.entry, 1)} · SL ₹${num(a.sl, 0)} · T1 ₹${num(a.t1, 0)} (+₹2,000/lot)${a.pot ? ` · can reach ₹${num(a.pot.target, 0)} by ${esc(a.pot.by)}` : ''}`,
+        (a.extras || []).join(' · ')));
     });
-    // About to cross, with the engine's 30-minute estimate (ATR reach capped by the OI wall).
-    scans.flatMap(x => x.forming || []).filter(f => f.show).sort((x, y) => y.potential - x.potential).slice(0, Math.max(0, 6 - tiles.length)).forEach((f, i) => {
-      const [ix, strike, typ] = f.contract.split(' ');
-      const tone = f.flow === 'against' ? 'butter' : 'mint';
-      tiles.push(`<div class="kpi tl t-${tone} pop" style="--i:${i + 11}" title="${esc(((S.pw.last_scan || {}).NIFTY || {}).odds || '')}"><div class="lab"><span>Forming · ${esc(f.gap_pct)}% to cross</span><em>by ${esc(f.by)}</em></div>
-        <div class="nm">${esc(ix)} ${esc(strike)}<span class="ot">${esc(typ)}</span></div>
-        <div class="val">₹${num(f.ltp, 0)} → ₹${num(f.target, 0)}</div>
-        <div class="sub">+${num(f.potential, 0)} pts, ${inr(f.per_lot, true)}/lot${f.wall ? ` · OI wall ${esc(Math.round(f.wall))}` : ''}${f.flow_note ? ` · ${esc(f.flow_note)}` : ''}</div></div>`);
+    const live = scans.flatMap(x => (x.live || []).concat((x.forming || []).filter(f => f.show)));
+    const order = { just: 0, running: 1, forming: 2 };
+    live.sort((x, y) => order[x.stage] - order[y.stage] || y.potential - x.potential);
+    live.forEach(x => {
+      if (tiles.length >= 11) return;
+      const oi = pwOI(x), pl = `+${num(x.potential, 0)} pts (${inr(x.per_lot, true)}/lot)`;
+      if (x.stage === 'forming') {
+        tiles.push(T(x.flow === 'against' ? 'butter' : 'peach', tiles.length, `About to cross · ${esc(x.gap_pct)}% gap`, `by ${esc(x.by)}`, NM(x.contract),
+          `₹${num(x.ltp, 0)} → ₹${num(x.target, 0)}`,
+          `Blue closing in on red, MACD green, volume ${num(x.vol_ratio, 1)}x. Can go ${pl} by ${esc(x.by)}${oi ? ' · ' + oi : ''}`, (((pw.last_scan || {}).NIFTY || {}).odds || '')));
+        return;
+      }
+      const why = x.alerted ? '' : x.skip_why ? ` · No alert: ${x.skip_why.map(k => esc(PW_WHY(k, x.skip))).join(', ')}` : '';
+      const em = x.alerted ? 'alert sent' : 'no alert';
+      if (x.stage === 'just') {
+        tiles.push(T(x.ltp < x.cross_price ? 'butter' : 'mint', tiles.length, `Just crossed · ${esc(x.crossed_at)}`, em, NM(x.contract),
+          `₹${num(x.cross_price, 0)} → ₹${num(x.target, 0)}`,
+          `Crossed at ₹${num(x.cross_price, 1)}, now ₹${num(x.ltp, 1)}. Expected ${pl} by ${esc(x.by)}${oi ? ' · ' + oi : ''}${why}`));
+        return;
+      }
+      const reached = x.left <= 0, failing = x.ltp < x.cross_price;
+      tiles.push(T(reached ? 'lav' : failing ? 'blush' : 'sky', tiles.length, `Crossed ${esc(x.crossed_at)} · ${esc(x.mins)} min ago`, reached ? 'target reached' : failing ? 'weak' : `${esc(x.done_pct)}% done`, NM(x.contract),
+        `₹${num(x.cross_price, 0)} → ₹${num(x.target, 0)}`,
+        (reached ? `Reached the ₹${num(x.target, 0)} estimate, now ₹${num(x.ltp, 1)}. Late to enter.`
+          : failing ? `Back under the cross price, now ₹${num(x.ltp, 1)}. Setup not working.`
+          : `Now ₹${num(x.ltp, 1)}. +${num(x.left, 0)} pts left to ₹${num(x.target, 0)} by ${esc(x.by)}.`) + (oi ? ' ' + oi : '') + why));
     });
-    const all = scans.flatMap(x => x.contracts || []);
-    const near = all.filter(c => c.missing && c.missing.length && c.missing.length <= 2 && !['time', 'warmup', 'crossed_earlier'].some(m => c.missing.includes(m)))
-      .sort((x, y) => x.missing.length - y.missing.length || (y.vol_ratio || 0) - (x.vol_ratio || 0));
-    near.slice(0, Math.max(0, 6 - tiles.length)).forEach((c, i) => {
-      const [ix, strike, typ] = c.contract.split(' ');
-      tiles.push(`<div class="kpi tl t-peach pop" style="--i:${i + 12}"><div class="lab"><span>Close to crossing</span><em>${c.missing.length} left</em></div>
-        <div class="nm">${esc(ix)} ${esc(strike)}<span class="ot">${esc(typ)}</span></div><div class="val">₹${num(c.ltp, 1)}</div>
-        <div class="sub">Needs ${c.missing.map(m => esc(PW_NEED[m] || m)).join(' + ')}</div></div>`);
-    });
-    // Crossed today but no alert: say when, and why the engine stayed quiet.
-    const WHY = (k, sk) => ({ macd: `MACD already green since ${sk.macd_green_since || 'earlier'}, not a fresh turn`, below_vwap: `premium under today's VWAP ₹${num(sk.vwap, 0)}`,
-      volume: `volume only ${num(sk.vol_ratio, 1)}x`, extended: 'already ran too far', weak_bar: 'weak candle' })[k] || k;
-    all.filter(c => c.crossed_at).sort((x, y) => (y.crossed_at || '').localeCompare(x.crossed_at || ''))
-      .slice(0, Math.max(0, 6 - tiles.length)).forEach((c, i) => {
-        const [ix, strike, typ] = c.contract.split(' '), sk = c.skip;
-        tiles.push(`<div class="kpi tl t-butter pop" style="--i:${i + 14}"><div class="lab"><span>Crossed at ${esc(sk ? sk.bar : c.crossed_at)}</span><em>no alert</em></div>
-          <div class="nm">${esc(ix)} ${esc(strike)}<span class="ot">${esc(typ)}</span></div><div class="val">₹${num(c.ltp, 1)}</div>
-          <div class="sub">${sk ? 'Skipped: ' + sk.why.map(k => esc(WHY(k, sk))).join(', ') : 'Too late to enter now. Waits for a fresh cross.'}</div></div>`);
-      });
-    return head + `<div class="kpis six">${tiles.join('')}</div>`;
+    const nLive = tiles.length;
+    if (!nLive) tiles.push(T('sky', 0, 'Live now', lastBar ? 'bar ' + esc(lastBar) : 'idle', 'Nothing live', '-',
+      'Checks every 5 min, 09:30 to 14:45. A cross shows here for 30 min, then drops off and is scored.'));
+    const lrn = L.cases ? ` · learning from ${L.cases} setups` : '';
+    tiles.unshift(`<div class="kpi tl t-lav pop" style="--i:8" title="Every crossover is scored 30 minutes after it happens and kept across days since ${esc(sco.since || 'today')}.${L.cases ? ` Targets use ${L.reach_factor}x the premium's 5-min swing${L.active ? ', learned from past results' : ' (default until 15 scored setups)'}.` : ''}"><div class="lab"><span>Success so far</span><em>${lastBar ? 'bar ' + esc(lastBar) : 'idle'}</em></div>
+      <div class="nm">${cr.closed ? 'Crossovers reached target' : 'Alerts hit T1'}</div>
+      <div class="val">${cr.closed ? cr.pct + '%' : w.closed ? w.pct + '%' : '-'}</div>
+      <div class="sub">${cr.closed || w.closed || fo.closed || sk.closed ? `Crossovers: ${frac(cr)} · alerts hit T1: ${frac(w)} · forming: ${frac(fo)} · right to skip: ${frac(sk)}${esc(lrn)}` : 'Every crossover is scored 30 min after it happens. The rate builds from here.'}</div></div>`);
+    return head.replace('%LIVE%', nLive) + `<div class="kpis six">${tiles.join('')}</div>`;
   }
 
   // ── long-term picks ──────────────────────────────────────────────────
