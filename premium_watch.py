@@ -427,6 +427,12 @@ class PremiumWatch:
         self.reach_factor = FORM_REACH_ATR
         self.ltp_now: dict = {}               # token -> (live price, "HH:MM:SS") from the quote API
         self._live_tokens: dict = {}          # index -> {token: contract label}
+        # 5-minute bars built from the live quotes, so a scan needs no candle download
+        # (Angel throttles those and a scan took 4+ minutes). token -> {bar_start: bar}
+        self._tbars: dict = {}
+        self._tlast: dict = {}                # token -> (time, cumulative volume) of the last quote
+        self._base: dict = {}                 # token -> candle history from Angel (fetched once)
+        self.bar_source: dict = {}            # contract -> "live quotes" / "Angel candles"
         self.learned: dict = {}
         self._form_last: dict = {}
         self.watch_list = [s.strip().upper() for s in
@@ -514,17 +520,73 @@ class PremiumWatch:
                         toks.update({str(a["token"]): a["contract"] for a in self.alerts
                                      if a.get("token") and (a.get("outcome") or {}).get("result") == "OPEN"})
                     if toks:
-                        r = self.client.api.getMarketData(mode="LTP", exchangeTokens={"NFO": list(toks)})
-                        stamp = self._now().strftime("%H:%M:%S")
+                        r = self.client.api.getMarketData(mode="FULL", exchangeTokens={"NFO": list(toks)})
+                        now = self._now()
+                        stamp = now.strftime("%H:%M:%S")
                         for it in (((r or {}).get("data") or {}).get("fetched") or []):
                             tok = str(it.get("symbolToken") or it.get("symboltoken") or "")
                             if tok in toks and it.get("ltp") not in (None, "", 0):
                                 self.ltp_now[tok] = (float(it["ltp"]), stamp)
+                                vol = it.get("tradeVolume") or it.get("totalTradedVolume")
+                                self._tick_bar(tok, now.replace(tzinfo=None), float(it["ltp"]),
+                                               float(vol) if vol not in (None, "") else None)
             except Exception as e:
                 if time.time() - warned > 300:
                     warned = time.time()
                     self._warn(f"live prices: {e}")
             time.sleep(every)
+
+    def _tick_bar(self, tok, t, px, vcum):
+        """Fold one quote into its 5-minute bar. A bar is 'full' only if quotes were already
+        flowing when it opened (previous quote under 15 s before), so its open and volume are right."""
+        start = t.replace(second=0, microsecond=0, minute=t.minute - t.minute % 5)
+        bars = self._tbars.setdefault(tok, {})
+        prev = self._tlast.get(tok)
+        b = bars.get(start)
+        if b is None:
+            full = bool(prev and (t - prev[0]).total_seconds() <= 15 and (prev[0] >= start - timedelta(minutes=5)))
+            b = bars[start] = {"o": px, "h": px, "l": px, "c": px, "full": full and prev[1] is not None and vcum is not None,
+                               "v0": prev[1] if prev else None, "v1": vcum}
+            for k in [k for k in bars if k < start - timedelta(hours=8)]:
+                bars.pop(k, None)
+        b["h"], b["l"], b["c"] = max(b["h"], px), min(b["l"], px), px
+        if vcum is not None:
+            b["v1"] = vcum
+        self._tlast[tok] = (t, vcum)
+
+    def _bars_for(self, tok, label, bar_close):
+        """Candles for one contract up to the bar that just closed. Uses Angel's history once
+        (and again only if the live-quote bars have a gap), then the bars built from quotes."""
+        tok = str(tok)
+        last_start = bar_close.replace(tzinfo=None) - timedelta(minutes=5)
+        base = self._base.get(tok)
+        tb = self._tbars.get(tok, {})
+        if base is not None and len(base):
+            b_end = base["timestamp"].iloc[-1]
+            need, t = [], b_end + timedelta(minutes=5)
+            while t <= last_start:
+                if t.date() == last_start.date() and t.strftime("%H:%M") >= "09:15":
+                    need.append(t)
+                t += timedelta(minutes=5)
+            if all(t in tb and tb[t]["full"] for t in need):
+                if need:
+                    add = pd.DataFrame([{"timestamp": t, "open": tb[t]["o"], "high": tb[t]["h"], "low": tb[t]["l"],
+                                         "close": tb[t]["c"], "volume": max(0.0, (tb[t]["v1"] or 0) - (tb[t]["v0"] or 0))}
+                                        for t in need])
+                    self._base[tok] = base = pd.concat([base, add], ignore_index=True)
+                self.bar_source[label] = "live quotes"
+                return base
+        df = self.client.candles(tok, "NFO", "FIVE_MINUTE", 3, force_refresh=True)
+        if df is None or df.empty:
+            return df
+        d = _norm(df)[["timestamp", "open", "high", "low", "close", "volume"]]
+        # Keep only closed bars; the bar still forming would be counted twice later.
+        d = d[d["timestamp"] <= last_start].reset_index(drop=True)
+        for k in ("open", "high", "low", "close", "volume"):
+            d[k] = d[k].astype(float)
+        self._base[tok] = d
+        self.bar_source[label] = "Angel candles"
+        return d
 
     def _follow_loop(self):
         """Scores open events every minute, on its own thread so a slow candle call never
@@ -608,6 +670,7 @@ class PremiumWatch:
                 self._warn(f"{name} scan failed: {e}")
 
     def _scan_index(self, name, bar_close):
+        t_start = time.time()
         spot, idx_trend = self._spot_and_trend(name)
         if not spot:
             return
@@ -627,7 +690,8 @@ class PremiumWatch:
                 self._warn(f"{name} chain read: {e}")
         gap_pts = self.instruments[name]["strike_gap"]
         for row in contracts:
-            df = self.client.candles(row["token"], "NFO", "FIVE_MINUTE", 3, force_refresh=True)
+            label = f"{name} {int(row['strike'])} {row['type']}"
+            df = self._bars_for(row["token"], label, bar_close)
             if df is None or df.empty or len(df) < 35:
                 continue
             d = indicators(_norm(df))
@@ -739,6 +803,9 @@ class PremiumWatch:
                                     "expiry": exp_date.isoformat() if exp_date else None,
                                     "contracts": rows, "forming": forming, "live": live,
                                     "reach_factor": self.reach_factor, "learn": self.learned,
+                                    "checked_at": self._now().strftime("%H:%M:%S"),
+                                    "took_s": round(time.time() - t_start, 1),
+                                    "bar_source": {k: v for k, v in self.bar_source.items() if k.startswith(name)},
                                     "odds": FORM_ODDS}
         self._post_forming(name, forming)
         if self.store:
@@ -1022,6 +1089,10 @@ class PremiumWatch:
                     "today": {"alerts": len(self.alerts), "closed": len(done), "wins": len(wins),
                               "pnl_per_lot": sum(a["outcome"]["pnl_per_lot"] for a in done)},
                     "last_scan": self._with_live(self.last_scan),
+                    "tick_bars": {tok: [{"t": k.strftime("%H:%M"), "o": b["o"], "h": b["h"], "l": b["l"], "c": b["c"],
+                                         "v": (b["v1"] or 0) - (b["v0"] or 0) if b["v0"] is not None else None, "full": b["full"]}
+                                        for k, b in sorted(bars.items())[-4:]]
+                                  for tok, bars in list(self._tbars.items())[:2]},
                     "live_prices": {"every_s": float(os.environ.get("PW_TICK_S", "5")),
                                     "last": max((v[1] for v in self.ltp_now.values()), default=None)},
                     "score": ({k: v for k, v in self.stats().items() if k != "events"} if self.store else None)}
