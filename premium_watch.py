@@ -644,14 +644,25 @@ class PremiumWatch:
         return out, pick
 
     def _spot_and_trend(self, name: str):
+        """Spot from the live quote (never blocked by Angel's candle throttle). Index trend
+        from candles when they come back; trend 0 (unknown) when they do not."""
         info = self.instruments[name]
+        spot = None
+        try:
+            r = self.client.api.getMarketData(mode="LTP", exchangeTokens={info["exchange"]: [str(info["token"])]})
+            f = (((r or {}).get("data") or {}).get("fetched") or [])
+            if f and f[0].get("ltp"):
+                spot = float(f[0]["ltp"])
+        except Exception as e:
+            self._warn(f"{name} spot quote: {e}")
+        trend = 0
         df = self.client.candles(info["token"], info["exchange"], "FIVE_MINUTE", 3)
-        if df is None or df.empty:
-            return None, 0
-        d = _norm(df)
-        c = d["close"].astype(float)
-        e9, e21 = _ema(c, EMA_FAST).iloc[-1], _ema(c, EMA_SLOW).iloc[-1]
-        return float(c.iloc[-1]), (1 if e9 > e21 else -1)
+        if df is not None and not df.empty:
+            c = _norm(df)["close"].astype(float)
+            trend = 1 if _ema(c, EMA_FAST).iloc[-1] > _ema(c, EMA_SLOW).iloc[-1] else -1
+            if spot is None:
+                spot = float(c.iloc[-1])
+        return spot, trend
 
     def _bar_index(self, d: pd.DataFrame, bar_close):
         """Index of the last bar that has fully closed by bar_close (bars are stamped
