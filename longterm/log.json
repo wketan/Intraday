@@ -343,7 +343,16 @@
 "stock": "TORNTPHARM",
 "joined": "2026-11-25",
 "join_px": 4895.5,
-"join_nifty": 25819.25
+"join_nifty": 25819.25,
+"left": "2026-11-26",
+"left_px": 5019.1,
+"left_nifty": 25884.5
+},
+{
+"stock": "ADANIPOWER",
+"joined": "2026-11-26",
+"join_px": 208.3,
+"join_nifty": 25884.5
 }
 ]
 }
