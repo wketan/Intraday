@@ -425,6 +425,8 @@ class PremiumWatch:
         self.store = EventStore(db_path) if db_path else None
         self._scorecard_day = None
         self.reach_factor = FORM_REACH_ATR
+        self.ltp_now: dict = {}               # token -> (live price, "HH:MM:SS") from the quote API
+        self._live_tokens: dict = {}          # index -> {token: contract label}
         self.learned: dict = {}
         self._form_last: dict = {}
         self.watch_list = [s.strip().upper() for s in
@@ -469,6 +471,8 @@ class PremiumWatch:
                 self._warn(f"event store load: {e}")
             self._learn()
         threading.Thread(target=self._loop, daemon=True, name="PremiumWatch").start()
+        threading.Thread(target=self._tick_loop, daemon=True, name="PremiumWatchLTP").start()
+        threading.Thread(target=self._follow_loop, daemon=True, name="PremiumWatchFollow").start()
         self._info(f"running for {', '.join(self.watch_list)}")
 
     def _loop(self):
@@ -482,9 +486,6 @@ class PremiumWatch:
                     if (now - bar_close).total_seconds() >= 25 and self._last_bar != bar_close:
                         self._last_bar = bar_close
                         self.scan(bar_close)
-                    if time.time() - self._last_follow >= 60:
-                        self._last_follow = time.time()
-                        self._update_outcomes()
                 elif now.strftime("%H:%M") < "09:00" and self.alerts and \
                         self.alerts[0].get("day") != now.strftime("%Y-%m-%d"):
                     with self.lock:
@@ -493,6 +494,61 @@ class PremiumWatch:
             except Exception as e:
                 self._warn(f"loop error: {e}")
             time.sleep(10)
+
+    def _market_open(self):
+        n = self._now()
+        return n.weekday() < 5 and "09:15" <= n.strftime("%H:%M") <= "15:31"
+
+    def _tick_loop(self):
+        """Live option prices every PW_TICK_S seconds (one batched quote call), so the Desk
+        shows the real current premium, not the close of the last 5-minute candle."""
+        every = float(os.environ.get("PW_TICK_S", "5"))
+        warned = 0.0
+        while self.running:
+            try:
+                if self._market_open():
+                    toks = {}
+                    for m in list(self._live_tokens.values()):
+                        toks.update(m)
+                    with self.lock:
+                        toks.update({str(a["token"]): a["contract"] for a in self.alerts
+                                     if a.get("token") and (a.get("outcome") or {}).get("result") == "OPEN"})
+                    if toks:
+                        r = self.client.api.getMarketData(mode="LTP", exchangeTokens={"NFO": list(toks)})
+                        stamp = self._now().strftime("%H:%M:%S")
+                        for it in (((r or {}).get("data") or {}).get("fetched") or []):
+                            tok = str(it.get("symbolToken") or it.get("symboltoken") or "")
+                            if tok in toks and it.get("ltp") not in (None, "", 0):
+                                self.ltp_now[tok] = (float(it["ltp"]), stamp)
+            except Exception as e:
+                if time.time() - warned > 300:
+                    warned = time.time()
+                    self._warn(f"live prices: {e}")
+            time.sleep(every)
+
+    def _follow_loop(self):
+        """Scores open events every minute, on its own thread so a slow candle call never
+        holds up the 5-minute scan."""
+        while self.running:
+            try:
+                n = self._now()
+                if n.weekday() < 5 and "09:15" <= n.strftime("%H:%M") <= "15:50":
+                    self._update_outcomes()
+            except Exception as e:
+                self._warn(f"follow loop: {e}")
+            time.sleep(60)
+
+    def _live_price(self, token, max_age_s=60):
+        v = self.ltp_now.get(str(token)) if token else None
+        if not v:
+            return None, None
+        try:
+            t = datetime.strptime(self._now().strftime("%Y-%m-%d ") + v[1], "%Y-%m-%d %H:%M:%S")
+            if (self._now().replace(tzinfo=None) - t).total_seconds() > max_age_s:
+                return None, None
+        except Exception:
+            pass
+        return v
 
     def _contracts(self, name: str, spot: float):
         """Nearest usable expiry (skip today's expiry after 11:00), ATM +/- N, CE and PE."""
@@ -556,6 +612,7 @@ class PremiumWatch:
         if not spot:
             return
         contracts, exp_date = self._contracts(name, spot)
+        self._live_tokens[name] = {str(r["token"]): f"{name} {int(r['strike'])} {r['type']}" for r in contracts}
         expiry_day = exp_date == self._now().date()
         bias = None
         if self.bias_fn:
@@ -608,7 +665,7 @@ class PremiumWatch:
                                              "ltp": c2["ind"]["close"], "macd_green_since": c2["ind"].get("macd_green_since"),
                                              "vwap": c2["ind"].get("vwap"), "vol_ratio": c2["ind"].get("vol_ratio")}
             sk = self.skips.get(label)
-            rows.append({"contract": label, "ltp": chk["ind"].get("close"),
+            rows.append({"contract": label, "token": str(row["token"]), "ltp": chk["ind"].get("close"),
                          "missing": chk["fails"], "vol_ratio": chk["ind"].get("vol_ratio"),
                          "crossed_at": chk["ind"].get("crossed_at"),
                          "macd_green_since": chk["ind"].get("macd_green_since"),
@@ -635,7 +692,7 @@ class PremiumWatch:
                                      start=d["timestamp"].iloc[j] + timedelta(minutes=5))
                 vr_j = d["volume"].iloc[j] / d["vavg20"].iloc[j] if d["vavg20"].iloc[j] == d["vavg20"].iloc[j] and d["vavg20"].iloc[j] else 0
                 sk = self.skips.get(label)
-                lv = {"stage": "just" if i - j <= 1 else "running", "contract": label,
+                lv = {"stage": "just" if i - j <= 1 else "running", "contract": label, "token": str(row["token"]),
                       "crossed_at": c_at, "cross_price": round(cp, 2), "ltp": round(ltp, 2),
                       "lot": lot, **pt, "per_lot": round(pt["potential"] * lot),
                       "left": round(pt["target"] - ltp, 1), "mins": (i - j) * 5 + 5,
@@ -925,6 +982,35 @@ class PremiumWatch:
                 "days": len(days), "since": days[0] if days else None, "learn": self.learned,
                 "events": [{k: v for k, v in r.items() if k != "token"} for r in rows[-200:]]}
 
+    def _with_live(self, scans):
+        """Copy of last_scan with every price replaced by the live quote. The 5-minute
+        candle close stays as ltp_bar; 'left' and 'done' are worked out from the live price."""
+        out = {}
+        for name, sc in scans.items():
+            sc = dict(sc)
+            for key in ("contracts", "live", "forming"):
+                items = []
+                for x in sc.get(key) or []:
+                    x = dict(x)
+                    px, at = self._live_price(x.get("token"))
+                    if px is not None:
+                        x["ltp_bar"], x["ltp"], x["ltp_at"] = x.get("ltp"), round(px, 2), at
+                        if key == "live":
+                            x["left"] = round(x["target"] - px, 1)
+                            x["done_pct"] = round((px - x["cross_price"]) / x["potential"] * 100) if x.get("potential") else None
+                    x.pop("token", None)
+                    items.append(x)
+                sc[key] = items
+            out[name] = sc
+        return out
+
+    def _alert_live(self, a):
+        x = {k: v for k, v in a.items() if k != "token"}
+        px, at = self._live_price(a.get("token"))
+        if px is not None:
+            x["ltp"], x["ltp_at"] = round(px, 2), at
+        return x
+
     def snapshot(self):
         with self.lock:
             done = [a for a in self.alerts if a["outcome"].get("result") in ("T1", "T2", "SL", "TIME")]
@@ -932,8 +1018,10 @@ class PremiumWatch:
             return {"enabled": self.enabled, "running": self.running, "watch": self.watch_list,
                     "rules": {"ema": [EMA_FAST, EMA_SLOW], "vol_mult": VOL_MULT, "t1_rs": T1_RS,
                               "t2_rs": T2_RS, "sl_rs_cap": SL_RS_CAP, "hold_min": HOLD_MIN},
-                    "alerts": [{k: v for k, v in a.items() if k != "token"} for a in self.alerts],
+                    "alerts": [self._alert_live(a) for a in self.alerts],
                     "today": {"alerts": len(self.alerts), "closed": len(done), "wins": len(wins),
                               "pnl_per_lot": sum(a["outcome"]["pnl_per_lot"] for a in done)},
-                    "last_scan": self.last_scan,
+                    "last_scan": self._with_live(self.last_scan),
+                    "live_prices": {"every_s": float(os.environ.get("PW_TICK_S", "5")),
+                                    "last": max((v[1] for v in self.ltp_now.values()), default=None)},
                     "score": ({k: v for k, v in self.stats().items() if k != "events"} if self.store else None)}

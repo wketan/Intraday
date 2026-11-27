@@ -684,6 +684,7 @@
 /* Compact tiles (26 Nov): every section uses the top-card size, details open in the side sheet. */
 .kpis.six+.kpis.six{margin-top:14px}
 .kpis.six .kpi.tl{cursor:default;min-width:0}
+.kpi.tl small.lv{font-size:.78em;opacity:.7;font-weight:500}
 .kpis.six .kpi.tl[data-sw],.kpis.six .kpi.tl[data-tg]{cursor:pointer;outline:2px solid transparent;outline-offset:3px;transition:transform .5s var(--spring),box-shadow .4s var(--ease),outline-color .25s}
 .kpis.six .kpi.tl[data-sw]:hover,.kpis.six .kpi.tl[data-tg]:hover{transform:translateY(-2px)}
 .kpis.six .kpi.tl[data-sw]:focus-visible,.kpis.six .kpi.tl[data-tg]:focus-visible{outline-color:var(--accent)}
@@ -944,56 +945,73 @@
   const PW_WHY = (k, sk) => ({ macd: `MACD already green since ${(sk || {}).macd_green_since || 'earlier'}`, below_vwap: `under today's VWAP ₹${num((sk || {}).vwap, 0)}`,
     volume: `volume only ${num((sk || {}).vol_ratio, 1)}x`, extended: 'already ran too far', weak_bar: 'weak candle' })[k] || k;
   const pwOI = x => [x.wall ? `OI wall ${Math.round(x.wall)} (${num(x.room, 0)} pts away)` : '', x.flow_note ? (x.flow === 'against' ? 'OI against: ' : 'OI: ') + x.flow_note : ''].filter(Boolean).map(esc).join(' · ');
+  // Live price text. Kept in its own spans so the 5-second price refresh can patch it in place.
+  const pwNow = x => `₹${num(x.ltp, 1)}${x.ltp_at ? ` <small class="lv">live ${esc(x.ltp_at)}</small>` : ' <small class="lv">5-min close</small>'}`;
+  const pwState = x => x.stage === 'running' ? (x.left <= 0 ? 'reached' : x.ltp < x.cross_price ? 'failing' : 'ok') : x.stage === 'just' ? (x.ltp < x.cross_price ? 'under' : 'ok') : 'ok';
+  const pwKey = x => (x.stage || 'alert') + ':' + x.contract;
+  function pwLive(x) {     // the part of each tile that moves with the live price
+    if (x.stage === 'alert') return { val: `₹${num(x.entry, 0)} → ₹${num(x.t1, 0)}`, txt: `Now ${pwNow(x)} · ` };
+    if (x.stage === 'forming') return { val: `₹${num(x.ltp, 0)} → ₹${num(x.target, 0)}`, txt: `Now ${pwNow(x)}. ` };
+    if (x.stage === 'just') return { val: `₹${num(x.cross_price, 0)} → ₹${num(x.target, 0)}`, txt: `Crossed at ₹${num(x.cross_price, 1)}, now ${pwNow(x)}. ` };
+    const st = pwState(x);
+    return { val: `₹${num(x.cross_price, 0)} → ₹${num(x.target, 0)}`,
+      txt: st === 'reached' ? `Reached the ₹${num(x.target, 0)} estimate, now ${pwNow(x)}. Late to enter. `
+        : st === 'failing' ? `Back under the cross price, now ${pwNow(x)}. Setup not working. `
+        : `Now ${pwNow(x)}. +${num(x.left, 0)} pts left to ₹${num(x.target, 0)} by ${esc(x.by)}. ` };
+  }
+  function pwItems(pw) {
+    const scans = Object.values(pw.last_scan || {});
+    const al = (pw.alerts || []).filter(a => ((a.outcome || {}).result || 'OPEN') === 'OPEN').reverse().map(a => ({ ...a, stage: 'alert' }));
+    const live = scans.flatMap(x => (x.live || []).concat((x.forming || []).filter(f => f.show)));
+    const order = { just: 0, running: 1, forming: 2 };
+    live.sort((x, y) => order[x.stage] - order[y.stage] || y.potential - x.potential);
+    return al.concat(live).slice(0, 11);
+  }
+  // Same tiles and states as on screen: only the prices changed, so patch them without a re-render.
+  const pwSig = pw => pw ? JSON.stringify([pwItems(pw).map(x => pwKey(x) + ':' + pwState(x) + ':' + (x.outcome || {}).result), Object.values(pw.last_scan || {}).map(x => x.bar), JSON.stringify(pw.score || {})]) : '';
+  function pwPatch(pw) {
+    pwItems(pw).forEach(x => {
+      const el = document.querySelector(`[data-pwk="${CSS.escape(pwKey(x))}"]`);
+      if (!el) return;
+      const L = pwLive(x), v = el.querySelector('.val'), t = el.querySelector('[data-pwt]');
+      if (v && v.innerHTML !== L.val) v.innerHTML = L.val;
+      if (t && t.innerHTML !== L.txt) t.innerHTML = L.txt;
+      const em = el.querySelector('.lab em');
+      if (em && x.stage === 'running' && pwState(x) === 'ok') em.textContent = `${x.done_pct}% done`;
+    });
+  }
   function pwSection() {
     const pw = S.pw;
-    const head = `<div class="tb rise" style="--i:8" id="go-pw"><h2>Crossover watch <span class="tag">%LIVE%</span></h2><span class="stamp">Live only: about to cross, just crossed, crossed under 30 min ago · price targets from the premium's swing and OI · NIFTY, ATM ±2 strikes</span></div>`;
+    const head = `<div class="tb rise" style="--i:8" id="go-pw"><h2>Crossover watch <span class="tag">%LIVE%</span></h2><span class="stamp">Live only: about to cross, just crossed, crossed under 30 min ago · prices refresh every 5 s · targets from the premium's swing and OI · NIFTY, ATM ±2 strikes</span></div>`;
     if (!pw) return head.replace('%LIVE%', '0') + `<div class="kpis six"><div class="kpi tl t-butter pop" style="--i:8"><div class="lab">Crossover watch</div><div class="nm">Waiting for the engine</div><div class="sub">${esc(S.pwErr || 'loading')}</div></div></div>`;
     const scans = Object.values(pw.last_scan || {});
     const lastBar = scans.map(x => x.bar).sort().slice(-1)[0];
     const sco = pw.score || {}, sc = sco.all_time || {}, w = sc.watch || {}, cr = sc.cross || {}, fo = sc.forming || {}, sk = sc.skipped || {};
     const L = sco.learn || {};
     const frac = x => x && x.closed ? `${x.success} of ${x.closed} (${x.pct}%)` : 'none yet';
-    const tiles = [];
-    const T = (tone, i, lab, em, nm, val, sub, title) => `<div class="kpi tl t-${tone} pop" style="--i:${i + 9}"${title ? ` title="${esc(title)}"` : ''}><div class="lab"><span>${lab}</span><em>${em}</em></div>
-      <div class="nm">${nm}</div><div class="val">${val}</div><div class="sub">${sub}</div></div>`;
+    const T = (x, tone, i, lab, em, rest, title) => `<div class="kpi tl t-${tone} pop" style="--i:${i + 9}" data-pwk="${esc(pwKey(x))}"${title ? ` title="${esc(title)}"` : ''}><div class="lab"><span>${lab}</span><em>${em}</em></div>
+      <div class="nm">${NM(x.contract)}</div><div class="val">${pwLive(x).val}</div><div class="sub"><span data-pwt>${pwLive(x).txt}</span>${rest}</div></div>`;
     const NM = c => { const [ix, strike, typ] = c.split(' '); return `${esc(ix)} ${esc(strike)}<span class="ot">${esc(typ)}</span>`; };
-    // Open alerts (closed ones are history: counted in the success tile).
-    (pw.alerts || []).filter(a => ((a.outcome || {}).result || 'OPEN') === 'OPEN').reverse().forEach(a => {
-      tiles.push(T('mint', tiles.length, `Alert ${esc(a.time)} · grade ${esc(a.grade)}`, `exit by ${esc(a.exit_by)}`, NM(a.contract),
-        `₹${num(a.entry, 0)} → ₹${num(a.t1, 0)}`,
-        `Buy near ₹${num(a.entry, 1)} · SL ₹${num(a.sl, 0)} · T1 ₹${num(a.t1, 0)} (+₹2,000/lot)${a.pot ? ` · can reach ₹${num(a.pot.target, 0)} by ${esc(a.pot.by)}` : ''}`,
-        (a.extras || []).join(' · ')));
-    });
-    const live = scans.flatMap(x => (x.live || []).concat((x.forming || []).filter(f => f.show)));
-    const order = { just: 0, running: 1, forming: 2 };
-    live.sort((x, y) => order[x.stage] - order[y.stage] || y.potential - x.potential);
-    live.forEach(x => {
-      if (tiles.length >= 11) return;
+    const tiles = pwItems(pw).map((x, i) => {
       const oi = pwOI(x), pl = `+${num(x.potential, 0)} pts (${inr(x.per_lot, true)}/lot)`;
-      if (x.stage === 'forming') {
-        tiles.push(T(x.flow === 'against' ? 'butter' : 'peach', tiles.length, `About to cross · ${esc(x.gap_pct)}% gap`, `by ${esc(x.by)}`, NM(x.contract),
-          `₹${num(x.ltp, 0)} → ₹${num(x.target, 0)}`,
-          `Blue closing in on red, MACD green, volume ${num(x.vol_ratio, 1)}x. Can go ${pl} by ${esc(x.by)}${oi ? ' · ' + oi : ''}`, (((pw.last_scan || {}).NIFTY || {}).odds || '')));
-        return;
-      }
+      if (x.stage === 'alert')
+        return T(x, 'mint', i, `Alert ${esc(x.time)} · grade ${esc(x.grade)}`, `exit by ${esc(x.exit_by)}`,
+          `Buy near ₹${num(x.entry, 1)} · SL ₹${num(x.sl, 0)} · T1 ₹${num(x.t1, 0)} (+₹2,000/lot)${x.pot ? ` · can reach ₹${num(x.pot.target, 0)} by ${esc(x.pot.by)}` : ''}`, (x.extras || []).join(' · '));
+      if (x.stage === 'forming')
+        return T(x, x.flow === 'against' ? 'butter' : 'peach', i, `About to cross · ${esc(x.gap_pct)}% gap`, `by ${esc(x.by)}`,
+          `Blue closing in on red, MACD green, volume ${num(x.vol_ratio, 1)}x. Can go ${pl} by ${esc(x.by)}${oi ? ' · ' + oi : ''}`, (((pw.last_scan || {}).NIFTY || {}).odds || ''));
       const why = x.alerted ? '' : x.skip_why ? ` · No alert: ${x.skip_why.map(k => esc(PW_WHY(k, x.skip))).join(', ')}` : '';
       const em = x.alerted ? 'alert sent' : 'no alert';
-      if (x.stage === 'just') {
-        tiles.push(T(x.ltp < x.cross_price ? 'butter' : 'mint', tiles.length, `Just crossed · ${esc(x.crossed_at)}`, em, NM(x.contract),
-          `₹${num(x.cross_price, 0)} → ₹${num(x.target, 0)}`,
-          `Crossed at ₹${num(x.cross_price, 1)}, now ₹${num(x.ltp, 1)}. Expected ${pl} by ${esc(x.by)}${oi ? ' · ' + oi : ''}${why}`));
-        return;
-      }
-      const reached = x.left <= 0, failing = x.ltp < x.cross_price;
-      tiles.push(T(reached ? 'lav' : failing ? 'blush' : 'sky', tiles.length, `Crossed ${esc(x.crossed_at)} · ${esc(x.mins)} min ago`, reached ? 'target reached' : failing ? 'weak' : `${esc(x.done_pct)}% done`, NM(x.contract),
-        `₹${num(x.cross_price, 0)} → ₹${num(x.target, 0)}`,
-        (reached ? `Reached the ₹${num(x.target, 0)} estimate, now ₹${num(x.ltp, 1)}. Late to enter.`
-          : failing ? `Back under the cross price, now ₹${num(x.ltp, 1)}. Setup not working.`
-          : `Now ₹${num(x.ltp, 1)}. +${num(x.left, 0)} pts left to ₹${num(x.target, 0)} by ${esc(x.by)}.`) + (oi ? ' ' + oi : '') + why));
+      if (x.stage === 'just')
+        return T(x, pwState(x) === 'under' ? 'butter' : 'mint', i, `Just crossed · ${esc(x.crossed_at)}`, em,
+          `Expected ${pl} by ${esc(x.by)}${oi ? ' · ' + oi : ''}${why}`);
+      const st = pwState(x);
+      return T(x, st === 'reached' ? 'lav' : st === 'failing' ? 'blush' : 'sky', i, `Crossed ${esc(x.crossed_at)} · ${esc(x.mins)} min ago`,
+        st === 'reached' ? 'target reached' : st === 'failing' ? 'weak' : `${esc(x.done_pct)}% done`, (oi || '') + why);
     });
     const nLive = tiles.length;
-    if (!nLive) tiles.push(T('sky', 0, 'Live now', lastBar ? 'bar ' + esc(lastBar) : 'idle', 'Nothing live', '-',
-      'Checks every 5 min, 09:30 to 14:45. A cross shows here for 30 min, then drops off and is scored.'));
+    if (!nLive) tiles.push(`<div class="kpi tl t-sky pop" style="--i:9"><div class="lab"><span>Live now</span><em>${lastBar ? 'bar ' + esc(lastBar) : 'idle'}</em></div>
+      <div class="nm">Nothing live</div><div class="val">-</div><div class="sub">Checks every 5 min, 09:30 to 14:45. A cross shows here for 30 min, then drops off and is scored.</div></div>`);
     const lrn = L.cases ? ` · learning from ${L.cases} setups` : '';
     tiles.unshift(`<div class="kpi tl t-lav pop" style="--i:8" title="Every crossover is scored 30 minutes after it happens and kept across days since ${esc(sco.since || 'today')}.${L.cases ? ` Targets use ${L.reach_factor}x the premium's 5-min swing${L.active ? ', learned from past results' : ' (default until 15 scored setups)'}.` : ''}"><div class="lab"><span>Success so far</span><em>${lastBar ? 'bar ' + esc(lastBar) : 'idle'}</em></div>
       <div class="nm">${cr.closed ? 'Crossovers reached target' : 'Alerts hit T1'}</div>
@@ -1726,8 +1744,16 @@
   const loadSm = async () => { try { S.sm = await api('/api/sm/live?lite=1', 30000); S.smErr = null; } catch (e) { S.smErr = 'tape not reachable yet, retrying'; } S.smV++; render(); };
   loadSm(); setInterval(loadSm, 30000);
   S.ltAmt = +ls.get('desk-lt-amt', '0') || 0; S.ltN = +ls.get('desk-lt-n', '5') || 5;
-  const loadPw = async () => { try { S.pw = await api('/api/pw/live', 20000); S.pwErr = null; } catch (e) { S.pw = null; S.pwErr = 'The watch starts with the engine. If this stays, the engine has not been updated yet.'; } render(); };
-  loadPw(); setInterval(loadPw, 30000);
+  // Prices every 5 s. Same tiles as before: patch the numbers in place. Anything else changed: full render.
+  const loadPw = async () => {
+    let fresh;
+    try { fresh = await api('/api/pw/live', 15000); S.pwErr = null; }
+    catch (e) { if (!S.pw) { S.pwErr = 'The watch starts with the engine. If this stays, the engine has not been updated yet.'; render(); } return; }
+    const same = S.pw && pwSig(S.pw) === pwSig(fresh) && document.getElementById('go-pw');
+    S.pw = fresh;
+    if (same) pwPatch(fresh); else render();
+  };
+  loadPw(); setInterval(loadPw, 5000);
   poll('swing', '/api/swing/positions', 120000);
   poll('screen', '/api/swing/screen', 120000, null, 40000);
   // Long-term analysis is a static file that the daily job commits to this site.

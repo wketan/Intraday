@@ -143,5 +143,49 @@
   "why": [
    "extended"
   ]
+ },
+ {
+  "bar": "09:30",
+  "contract": "NIFTY 25800 PE",
+  "day": "2026-11-27",
+  "entry": 150.25,
+  "kind": "skipped",
+  "lot": 65,
+  "outcome": {
+   "result": "OPEN"
+  },
+  "risk_per_lot": 1345,
+  "sl": 129.55,
+  "t1": 181.02,
+  "t2": 196.4,
+  "time": "09:36",
+  "why": [
+   "macd",
+   "below_vwap",
+   "weak_bar"
+  ]
+ },
+ {
+  "bar": "09:30",
+  "contract": "NIFTY 25900 PE",
+  "day": "2026-11-27",
+  "entry": 201.0,
+  "kind": "skipped",
+  "lot": 65,
+  "outcome": {
+   "at": "09:40",
+   "max_seen": 205.8,
+   "pnl_per_lot": -1500,
+   "result": "SL"
+  },
+  "risk_per_lot": 1500,
+  "sl": 177.92,
+  "t1": 231.77,
+  "t2": 247.15,
+  "time": "09:38",
+  "why": [
+   "below_vwap",
+   "weak_bar"
+  ]
  }
 ]
