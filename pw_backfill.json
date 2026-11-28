@@ -168,25 +168,6 @@
   ]
  },
  {
-  "bar": "10:25",
-  "contract": "NIFTY 25700 PE",
-  "day": "2026-11-27",
-  "entry": 122.1,
-  "kind": "skipped",
-  "lot": 65,
-  "outcome": {
-   "result": "OPEN"
-  },
-  "risk_per_lot": 1500,
-  "sl": 99.02,
-  "t1": 152.87,
-  "t2": 168.25,
-  "time": "10:34",
-  "why": [
-   "macd"
-  ]
- },
- {
   "atr": 15.31,
   "bar": "10:20",
   "contract": "NIFTY 25700 PE",
@@ -210,6 +191,278 @@
   "target": 141.6,
   "time": "10:34",
   "vol_ratio": 1.6,
+  "wall": 25500.0
+ },
+ {
+  "bar": "14:20",
+  "contract": "NIFTY 25750 PE",
+  "day": "2026-11-27",
+  "entry": 202.25,
+  "kind": "skipped",
+  "lot": 65,
+  "outcome": {
+   "at": "14:35",
+   "max_seen": 207.0,
+   "pnl_per_lot": -1500,
+   "result": "SL"
+  },
+  "risk_per_lot": 1500,
+  "sl": 179.17,
+  "t1": 233.02,
+  "t2": 248.4,
+  "time": "14:25",
+  "why": [
+   "macd",
+   "volume"
+  ]
+ },
+ {
+  "atr": 18.36,
+  "bar": "14:20",
+  "contract": "NIFTY 25750 PE",
+  "day": "2026-11-27",
+  "entry": 202.25,
+  "flow": "with",
+  "flow_note": "put writers leaving / call writers adding",
+  "kind": "cross",
+  "lot": 65,
+  "outcome": {
+   "at": "14:50",
+   "gain_pts": 23.7,
+   "max_seen": 225.95,
+   "min_seen": 176.7,
+   "pnl_per_lot": 237,
+   "result": "MISS"
+  },
+  "potential": 27.5,
+  "reach_factor": 1.5,
+  "room": 160.8,
+  "target": 229.8,
+  "time": "14:25",
+  "vol_ratio": 0.9,
+  "wall": 25500.0
+ },
+ {
+  "atr": 18.36,
+  "bar": "14:40",
+  "contract": "NIFTY 25750 PE",
+  "day": "2026-11-27",
+  "entry": 215.55,
+  "flow": "neutral",
+  "flow_note": "",
+  "kind": "cross",
+  "lot": 65,
+  "outcome": {
+   "at": "15:05",
+   "gain_pts": 28.4,
+   "max_seen": 244.0,
+   "min_seen": 200.8,
+   "pnl_per_lot": 1791,
+   "result": "HIT"
+  },
+  "potential": 27.5,
+  "reach_factor": 1.5,
+  "room": 127.2,
+  "target": 243.1,
+  "time": "14:46",
+  "vol_ratio": 1.68,
+  "wall": 25500.0
+ },
+ {
+  "bar": "14:45",
+  "contract": "NIFTY 25650 PE",
+  "day": "2026-11-27",
+  "entry": 156.1,
+  "kind": "skipped",
+  "lot": 65,
+  "outcome": {
+   "at": "15:10",
+   "max_seen": 187.9,
+   "pnl_per_lot": 2000,
+   "result": "T1"
+  },
+  "risk_per_lot": 1500,
+  "sl": 133.02,
+  "t1": 186.87,
+  "t2": 202.25,
+  "time": "14:50",
+  "why": [
+   "macd",
+   "volume",
+   "weak_bar"
+  ]
+ },
+ {
+  "atr": 14.82,
+  "bar": "14:45",
+  "contract": "NIFTY 25650 PE",
+  "day": "2026-11-27",
+  "entry": 156.1,
+  "flow": "neutral",
+  "flow_note": "",
+  "kind": "cross",
+  "lot": 65,
+  "outcome": {
+   "at": "15:05",
+   "gain_pts": 22.9,
+   "max_seen": 179.0,
+   "min_seen": 143.1,
+   "pnl_per_lot": 1443,
+   "result": "HIT"
+  },
+  "potential": 22.2,
+  "reach_factor": 1.5,
+  "room": 132.4,
+  "target": 178.3,
+  "time": "14:50",
+  "vol_ratio": 1.28,
+  "wall": 25500.0
+ },
+ {
+  "bar": "14:45",
+  "contract": "NIFTY 25600 PE",
+  "day": "2026-11-27",
+  "entry": 130.2,
+  "kind": "skipped",
+  "lot": 65,
+  "outcome": {
+   "at": "15:10",
+   "max_seen": 163.0,
+   "pnl_per_lot": 2000,
+   "result": "T1"
+  },
+  "risk_per_lot": 1500,
+  "sl": 107.12,
+  "t1": 160.97,
+  "t2": 176.35,
+  "time": "14:50",
+  "why": [
+   "macd",
+   "weak_bar"
+  ]
+ },
+ {
+  "atr": 13.35,
+  "bar": "14:45",
+  "contract": "NIFTY 25600 PE",
+  "day": "2026-11-27",
+  "entry": 130.2,
+  "flow": "neutral",
+  "flow_note": "",
+  "kind": "cross",
+  "lot": 65,
+  "outcome": {
+   "at": "15:05",
+   "gain_pts": 20.8,
+   "max_seen": 150.95,
+   "min_seen": 118.5,
+   "pnl_per_lot": 1300,
+   "result": "HIT"
+  },
+  "potential": 20.0,
+  "reach_factor": 1.5,
+  "room": 132.4,
+  "target": 150.2,
+  "time": "14:50",
+  "vol_ratio": 1.74,
+  "wall": 25500.0
+ },
+ {
+  "bar": "14:45",
+  "contract": "NIFTY 25700 PE",
+  "day": "2026-11-27",
+  "entry": 185.0,
+  "kind": "skipped",
+  "lot": 65,
+  "outcome": {
+   "at": "15:10",
+   "max_seen": 219.65,
+   "pnl_per_lot": 2000,
+   "result": "T1"
+  },
+  "risk_per_lot": 1500,
+  "sl": 161.92,
+  "t1": 215.77,
+  "t2": 231.15,
+  "time": "14:50",
+  "why": [
+   "macd",
+   "volume",
+   "weak_bar"
+  ]
+ },
+ {
+  "atr": 16.32,
+  "bar": "14:45",
+  "contract": "NIFTY 25700 PE",
+  "day": "2026-11-27",
+  "entry": 185.0,
+  "flow": "neutral",
+  "flow_note": "",
+  "kind": "cross",
+  "lot": 65,
+  "outcome": {
+   "at": "15:05",
+   "gain_pts": 25.5,
+   "max_seen": 210.5,
+   "min_seen": 170.65,
+   "pnl_per_lot": 1592,
+   "result": "HIT"
+  },
+  "potential": 24.5,
+  "reach_factor": 1.5,
+  "room": 132.4,
+  "target": 209.5,
+  "time": "14:50",
+  "vol_ratio": 1.05,
+  "wall": 25500.0
+ },
+ {
+  "bar": "14:45",
+  "contract": "NIFTY 25550 PE",
+  "day": "2026-11-27",
+  "entry": 108.8,
+  "kind": "skipped",
+  "lot": 65,
+  "outcome": {
+   "at": "15:15",
+   "max_seen": 136.05,
+   "pnl_per_lot": 598,
+   "result": "TIME"
+  },
+  "risk_per_lot": 1500,
+  "sl": 85.72,
+  "t1": 139.57,
+  "t2": 154.95,
+  "time": "14:50",
+  "why": [
+   "macd"
+  ]
+ },
+ {
+  "atr": 13.0,
+  "bar": "14:45",
+  "contract": "NIFTY 25550 PE",
+  "day": "2026-11-27",
+  "entry": 108.8,
+  "flow": "neutral",
+  "flow_note": "",
+  "kind": "cross",
+  "lot": 65,
+  "outcome": {
+   "at": "15:10",
+   "gain_pts": 24.5,
+   "max_seen": 133.25,
+   "min_seen": 97.0,
+   "pnl_per_lot": 1268,
+   "result": "HIT"
+  },
+  "potential": 19.5,
+  "reach_factor": 1.5,
+  "room": 132.4,
+  "target": 128.3,
+  "time": "14:50",
+  "vol_ratio": 1.38,
   "wall": 25500.0
  }
 ]

@@ -924,6 +924,7 @@ class PremiumWatch:
                             f"MACD green, volume {f['vol_ratio']:.1f}x\n"
                             f"Now ₹{f['ltp']:.1f} · *could reach ₹{f['target']:.1f} (+{f['potential']:.0f} pts, "
                             f"+₹{f['per_lot']:,}/lot) by {f['by']}*\n"
+                            f"Capital: 1 lot = ₹{f['ltp'] * f['lot']:,.0f} ({f['lot']} qty)\n"
                             f"_{wall}{flow}. {FORM_ODDS}. Wait for the cross alert or your own read of the chart._")
         except Exception as e:
             self._warn(f"slack forming: {e}")
@@ -938,7 +939,7 @@ class PremiumWatch:
                f"above VWAP {ind['vwap']:.1f}\n"
                f"*Buy near* ₹{a['entry']:.1f} · *SL* ₹{a['sl']:.1f} (₹{a['risk_per_lot']:,}/lot) · "
                f"*T1* ₹{a['t1']:.1f} (+₹{int(T1_RS):,}/lot) · *T2* ₹{a['t2']:.1f} (+₹{int(T2_RS):,}/lot)\n"
-               f"Exit by {a['exit_by']} if T1 is not hit · lot {lot}\n"
+               f"*Capital:* 1 lot = ₹{a['entry'] * lot:,.0f} ({lot} qty) · exit by {a['exit_by']} if T1 is not hit\n"
                f"Could reach ₹{a['pot']['target']:.1f} (+{a['pot']['potential']:.0f} pts) by {a['pot']['by']}"
                f"{' · OI wall ' + str(int(a['pot']['wall'])) + ' (' + str(int(a['pot']['room'])) + ' pts away)' if a['pot'].get('wall') else ''}"
                f"{' · short of T1, think about booking near ₹' + format(a['pot']['target'], '.0f') if a['pot']['target'] < a['t1'] else ''}\n"

@@ -949,15 +949,18 @@
   const pwNow = x => `₹${num(x.ltp, 1)}${x.ltp_at ? ` <small class="lv">live ${esc(x.ltp_at)}</small>` : ' <small class="lv">5-min close</small>'}`;
   const pwState = x => x.stage === 'running' ? (x.left <= 0 ? 'reached' : x.ltp < x.cross_price ? 'failing' : 'ok') : x.stage === 'just' ? (x.ltp < x.cross_price ? 'under' : 'ok') : 'ok';
   const pwKey = x => (x.stage || 'alert') + ':' + x.contract;
+  // Capital needed at the live price: one lot, and how many lots the desk capital buys.
+  const pwCap = x => { const px = +(x.ltp || x.entry || 0), lot = +(x.lot || 0); if (!px || !lot) return '';
+    const c = px * lot, n = Math.floor(capital / c); return `<b>1 lot ${inr(c)}</b> (${lot} qty), your ${inr(capital)} buys ${n} lot${n === 1 ? '' : 's'}. `; };
   function pwLive(x) {     // the part of each tile that moves with the live price
-    if (x.stage === 'alert') return { val: `₹${num(x.entry, 0)} → ₹${num(x.t1, 0)}`, txt: `Now ${pwNow(x)} · ` };
-    if (x.stage === 'forming') return { val: `₹${num(x.ltp, 0)} → ₹${num(x.target, 0)}`, txt: `Now ${pwNow(x)}. ` };
-    if (x.stage === 'just') return { val: `₹${num(x.cross_price, 0)} → ₹${num(x.target, 0)}`, txt: `Crossed at ₹${num(x.cross_price, 1)}, now ${pwNow(x)}. ` };
+    if (x.stage === 'alert') return { val: `₹${num(x.entry, 0)} → ₹${num(x.t1, 0)}`, txt: `Now ${pwNow(x)} · ${pwCap(x)}` };
+    if (x.stage === 'forming') return { val: `₹${num(x.ltp, 0)} → ₹${num(x.target, 0)}`, txt: `Now ${pwNow(x)}. ${pwCap(x)}` };
+    if (x.stage === 'just') return { val: `₹${num(x.cross_price, 0)} → ₹${num(x.target, 0)}`, txt: `Crossed at ₹${num(x.cross_price, 1)}, now ${pwNow(x)}. ${pwCap(x)}` };
     const st = pwState(x);
     return { val: `₹${num(x.cross_price, 0)} → ₹${num(x.target, 0)}`,
       txt: st === 'reached' ? `Reached the ₹${num(x.target, 0)} estimate, now ${pwNow(x)}. Late to enter. `
         : st === 'failing' ? `Back under the cross price, now ${pwNow(x)}. Setup not working. `
-        : `Now ${pwNow(x)}. +${num(x.left, 0)} pts left to ₹${num(x.target, 0)} by ${esc(x.by)}. ` };
+        : `Now ${pwNow(x)}. +${num(x.left, 0)} pts left to ₹${num(x.target, 0)} by ${esc(x.by)}. ${pwCap(x)}` };
   }
   function pwItems(pw) {
     const scans = Object.values(pw.last_scan || {});
